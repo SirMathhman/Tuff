@@ -37,3 +37,9 @@ test("identifier declared in a block is not visible after it", () => {
     error: { type: "UnknownIdentifier", name: "x" },
   });
 });
+test("identifier declared in an if branch is not visible after it", () => {
+  expect(evaluateTuff("if (false) { let x = 0; } return x;")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "x" },
+  });
+});

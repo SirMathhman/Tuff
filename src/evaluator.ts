@@ -120,8 +120,8 @@ interface TypeInfo {
  * are reported even in branches that would not execute.
  *
  * @param stmts - The statements to check.
- * @param types - The types of declared variables; each block gets a copy,
- * so declarations inside a block are not visible outside it.
+ * @param types - The types of declared variables; each block and `if`
+ * branch gets a copy, so declarations inside them are not visible outside.
  * @returns Success, or a structured error.
  */
 function typeCheck(
@@ -137,9 +137,9 @@ function typeCheck(
     if (stmt.type === "If") {
       const cond = exprKind(stmt.cond, types);
       if (!cond.ok) return cond;
-      const err = typeCheck(stmt.then, types);
+      const err = typeCheck(stmt.then, new Map(types));
       if (!err.ok) return err;
-      const elseErr = typeCheck(stmt.else, types);
+      const elseErr = typeCheck(stmt.else, new Map(types));
       if (!elseErr.ok) return elseErr;
       continue;
     }
