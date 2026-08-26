@@ -1,4 +1,5 @@
 import type { TuffError } from "./errors.ts";
+import { tokenize, type TuffToken } from "./tokenizer.ts";
 
 /** A literal expression node (number or boolean). */
 export interface LiteralNode {
@@ -29,7 +30,7 @@ export interface AndNode {
 /** A parsed tuff expression. */
 export type TuffExpr = LiteralNode | IdentifierNode | OrNode | AndNode;
 
-/** A mutable parse position over an expression string. */
+/** A mutable parse position over a token list. */
 interface Pos {
   i: number;
 }
@@ -49,75 +50,58 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
 }
 
 /**
- * Advance the position past any whitespace.
- * @param text {string} - The expression text.
- * @param pos {Pos} - The mutable parse position.
- * @returns {void} No return value.
- */
-function skipSpaces(text: string, pos: Pos): void {
-  while (pos.i < text.length && /\s/.test(text[pos.i] ?? "")) pos.i++;
-}
-
-/**
- * Parse a single operand: a number, a boolean, or an identifier.
- * @param text {string} - The expression text.
+ * Parse a single operand: a literal, an identifier, or a parenthesized expression.
+ * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the operand.
  * @param line {number} - The 1-based line number.
  * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
  */
 function parseOperand(
-  text: string,
+  tokens: TuffToken[],
   pos: Pos,
   line: number,
 ): TuffExpr | TuffError {
-  skipSpaces(text, pos);
-  if (text[pos.i] === "(") {
+  const token = tokens[pos.i];
+  if (!token) return { kind: "InvalidExpression", expression: "", line };
+  if (token.kind === "Number" || token.kind === "Bool") {
     pos.i++;
-    const inner = parseOr(text, pos, line);
+    return { kind: "Literal", value: token.value };
+  }
+  if (token.kind === "Ident") {
+    pos.i++;
+    return { kind: "Identifier", name: token.name };
+  }
+  if (token.kind === "LParen") {
+    pos.i++;
+    const inner = parseOr(tokens, pos, line);
     if (!isExpr(inner)) return inner;
-    skipSpaces(text, pos);
-    if (text[pos.i] !== ")") {
-      return { kind: "InvalidExpression", expression: text.trim(), line };
+    const close = tokens[pos.i];
+    if (close?.kind !== "RParen") {
+      return { kind: "InvalidExpression", expression: "", line };
     }
     pos.i++;
     return inner;
   }
-  const rest = text.slice(pos.i);
-  const num = rest.match(/^-?\d+(\.\d+)?/);
-  if (num) {
-    pos.i += num[0].length;
-    return { kind: "Literal", value: Number(num[0]) };
-  }
-  if (/^true\b/.test(rest)) {
-    pos.i += 4;
-    return { kind: "Literal", value: 1 };
-  }
-  if (/^false\b/.test(rest)) {
-    pos.i += 5;
-    return { kind: "Literal", value: 0 };
-  }
-  const ident = rest.match(/^\w+/);
-  if (ident) {
-    pos.i += ident[0].length;
-    return { kind: "Identifier", name: ident[0] };
-  }
-  return { kind: "InvalidExpression", expression: text.trim(), line };
+  return { kind: "InvalidExpression", expression: "", line };
 }
 
 /**
  * Parse an expression at the `||` level, right-associative.
- * @param text {string} - The expression text.
+ * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the expression.
  * @param line {number} - The 1-based line number.
  * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
  */
-function parseOr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
-  const left = parseAnd(text, pos, line);
+function parseOr(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  const left = parseAnd(tokens, pos, line);
   if (!isExpr(left)) return left;
-  skipSpaces(text, pos);
-  if (text.startsWith("||", pos.i)) {
-    pos.i += 2;
-    const right = parseOr(text, pos, line);
+  if (tokens[pos.i]?.kind === "Or") {
+    pos.i++;
+    const right = parseOr(tokens, pos, line);
     if (!isExpr(right)) return right;
     return { kind: "Or", left, right };
   }
@@ -126,18 +110,21 @@ function parseOr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
 
 /**
  * Parse an expression at the `&&` level, right-associative.
- * @param text {string} - The expression text.
+ * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the expression.
  * @param line {number} - The 1-based line number.
  * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
  */
-function parseAnd(text: string, pos: Pos, line: number): TuffExpr | TuffError {
-  const left = parseOperand(text, pos, line);
+function parseAnd(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  const left = parseOperand(tokens, pos, line);
   if (!isExpr(left)) return left;
-  skipSpaces(text, pos);
-  if (text.startsWith("&&", pos.i)) {
-    pos.i += 2;
-    const right = parseAnd(text, pos, line);
+  if (tokens[pos.i]?.kind === "And") {
+    pos.i++;
+    const right = parseAnd(tokens, pos, line);
     if (!isExpr(right)) return right;
     return { kind: "And", left, right };
   }
@@ -154,12 +141,21 @@ export function parseExpression(
   expr: string,
   line: number,
 ): TuffExpr | TuffError {
+  let tokens: TuffToken[];
+  try {
+    tokens = tokenize(expr);
+  } catch {
+    return { kind: "InvalidExpression", expression: expr.trim(), line };
+  }
   const pos: Pos = { i: 0 };
-  skipSpaces(expr, pos);
-  const node = parseOr(expr, pos, line);
-  if (!isExpr(node)) return node;
-  skipSpaces(expr, pos);
-  if (pos.i !== expr.length) {
+  const node = parseOr(tokens, pos, line);
+  if (!isExpr(node)) {
+    if (node.kind === "InvalidExpression") {
+      return { kind: "InvalidExpression", expression: expr.trim(), line };
+    }
+    return node;
+  }
+  if (pos.i !== tokens.length) {
     return { kind: "InvalidExpression", expression: expr.trim(), line };
   }
   return node;
