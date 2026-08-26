@@ -47,19 +47,31 @@ interface Pos {
   i: number;
 }
 
+/** A binary operator's grammar properties. */
+interface BinaryOp {
+  token: "Or" | "And" | "Plus";
+  node: "Or" | "And" | "Add";
+  assoc: "left" | "right";
+}
+
+/**
+ * The binary operator grammar, loosest binding first.
+ * Precedence and associativity are declared here, never by function order.
+ */
+const BINARY_OPS: BinaryOp[] = [
+  { token: "Or", node: "Or", assoc: "right" },
+  { token: "And", node: "And", assoc: "right" },
+  { token: "Plus", node: "Add", assoc: "left" },
+];
+
 /**
  * Type guard distinguishing a parsed expression node from an error.
  * @param value {TuffExpr | TuffError} - The value to test.
  * @returns {boolean} True if the value is an expression node.
  */
 export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
-  return (
-    value.kind === "Literal" ||
-    value.kind === "Identifier" ||
-    value.kind === "Or" ||
-    value.kind === "And" ||
-    value.kind === "Add"
-  );
+  if (value.kind === "Literal" || value.kind === "Identifier") return true;
+  return BINARY_OPS.some((op) => op.node === value.kind);
 }
 
 /**
@@ -86,7 +98,7 @@ function parseOperand(
   }
   if (token.kind === "LParen") {
     pos.i++;
-    const inner = parseOr(tokens, pos, line);
+    const inner = parseLevel(tokens, pos, line, 0);
     if (!isExpr(inner)) return inner;
     const close = tokens[pos.i];
     if (close?.kind !== "RParen") {
@@ -99,71 +111,32 @@ function parseOperand(
 }
 
 /**
- * Parse an expression at the `||` level, right-associative.
+ * Parse an expression at one precedence level of the binary operator grammar.
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the expression.
  * @param line {number} - The 1-based line number.
+ * @param level {number} - The index into BINARY_OPS; the next level binds tighter.
  * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
  */
-function parseOr(
+function parseLevel(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  level: number,
 ): TuffExpr | TuffError {
-  const left = parseAnd(tokens, pos, line);
-  if (!isExpr(left)) return left;
-  if (tokens[pos.i]?.kind === "Or") {
-    pos.i++;
-    const right = parseOr(tokens, pos, line);
-    if (!isExpr(right)) return right;
-    return { kind: "Or", left, right };
-  }
-  return left;
-}
-
-/**
- * Parse an expression at the `&&` level, right-associative.
- * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the expression.
- * @param line {number} - The 1-based line number.
- * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
- */
-function parseAnd(
-  tokens: TuffToken[],
-  pos: Pos,
-  line: number,
-): TuffExpr | TuffError {
-  const left = parseAdd(tokens, pos, line);
-  if (!isExpr(left)) return left;
-  if (tokens[pos.i]?.kind === "And") {
-    pos.i++;
-    const right = parseAnd(tokens, pos, line);
-    if (!isExpr(right)) return right;
-    return { kind: "And", left, right };
-  }
-  return left;
-}
-
-/**
- * Parse an expression at the `+` level, left-associative.
- * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the expression.
- * @param line {number} - The 1-based line number.
- * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
- */
-function parseAdd(
-  tokens: TuffToken[],
-  pos: Pos,
-  line: number,
-): TuffExpr | TuffError {
-  const first = parseOperand(tokens, pos, line);
+  const op = BINARY_OPS[level];
+  if (!op) return parseOperand(tokens, pos, line);
+  const first = parseLevel(tokens, pos, line, level + 1);
   if (!isExpr(first)) return first;
   let left: TuffExpr = first;
-  while (tokens[pos.i]?.kind === "Plus") {
+  while (tokens[pos.i]?.kind === op.token) {
     pos.i++;
-    const right = parseOperand(tokens, pos, line);
+    const right =
+      op.assoc === "right"
+        ? parseLevel(tokens, pos, line, level)
+        : parseLevel(tokens, pos, line, level + 1);
     if (!isExpr(right)) return right;
-    left = { kind: "Add", left, right };
+    left = { kind: op.node, left, right };
   }
   return left;
 }
@@ -185,7 +158,7 @@ export function parseExpression(
     return { kind: "InvalidExpression", expression: expr.trim(), line };
   }
   const pos: Pos = { i: 0 };
-  const node = parseOr(tokens, pos, line);
+  const node = parseLevel(tokens, pos, line, 0);
   if (!isExpr(node)) {
     if (node.kind === "InvalidExpression") {
       return { kind: "InvalidExpression", expression: expr.trim(), line };

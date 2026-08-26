@@ -161,6 +161,41 @@ function executeAssignment(
   return undefined;
 }
 
+/** A binary node kind's evaluation rule. */
+interface BinaryRule {
+  /**
+   * Decide the result from the left value alone, or null to evaluate the right.
+   * @param left {number} - The evaluated left value.
+   * @returns {number | null} The short-circuit result, or null.
+   */
+  shortCircuit: (left: number) => number | null;
+  /**
+   * Combine both evaluated sides.
+   * @param left {number} - The evaluated left value.
+   * @param right {number} - The evaluated right value.
+   * @returns {number} The combined result.
+   */
+  combine: (left: number, right: number) => number;
+}
+
+/**
+ * The binary node evaluation rules, keyed by node kind.
+ */
+const BINARY_RULES: Record<"Or" | "And" | "Add", BinaryRule> = {
+  Or: {
+    shortCircuit: (left) => (left !== 0 ? 1 : null),
+    combine: (_left, right) => (right !== 0 ? 1 : 0),
+  },
+  And: {
+    shortCircuit: (left) => (left === 0 ? 0 : null),
+    combine: (_left, right) => (right !== 0 ? 1 : 0),
+  },
+  Add: {
+    shortCircuit: () => null,
+    combine: (left, right) => left + right,
+  },
+};
+
 /**
  * Evaluate a parsed expression to a number, or a structured error.
  * @param node {TuffExpr} - The expression node.
@@ -179,23 +214,14 @@ function evalExpr(
     if (binding) return binding.value;
     return { kind: "UnidentifiedIdentifier", name: node.name, line };
   }
+  const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, scopes, line);
   if (typeof left !== "number") return left;
-  if (node.kind === "Add") {
-    const right = evalExpr(node.right, scopes, line);
-    if (typeof right !== "number") return right;
-    return left + right;
-  }
-  if (node.kind === "Or") {
-    if (left !== 0) return 1;
-    const right = evalExpr(node.right, scopes, line);
-    if (typeof right !== "number") return right;
-    return right !== 0 ? 1 : 0;
-  }
-  if (left === 0) return 0;
+  const shortcut = rule.shortCircuit(left);
+  if (shortcut !== null) return shortcut;
   const right = evalExpr(node.right, scopes, line);
   if (typeof right !== "number") return right;
-  return right !== 0 ? 1 : 0;
+  return rule.combine(left, right);
 }
 
 /**
