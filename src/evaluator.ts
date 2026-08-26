@@ -81,6 +81,18 @@ function executeStatement(
       env.scopes.pop();
     }
   }
+  if (stmt.kind === "While") {
+    while (truthy(evalExpr(stmt.condition, env))) {
+      env.scopes.push(new Map());
+      try {
+        const result = executeStatement(stmt.body, line, env, executeList);
+        if (result) return result;
+      } finally {
+        env.scopes.pop();
+      }
+    }
+    return undefined;
+  }
   executeAssignment(stmt.target, stmt.value, env);
   return undefined;
 }

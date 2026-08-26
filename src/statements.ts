@@ -196,6 +196,50 @@ function parseIf(
 }
 
 /**
+ * Parse a `while` statement: `while (expr) stmt`.
+ * @param tokens {TuffToken[]} - The token list; `while` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, breaking mutual recursion.
+ * @returns {TuffStatement | TuffError} The While node, or a TuffError.
+ */
+function parseWhile(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
+  if (tokens[pos.i]?.kind !== "LParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const condition = parseLevel(tokens, pos, line, 0);
+  if (!isExpr(condition)) return condition;
+  if (tokens[pos.i]?.kind !== "RParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const body = parseStatement(tokens, pos, line);
+  if (!isStatement(body)) {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  if (tokens[pos.i]?.kind === "Semicolon") pos.i++;
+  return { kind: "While", condition, body };
+}
+
+/**
  * Parse a braced block: `{ stmt; ... }`.
  * @param tokens {TuffToken[]} - The token list; `{` already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the block.
@@ -269,6 +313,10 @@ export function parseStatement(
     pos.i++;
     return parseIf(tokens, pos, line, parseStatement);
   }
+  if (token.kind === "Ident" && token.name === "while") {
+    pos.i++;
+    return parseWhile(tokens, pos, line, parseStatement);
+  }
   if (token.kind === "Ident") {
     const name = token.name;
     pos.i++;
@@ -297,6 +345,7 @@ export function isStatement(
     value.kind === "Assign" ||
     value.kind === "Return" ||
     value.kind === "Block" ||
-    value.kind === "If"
+    value.kind === "If" ||
+    value.kind === "While"
   );
 }

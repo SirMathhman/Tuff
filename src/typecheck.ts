@@ -1,5 +1,11 @@
 import type { TuffError } from "./errors.ts";
-import type { AssignNode, TuffExpr, TuffStatement } from "./ast.ts";
+import type {
+  AssignNode,
+  IfNode,
+  TuffExpr,
+  TuffStatement,
+  WhileNode,
+} from "./ast.ts";
 
 /** A declared binding's type, mutability, and reference target. */
 interface DeclaredBinding {
@@ -92,18 +98,10 @@ function checkStatement(
     return null;
   }
   if (stmt.kind === "If") {
-    const condError = findUndeclared(stmt.condition, line, scopes);
-    if (condError) return condError;
-    scopes.push({});
-    let error = checkStatement(stmt.then, line, scopes);
-    scopes.pop();
-    if (error) return error;
-    if (stmt.else) {
-      scopes.push({});
-      error = checkStatement(stmt.else, line, scopes);
-      scopes.pop();
-    }
-    return error;
+    return checkIf(stmt, line, scopes);
+  }
+  if (stmt.kind === "While") {
+    return checkWhile(stmt, line, scopes);
   }
   if (stmt.kind === "Assign") {
     return checkAssignment(stmt, line, scopes);
@@ -112,6 +110,54 @@ function checkStatement(
     return findUndeclared(stmt.value, line, scopes);
   }
   return null;
+}
+
+/**
+ * Check an `if` statement: its condition, then-branch, and optional else-branch.
+ * @param stmt - The If statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkIf(
+  stmt: IfNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const condError = findUndeclared(stmt.condition, line, scopes);
+  if (condError) return condError;
+  scopes.push({});
+  let error = checkStatement(stmt.then, line, scopes);
+  scopes.pop();
+  if (error) return error;
+  if (stmt.else) {
+    scopes.push({});
+    error = checkStatement(stmt.else, line, scopes);
+    scopes.pop();
+  }
+  return error;
+}
+
+/**
+ * Check a `while` statement: its condition and body.
+ * @param stmt - The While statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkWhile(
+  stmt: WhileNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const condError = findUndeclared(stmt.condition, line, scopes);
+  if (condError) return condError;
+  scopes.push({});
+  try {
+    return checkStatement(stmt.body, line, scopes);
+  } finally {
+    scopes.pop();
+  }
 }
 
 /**

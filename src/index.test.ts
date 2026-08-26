@@ -106,6 +106,15 @@ test('evaluateTuff("let mut x = 1; x += 2; return x;") => 3', () => {
   });
 });
 
+test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; } return x;") => 4', () => {
+  expect(
+    evaluateTuff("let mut x = 0; while (x < 4) { x += 1; } return x;"),
+  ).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
+
 test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
   expectUnidentifiedIdentifier(
     evaluateTuff("let x = unidentifiedIdentifier;"),

@@ -107,13 +107,21 @@ export interface IfNode {
   else: TuffStatement | null;
 }
 
+/** A `while` loop statement node. */
+export interface WhileNode {
+  kind: "While";
+  condition: TuffExpr;
+  body: TuffStatement;
+}
+
 /** A parsed tuff statement. */
 export type TuffStatement =
   | LetNode
   | AssignNode
   | ReturnNode
   | BlockNode
-  | IfNode;
+  | IfNode
+  | WhileNode;
 
 /** A mutable parse position over a token list. */
 export interface Pos {

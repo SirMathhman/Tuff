@@ -20,6 +20,7 @@ export type {
   ReturnNode,
   BlockNode,
   IfNode,
+  WhileNode,
   TuffStatement,
   Pos,
 } from "./ast.ts";
@@ -49,7 +50,7 @@ export function parseProgram(
       continue;
     }
     if (!sep) break;
-    if (stmt.kind !== "Block" && stmt.kind !== "If") {
+    if (stmt.kind !== "Block" && stmt.kind !== "If" && stmt.kind !== "While") {
       return {
         kind: "InvalidStatement",
         token: tokenDetail(sep),
