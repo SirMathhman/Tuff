@@ -2,6 +2,7 @@ import type { TuffError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import type { Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr } from "./expr.ts";
+import { tupleElementsEqual } from "./expr.ts";
 import { typeCheck } from "./typecheck.ts";
 
 /**
@@ -166,10 +167,7 @@ function toNumber(value: Value): number {
 function valuesEqual(a: Value, b: Value): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "tuple" && b.kind === "tuple") {
-    return (
-      a.elements.length === b.elements.length &&
-      a.elements.every((el, i) => valuesEqual(el, b.elements[i] as Value))
-    );
+    return tupleElementsEqual(a.elements, b.elements, valuesEqual);
   }
   if (a.kind === "tuple" || b.kind === "tuple") return false;
   return a.value === b.value;

@@ -1,6 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type { Assign, Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr, FieldAccessExpr } from "./expr.ts";
+import { tupleElementsEqual } from "./expr.ts";
 
 /**
  * The static type of a number value.
@@ -171,10 +172,7 @@ function checkAssign(
 function sameType(a: TuffType, b: TuffType): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "tuple" && b.kind === "tuple") {
-    return (
-      a.elements.length === b.elements.length &&
-      a.elements.every((el, i) => sameType(el, b.elements[i] as TuffType))
-    );
+    return tupleElementsEqual(a.elements, b.elements, sameType);
   }
   return true;
 }
