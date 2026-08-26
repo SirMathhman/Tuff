@@ -1,6 +1,6 @@
 {
   "name": "tuff",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
@@ -8,7 +8,7 @@
     "lint": "tsc --noEmit && eslint .",
     "callgraph": "bun tools/callgraph.ts",
     "callgraph:watch": "nodemon",
-    "pmd:cpd": "pmd cpd index.ts index.test.ts --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
+    "pmd:cpd": "pmd cpd src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
     "madge:circular": "madge . --circular --extensions ts"
   },
   "devDependencies": {

@@ -1,5 +1,9 @@
 import type { TuffResult } from "./errors.ts";
-import { executeStatements, splitStatements, type Binding } from "./evaluator.ts";
+import {
+  executeStatements,
+  splitStatements,
+  type Binding,
+} from "./evaluator.ts";
 
 export type {
   TuffError,
