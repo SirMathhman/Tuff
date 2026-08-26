@@ -59,9 +59,22 @@ export interface While {
 }
 
 /**
+ * A `for` loop over a numeric range: `for (name in start..end) body`.
+ * The end is exclusive; the loop variable is a fresh number binding
+ * visible only inside the body.
+ */
+export interface For {
+  type: "For";
+  name: string;
+  start: Expr;
+  end: Expr;
+  body: Stmt[];
+}
+
+/**
  * A statement in the program.
  */
-export type Stmt = LetDecl | Assign | Return | Block | If | While;
+export type Stmt = LetDecl | Assign | Return | Block | If | While | For;
 
 /**
  * A successful statement parse result.
@@ -106,7 +119,12 @@ interface SepOk {
  * @returns True for block-like statements.
  */
 function isBlockLike(stmt: Stmt): boolean {
-  return stmt.type === "Block" || stmt.type === "If" || stmt.type === "While";
+  return (
+    stmt.type === "Block" ||
+    stmt.type === "If" ||
+    stmt.type === "While" ||
+    stmt.type === "For"
+  );
 }
 
 /**
@@ -204,6 +222,9 @@ export function parseStmt(state: ParserState): ParseStmtResult {
   }
   if (t.kind === "keyword" && t.value === "while") {
     return parseWhile(state);
+  }
+  if (t.kind === "keyword" && t.value === "for") {
+    return parseFor(state);
   }
   if (t.kind === "ident") {
     return parseAssign(state);
@@ -378,6 +399,113 @@ function parseWhile(state: ParserState): ParseStmtResult {
     },
   };
 }
+
+/**
+ * Parse a `for` loop: `for (name in start..end) { ... }`.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseFor(state: ParserState): ParseStmtResult {
+  next(state);
+  const open = next(state);
+  if (open.value !== "(") {
+    return {
+      ok: false,
+      error: parseError("Expected '(' after 'for'", open.pos),
+    };
+  }
+  const range = parseForRange(state, open.pos);
+  if (!range.ok) return range;
+  const block = parseBlock(state);
+  if (!block.ok) return block;
+  return {
+    ok: true,
+    stmt: {
+      type: "For",
+      name: range.name,
+      start: range.start,
+      end: range.end,
+      body: (block.stmt as Block).stmts,
+    },
+  };
+}
+
+/**
+ * Parse the `name in start..end` head of a `for` loop, including the
+ * closing `)`.
+ *
+ * @param state - The parser state, positioned at the loop variable.
+ * @param openPos - The position of the opening `(`, for error messages.
+ * @returns The loop variable and range bounds, or a structured parse error.
+ */
+function parseForRange(
+  state: ParserState,
+  openPos: number,
+): ParseForRangeResult {
+  const nameTok = next(state);
+  if (nameTok?.kind !== "ident") {
+    return {
+      ok: false,
+      error: parseError(
+        "Expected loop variable after 'for ('",
+        nameTok?.pos ?? openPos,
+      ),
+    };
+  }
+  const inTok = next(state);
+  if (inTok?.value !== "in") {
+    return {
+      ok: false,
+      error: parseError(
+        "Expected 'in' after loop variable",
+        inTok?.pos ?? nameTok.pos,
+      ),
+    };
+  }
+  const start = parseExpr(state);
+  if (!start.ok) return start;
+  const dots = next(state);
+  if (dots.value !== "..") {
+    return {
+      ok: false,
+      error: parseError("Expected '..' after range start", dots.pos),
+    };
+  }
+  const end = parseExpr(state);
+  if (!end.ok) return end;
+  const close = next(state);
+  if (close.value !== ")") {
+    return {
+      ok: false,
+      error: parseError("Expected ')' after range", close.pos),
+    };
+  }
+  return { ok: true, name: nameTok.value, start: start.expr, end: end.expr };
+}
+
+/**
+ * A successful `for` range parse result.
+ */
+interface ParseForRangeOk {
+  ok: true;
+  name: string;
+  start: Expr;
+  end: Expr;
+}
+
+/**
+ * A failed `for` range parse result.
+ */
+interface ParseForRangeErr {
+  ok: false;
+  error: TuffError;
+}
+
+/**
+ * The result of parsing a `for` loop range.
+ */
+type ParseForRangeResult = ParseForRangeOk | ParseForRangeErr;
 
 /**
  * Parse an assignment statement.

@@ -26,7 +26,16 @@ export interface TokenizeErr {
   error: TuffError;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return", "if", "else", "while"]);
+const KEYWORDS = new Set([
+  "let",
+  "mut",
+  "return",
+  "if",
+  "else",
+  "while",
+  "for",
+  "in",
+]);
 
 /**
  * Single-character punctuation tokens.
@@ -73,7 +82,13 @@ interface ScanErr {
 function scanNumber(input: string, i: number): ScanOk | ScanErr {
   let j = i;
   if (input[j] === "-") j++;
-  while (j < input.length && /[0-9.]/.test(input[j] ?? "")) j++;
+  while (
+    j < input.length &&
+    /[0-9.]/.test(input[j] ?? "") &&
+    !(input[j] === "." && input[j + 1] === ".")
+  ) {
+    j++;
+  }
   const text = input.slice(i, j);
   if (!/^-?\d+(\.\d+)?$/.test(text)) {
     return { error: parseError(`Invalid number: ${text}`, i) };
@@ -99,6 +114,11 @@ function scanIdent(input: string, i: number): ScanOk {
       : "ident";
   return { token: { kind, value: text, pos: i }, next: j };
 }
+
+/**
+ * The two-character punctuation tokens, in match order.
+ */
+const TWO_CHAR_PUNCT = ["||", "==", "+=", ".."] as const;
 
 /**
  * Tokenize source text into a flat token list.
@@ -129,18 +149,9 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       i = r.next;
       continue;
     }
-    if (ch === "|" && input[i + 1] === "|") {
-      tokens.push({ kind: "punct", value: "||", pos: i });
-      i += 2;
-      continue;
-    }
-    if (ch === "=" && input[i + 1] === "=") {
-      tokens.push({ kind: "punct", value: "==", pos: i });
-      i += 2;
-      continue;
-    }
-    if (ch === "+" && input[i + 1] === "=") {
-      tokens.push({ kind: "punct", value: "+=", pos: i });
+    const two = TWO_CHAR_PUNCT.find((p) => input.startsWith(p, i));
+    if (two !== undefined) {
+      tokens.push({ kind: "punct", value: two, pos: i });
       i += 2;
       continue;
     }

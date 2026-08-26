@@ -95,6 +95,39 @@ export function typeCheck(
       if (!err.ok) return err;
       continue;
     }
+    if (stmt.type === "For") {
+      const start = exprType(stmt.start, types);
+      if (!start.ok) return start;
+      if (start.type.kind !== "number") {
+        return {
+          ok: false,
+          error: {
+            type: "OperandTypeMismatch",
+            position: stmt.start.pos,
+            expected: "number",
+            actual: start.type.kind,
+          },
+        };
+      }
+      const end = exprType(stmt.end, types);
+      if (!end.ok) return end;
+      if (end.type.kind !== "number") {
+        return {
+          ok: false,
+          error: {
+            type: "OperandTypeMismatch",
+            position: stmt.end.pos,
+            expected: "number",
+            actual: end.type.kind,
+          },
+        };
+      }
+      const bodyTypes = new Map(types);
+      bodyTypes.set(stmt.name, { type: { kind: "number" }, mutable: true });
+      const err = typeCheck(stmt.body, bodyTypes);
+      if (!err.ok) return err;
+      continue;
+    }
     const r = exprType(stmt.value, types);
     if (!r.ok) return r;
     if (stmt.type === "Return" && r.type.kind === "tuple") {

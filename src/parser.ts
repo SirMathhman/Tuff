@@ -6,6 +6,7 @@ import type { Stmt } from "./stmts.ts";
 export type {
   Assign,
   Block,
+  For,
   If,
   LetDecl,
   Return,

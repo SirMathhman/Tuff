@@ -64,6 +64,11 @@ test("while loop with brace-less body", () => {
     evaluateTuff("let mut x = 0; while (x < 4) x += 1; return x;"),
   ).toEqual({ ok: true, value: 4 });
 });
+test("for loop over a range", () => {
+  expect(
+    evaluateTuff("let mut sum = 0; for (i in 0..4) { sum += i; } return sum;"),
+  ).toEqual({ ok: true, value: 6 });
+});
 test("tuple field access", () => {
   expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual(
     { ok: true, value: 7 },
