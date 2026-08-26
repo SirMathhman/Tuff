@@ -1,30 +1,6 @@
-import type { TuffError } from "./errors.ts";
-import { parse } from "./parser.ts";
 import type { Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr } from "./expr.ts";
 import { tupleElementsEqual } from "./expr.ts";
-import { typeCheck } from "./typecheck.ts";
-
-/**
- * A successful evaluation result.
- */
-export interface Ok {
-  ok: true;
-  value: number;
-}
-
-/**
- * A failed evaluation result.
- */
-export interface Err {
-  ok: false;
-  error: TuffError;
-}
-
-/**
- * The result of an evaluation: either a numeric value or a structured error.
- */
-export type Result = Ok | Err;
 
 /**
  * A numeric runtime value.
@@ -180,7 +156,10 @@ function valuesEqual(a: Value, b: Value): boolean {
  * @param vars - The variable scope, shared with enclosing blocks.
  * @returns The return value (or 0 if none).
  */
-function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): number {
+export function exec(
+  stmts: readonly Stmt[],
+  vars: Map<string, Binding>,
+): number {
   for (const stmt of stmts) {
     if (stmt.type === "Block") {
       exec(stmt.stmts, vars);
@@ -209,18 +188,4 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): number {
     vars.set(stmt.name, { value, mutable: stmt.mutable });
   }
   return 0;
-}
-
-/**
- * Evaluate the tuffness of a string.
- *
- * @param input - The string to evaluate.
- * @returns The tuffness score or a structured error.
- */
-export function evaluateTuff(input: string): Result {
-  const parsed = parse(input);
-  if (!parsed.ok) return parsed;
-  const err = typeCheck(parsed.program.stmts, new Map());
-  if (!err.ok) return err;
-  return { ok: true, value: exec(parsed.program.stmts, new Map()) };
 }
