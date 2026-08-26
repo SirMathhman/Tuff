@@ -71,6 +71,17 @@ function parseOperand(
   line: number,
 ): TuffExpr | TuffError {
   skipSpaces(text, pos);
+  if (text[pos.i] === "(") {
+    pos.i++;
+    const inner = parseOr(text, pos, line);
+    if (!isExpr(inner)) return inner;
+    skipSpaces(text, pos);
+    if (text[pos.i] !== ")") {
+      return { kind: "InvalidExpression", expression: text.trim(), line };
+    }
+    pos.i++;
+    return inner;
+  }
   const rest = text.slice(pos.i);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {

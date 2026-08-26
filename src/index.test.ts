@@ -170,3 +170,10 @@ test('evaluateTuff("let x = true; let y = false; return x && y;") => 0', () => {
     value: 0,
   });
 });
+
+test('evaluateTuff("return true || (true && false);") => 1', () => {
+  expect(evaluateTuff("return true || (true && false);")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
