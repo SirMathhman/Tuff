@@ -177,3 +177,10 @@ test('evaluateTuff("return true || (true && false);") => 1', () => {
     value: 1,
   });
 });
+
+test('evaluateTuff("return false && (true || false);") => 0', () => {
+  expect(evaluateTuff("return false && (true || false);")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
