@@ -41,9 +41,19 @@ export interface Block {
 }
 
 /**
+ * An `if` statement with an optional `else` branch.
+ */
+export interface If {
+  type: "If";
+  cond: Expr;
+  then: Stmt[];
+  else: Stmt[];
+}
+
+/**
  * A statement in the program.
  */
-export type Stmt = LetDecl | Assign | Return | Block;
+export type Stmt = LetDecl | Assign | Return | Block | If;
 
 /**
  * A parsed program: an ordered list of statements.
@@ -129,7 +139,11 @@ function parseStmtList(
     const r = parseStmt(state);
     if (!r.ok) return r;
     stmts.push(r.stmt);
-    const sep = consumeSeparator(state, inBlock, r.stmt.type === "Block");
+    const sep = consumeSeparator(
+      state,
+      inBlock,
+      r.stmt.type === "Block" || r.stmt.type === "If",
+    );
     if (!sep.ok) return sep;
   }
   if (inBlock) {
@@ -197,6 +211,9 @@ function parseStmt(state: ParserState): ParseStmtOk | ParseErr {
   }
   if (t.kind === "keyword" && t.value === "return") {
     return parseReturn(state);
+  }
+  if (t.kind === "keyword" && t.value === "if") {
+    return parseIf(state);
   }
   if (t.kind === "ident") {
     return parseAssign(state);
@@ -281,6 +298,50 @@ function parseReturn(state: ParserState): ParseStmtOk | ParseErr {
   const value = parseExpr(state);
   if (!value.ok) return value;
   return { ok: true, stmt: { type: "Return", value: value.expr } };
+}
+
+/**
+ * Parse an `if` statement: `if (cond) { ... } [else { ... }]`.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseIf(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  const open = next(state);
+  if (open.value !== "(") {
+    return {
+      ok: false,
+      error: parseError("Expected '(' after 'if'", open.pos),
+    };
+  }
+  const cond = parseExpr(state);
+  if (!cond.ok) return cond;
+  const close = next(state);
+  if (close.value !== ")") {
+    return {
+      ok: false,
+      error: parseError("Expected ')' after condition", close.pos),
+    };
+  }
+  const thenBlock = parseBlock(state);
+  if (!thenBlock.ok) return thenBlock;
+  let elseStmts: Stmt[] = [];
+  if (!atEnd(state) && peek(state).value === "else") {
+    next(state);
+    const elseBlock = parseBlock(state);
+    if (!elseBlock.ok) return elseBlock;
+    elseStmts = (elseBlock.stmt as Block).stmts;
+  }
+  return {
+    ok: true,
+    stmt: {
+      type: "If",
+      cond: cond.expr,
+      then: (thenBlock.stmt as Block).stmts,
+      else: elseStmts,
+    },
+  };
 }
 
 /**

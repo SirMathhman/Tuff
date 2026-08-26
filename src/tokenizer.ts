@@ -26,7 +26,7 @@ export interface TokenizeErr {
   error: TuffError;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return"]);
+const KEYWORDS = new Set(["let", "mut", "return", "if", "else"]);
 
 /**
  * A successful scan result: the token and the index after it.
@@ -119,7 +119,14 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       i += 2;
       continue;
     }
-    if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
+    if (
+      ch === "=" ||
+      ch === ";" ||
+      ch === "{" ||
+      ch === "}" ||
+      ch === "(" ||
+      ch === ")"
+    ) {
       tokens.push({ kind: "punct", value: ch, pos: i });
       i++;
       continue;

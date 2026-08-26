@@ -83,7 +83,10 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): EvalResult {
           : 0;
       return { ok: true, value: { value: equal, kind: "boolean" } };
     }
-    return { ok: true, value: { value: right.value.value !== 0 ? 1 : 0, kind: "boolean" } };
+    return {
+      ok: true,
+      value: { value: right.value.value !== 0 ? 1 : 0, kind: "boolean" },
+    };
   }
   const binding = vars.get(expr.name);
   if (binding !== undefined) return { ok: true, value: binding.value };
@@ -101,6 +104,14 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
   for (const stmt of stmts) {
     if (stmt.type === "Block") {
       const r = exec(stmt.stmts, vars);
+      if (!r.ok) return r;
+      continue;
+    }
+    if (stmt.type === "If") {
+      const cond = evalExpr(stmt.cond, vars);
+      if (!cond.ok) return cond;
+      const branch = cond.value.value !== 0 ? stmt.then : stmt.else;
+      const r = exec(branch, vars);
       if (!r.ok) return r;
       continue;
     }
