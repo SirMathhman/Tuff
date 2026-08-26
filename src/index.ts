@@ -32,6 +32,7 @@ export type {
   AssignNode,
   ReturnNode,
   BlockNode,
+  IfNode,
 } from "./parser.ts";
 export type { Binding, Environment } from "./scopes.ts";
 

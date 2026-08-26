@@ -64,6 +64,18 @@ function executeStatement(
     if (!value.ok) return value;
     return value;
   }
+  if (stmt.kind === "If") {
+    const condition = evalOrError(stmt.condition, line, env);
+    if (!condition.ok) return condition;
+    const branch = condition.value !== 0 ? stmt.then : stmt.else;
+    if (!branch) return undefined;
+    env.scopes.push(new Map());
+    try {
+      return executeList(branch.statements, line, env);
+    } finally {
+      env.scopes.pop();
+    }
+  }
   return executeAssignment(stmt.target, stmt.value, line, env);
 }
 

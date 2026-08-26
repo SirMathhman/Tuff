@@ -100,8 +100,21 @@ export interface BlockNode {
   statements: TuffStatement[];
 }
 
+/** An `if` statement node with an optional `else` branch. */
+export interface IfNode {
+  kind: "If";
+  condition: TuffExpr;
+  then: BlockNode;
+  else: BlockNode | null;
+}
+
 /** A parsed tuff statement. */
-export type TuffStatement = LetNode | AssignNode | ReturnNode | BlockNode;
+export type TuffStatement =
+  | LetNode
+  | AssignNode
+  | ReturnNode
+  | BlockNode
+  | IfNode;
 
 /** A mutable parse position over a token list. */
 interface Pos {
@@ -318,6 +331,61 @@ function parseAndCollect(
 }
 
 /**
+ * Parse an `if` statement: `if (expr) { ... } [else { ... }]`.
+ * @param tokens {TuffToken[]} - The token list; `if` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffStatement | TuffError} The If node, or a TuffError.
+ */
+function parseIf(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffStatement | TuffError {
+  if (tokens[pos.i]?.kind !== "LParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const condition = parseLevel(tokens, pos, line, 0);
+  if (!isExpr(condition)) return condition;
+  if (tokens[pos.i]?.kind !== "RParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const then = parseStatement(tokens, pos, line);
+  if (!isStatement(then) || then.kind !== "Block") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  let elseBlock: BlockNode | null = null;
+  const next = tokens[pos.i];
+  if (next?.kind === "Ident" && next.name === "else") {
+    pos.i++;
+    const elseStmt = parseStatement(tokens, pos, line);
+    if (!isStatement(elseStmt) || elseStmt.kind !== "Block") {
+      return {
+        kind: "InvalidStatement",
+        token: tokenDetail(tokens[pos.i]),
+        line,
+      };
+    }
+    elseBlock = elseStmt;
+  }
+  return { kind: "If", condition, then, else: elseBlock };
+}
+
+/**
  * Parse a braced block: `{ stmt; ... }`.
  * @param tokens {TuffToken[]} - The token list; `{` already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the block.
@@ -384,6 +452,10 @@ function parseStatement(
     if (!isExpr(value)) return value;
     return { kind: "Return", value };
   }
+  if (token.kind === "Ident" && token.name === "if") {
+    pos.i++;
+    return parseIf(tokens, pos, line);
+  }
   if (token.kind === "Ident") {
     const name = token.name;
     pos.i++;
@@ -417,7 +489,8 @@ export function isStatement(
     value.kind === "Let" ||
     value.kind === "Assign" ||
     value.kind === "Return" ||
-    value.kind === "Block"
+    value.kind === "Block" ||
+    value.kind === "If"
   );
 }
 
@@ -445,7 +518,7 @@ export function parseProgram(
       continue;
     }
     if (!sep) break;
-    if (stmt.kind !== "Block") {
+    if (stmt.kind !== "Block" && stmt.kind !== "If") {
       return {
         kind: "InvalidStatement",
         token: tokenDetail(sep),
