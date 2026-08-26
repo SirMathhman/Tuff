@@ -91,3 +91,11 @@ test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
     });
   }
 });
+
+test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("unidentifiedIdentifier = 1;"),
+    "unidentifiedIdentifier",
+    1,
+  );
+});
