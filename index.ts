@@ -4,10 +4,27 @@
  * @returns The tuffness score.
  */
 export function evaluateTuff(s: string): number {
-  try {
-    const result = new Function(s)();
-    return typeof result === "number" ? result : 0;
-  } catch {
-    return 0;
+  const env = new Map<string, number>();
+  const statements = s
+    .split(";")
+    .map((st) => st.trim())
+    .filter(Boolean);
+  for (const stmt of statements) {
+    const [, letName, letValue] = stmt.match(/^let\s+(\w+)\s*=\s*(.+)$/) ?? [];
+    if (letName && letValue) {
+      env.set(letName, resolve(letValue, env));
+      continue;
+    }
+    const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
+    if (returnValue) {
+      return resolve(returnValue, env);
+    }
   }
+  return 0;
+}
+
+function resolve(expr: string, env: Map<string, number>): number {
+  const trimmed = expr.trim();
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  return env.get(trimmed) ?? 0;
 }
