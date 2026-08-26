@@ -214,12 +214,15 @@ function evalExpr(
     if (!binding) {
       return { kind: "UnidentifiedIdentifier", name: node.operand.name, line };
     }
+    if (node.mut && !binding.mut) {
+      return { kind: "ImmutableAssignment", name: node.operand.name, line };
+    }
     const id = env.refs.next;
     env.refs.next++;
     env.refs.refs.set(id, {
       binding,
       name: node.operand.name,
-      mut: node.mut,
+      mut: binding.mut,
     });
     return id;
   }

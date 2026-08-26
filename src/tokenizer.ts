@@ -116,10 +116,7 @@ export type TokenizeResult = TuffToken[] | TokenizeError;
  * @param i {number} - The index to read from.
  * @returns {ReadToken | TokenizeError | null} The token and the index just past it, a tokenization error, or null if only whitespace remains.
  */
-function readToken(
-  text: string,
-  i: number,
-): ReadToken | TokenizeError | null {
+function readToken(text: string, i: number): ReadToken | TokenizeError | null {
   let j = i;
   while (j < text.length && /\s/.test(text[j] ?? "")) j++;
   if (j >= text.length) return null;
@@ -136,8 +133,7 @@ function readToken(
     return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
     return { kind: "token", token: { kind: "Equal" }, next: j + 2 };
-  if (ch === "&")
-    return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
+  if (ch === "&") return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
   if (ch === "*")
     return { kind: "token", token: { kind: "Deref" }, next: j + 1 };
   if (ch === "=")

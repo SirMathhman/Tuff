@@ -22,6 +22,27 @@ function expectUnidentifiedIdentifier(
   }
 }
 
+/**
+ * Assert that a result is an ImmutableAssignment error.
+ * @param result - The result to assert on.
+ * @param name - The expected variable name.
+ * @param line - The expected line number.
+ */
+function expectImmutableAssignment(
+  result: TuffResult,
+  name: string,
+  line: number,
+) {
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "ImmutableAssignment",
+      name,
+      line,
+    });
+  }
+}
+
 test('evaluateTuff("") => 0', () => {
   expect(evaluateTuff("")).toEqual({ ok: true, value: 0 });
 });
@@ -87,15 +108,11 @@ test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
 });
 
 test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
-  const result = evaluateTuff("let x = 0; x = 1; return x;");
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.error).toEqual({
-      kind: "ImmutableAssignment",
-      name: "x",
-      line: 2,
-    });
-  }
+  expectImmutableAssignment(
+    evaluateTuff("let x = 0; x = 1; return x;"),
+    "x",
+    2,
+  );
 });
 
 test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {
@@ -237,4 +254,12 @@ test('evaluateTuff("let mut x = 0; let y = &mut x; *y = 1; return x;") => 1', ()
     ok: true,
     value: 1,
   });
+});
+
+test('evaluateTuff("let x = 1; let y = &mut x; *y = 5; return x;") => Err', () => {
+  expectImmutableAssignment(
+    evaluateTuff("let x = 1; let y = &mut x; *y = 5; return x;"),
+    "x",
+    2,
+  );
 });
