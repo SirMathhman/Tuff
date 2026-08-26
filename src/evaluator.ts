@@ -173,6 +173,9 @@ function executeAssignment(
   }
   const result = evalExpr(value, line, env);
   if (!isValue(result)) return { ok: false, error: result };
+  if (result.kind !== lvalue.binding.value.kind) {
+    return { ok: false, error: { kind: "TypeMismatch", name: lvalue.name, line } };
+  }
   lvalue.binding.value = result;
   return undefined;
 }

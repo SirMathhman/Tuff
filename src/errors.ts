@@ -32,6 +32,13 @@ export interface InvalidDerefError {
   line: number;
 }
 
+/** An error for assigning a value whose type differs from the binding's type. */
+export interface TypeMismatchError {
+  kind: "TypeMismatch";
+  name: string;
+  line: number;
+}
+
 /** An error for a character the tokenizer does not recognize. */
 export interface UnexpectedCharacterError {
   kind: "UnexpectedCharacter";
@@ -46,6 +53,7 @@ export type TuffError =
   | InvalidStatementError
   | ImmutableAssignmentError
   | InvalidDerefError
+  | TypeMismatchError
   | UnexpectedCharacterError;
 
 /** A successful evaluation result. */
