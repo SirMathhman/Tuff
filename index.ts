@@ -65,8 +65,15 @@ export interface OrNode {
   right: TuffExpr;
 }
 
+/** A binary `&&` expression node. */
+export interface AndNode {
+  kind: "And";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A parsed tuff expression. */
-export type TuffExpr = LiteralNode | IdentifierNode | OrNode;
+export type TuffExpr = LiteralNode | IdentifierNode | OrNode | AndNode;
 
 /**
  * Evaluate the tuffness of a string.
@@ -247,7 +254,8 @@ function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
   return (
     value.kind === "Literal" ||
     value.kind === "Identifier" ||
-    value.kind === "Or"
+    value.kind === "Or" ||
+    value.kind === "And"
   );
 }
 
@@ -297,21 +305,41 @@ function parseOperand(
 }
 
 /**
- * Parse an expression, right-associative over `||`.
+ * Parse an expression at the `||` level, right-associative.
  * @param text {string} - The expression text.
  * @param pos {Pos} - The mutable parse position, advanced past the expression.
  * @param line {number} - The 1-based line number.
  * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
  */
-function parseExpr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
-  const left = parseOperand(text, pos, line);
+function parseOr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
+  const left = parseAnd(text, pos, line);
   if (!isExpr(left)) return left;
   skipSpaces(text, pos);
   if (text.startsWith("||", pos.i)) {
     pos.i += 2;
-    const right = parseExpr(text, pos, line);
+    const right = parseOr(text, pos, line);
     if (!isExpr(right)) return right;
     return { kind: "Or", left, right };
+  }
+  return left;
+}
+
+/**
+ * Parse an expression at the `&&` level, right-associative.
+ * @param text {string} - The expression text.
+ * @param pos {Pos} - The mutable parse position, advanced past the expression.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
+ */
+function parseAnd(text: string, pos: Pos, line: number): TuffExpr | TuffError {
+  const left = parseOperand(text, pos, line);
+  if (!isExpr(left)) return left;
+  skipSpaces(text, pos);
+  if (text.startsWith("&&", pos.i)) {
+    pos.i += 2;
+    const right = parseAnd(text, pos, line);
+    if (!isExpr(right)) return right;
+    return { kind: "And", left, right };
   }
   return left;
 }
@@ -325,7 +353,7 @@ function parseExpr(text: string, pos: Pos, line: number): TuffExpr | TuffError {
 function parseExpression(expr: string, line: number): TuffExpr | TuffError {
   const pos: Pos = { i: 0 };
   skipSpaces(expr, pos);
-  const node = parseExpr(expr, pos, line);
+  const node = parseOr(expr, pos, line);
   if (!isExpr(node)) return node;
   skipSpaces(expr, pos);
   if (pos.i !== expr.length) {
@@ -354,7 +382,13 @@ function evalExpr(
   }
   const left = evalExpr(node.left, scopes, line);
   if (typeof left !== "number") return left;
-  if (left !== 0) return 1;
+  if (node.kind === "Or") {
+    if (left !== 0) return 1;
+    const right = evalExpr(node.right, scopes, line);
+    if (typeof right !== "number") return right;
+    return right !== 0 ? 1 : 0;
+  }
+  if (left === 0) return 0;
   const right = evalExpr(node.right, scopes, line);
   if (typeof right !== "number") return right;
   return right !== 0 ? 1 : 0;

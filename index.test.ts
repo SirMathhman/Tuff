@@ -163,3 +163,10 @@ test('evaluateTuff("let x = true; let y = false; return x || y;") => 1', () => {
     value: 1,
   });
 });
+
+test('evaluateTuff("let x = true; let y = false; return x && y;") => 0', () => {
+  expect(evaluateTuff("let x = true; let y = false; return x && y;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
