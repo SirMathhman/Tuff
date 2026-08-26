@@ -113,7 +113,8 @@ function consumeSeparator(
 }
 
 /**
- * Parse a single statement.
+ * Parse a single statement. An identifier not followed by `=` or `+=`
+ * is a bare expression statement, which implicitly returns its value.
  *
  * @param state - The parser state.
  * @returns The statement, or a structured parse error.
@@ -136,7 +137,13 @@ export function parseStmt(state: ParserState): ParseStmtResult {
     return parseFor(state);
   }
   if (t.kind === "ident") {
-    return parseAssign(state);
+    if (!atEnd(state)) {
+      const after = state.tokens[state.idx + 1];
+      if (after !== undefined && (after.value === "=" || after.value === "+=")) {
+        return parseAssign(state);
+      }
+    }
+    return parseBareExpr(state);
   }
   if (t.value === "{") {
     return parseBlock(state);
@@ -145,6 +152,20 @@ export function parseStmt(state: ParserState): ParseStmtResult {
     ok: false,
     error: parseError(`Unexpected token: ${t.value}`, t.pos),
   };
+}
+
+/**
+ * Parse a bare expression statement: an expression that is not an
+ * assignment, which implicitly returns its value.
+ *
+ * @param state - The parser state, positioned at the expression.
+ * @returns A return statement carrying the expression, or a structured
+ * parse error.
+ */
+function parseBareExpr(state: ParserState): ParseStmtResult {
+  const value = parseExpr(state);
+  if (!value.ok) return value;
+  return { ok: true, stmt: { type: "Return", value: value.expr } };
 }
 
 /**

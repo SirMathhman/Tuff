@@ -12,6 +12,9 @@ test("no return statement returns 0", () => {
 test("return statement returns the number", () => {
   expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
 });
+test("bare expression statement implicitly returns its value", () => {
+  expect(evaluateTuff("let x = 1; x")).toEqual({ ok: true, value: 1 });
+});
 test("let declaration then return variable", () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,
