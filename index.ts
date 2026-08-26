@@ -15,7 +15,16 @@ export interface InvalidExpressionError {
   line: number;
 }
 
-export type TuffError = UnidentifiedIdentifierError | InvalidExpressionError;
+export interface ImmutableAssignmentError {
+  kind: "ImmutableAssignment";
+  name: string;
+  line: number;
+}
+
+export type TuffError =
+  | UnidentifiedIdentifierError
+  | InvalidExpressionError
+  | ImmutableAssignmentError;
 
 export interface TuffErr {
   ok: false;
@@ -31,6 +40,7 @@ export type TuffResult = TuffOk | TuffErr;
  */
 export function evaluateTuff(s: string): TuffResult {
   const env = new Map<string, number>();
+  const muts = new Set<string>();
   const statements = s
     .split(";")
     .map((st) => st.trim())
@@ -39,12 +49,13 @@ export function evaluateTuff(s: string): TuffResult {
     const stmt = statements[i];
     if (!stmt) continue;
     const line = i + 1;
-    const [, letName, letValue] =
-      stmt.match(/^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
+    const [, letMut, letName, letValue] =
+      stmt.match(/^let\s+(mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
     if (letName && letValue) {
       const value = resolveOrError(letValue, env, line);
       if (typeof value !== "number") return { ok: false, error: value };
       env.set(letName, value);
+      if (letMut) muts.add(letName);
       continue;
     }
     const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
@@ -59,6 +70,12 @@ export function evaluateTuff(s: string): TuffResult {
         return {
           ok: false,
           error: { kind: "UnidentifiedIdentifier", name: assignName, line },
+        };
+      }
+      if (!muts.has(assignName)) {
+        return {
+          ok: false,
+          error: { kind: "ImmutableAssignment", name: assignName, line },
         };
       }
       const value = resolveOrError(assignValue, env, line);

@@ -79,3 +79,15 @@ test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
     1,
   );
 });
+
+test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
+  const result = evaluateTuff("let x = 0; x = 1; return x;");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "ImmutableAssignment",
+      name: "x",
+      line: 2,
+    });
+  }
+});
