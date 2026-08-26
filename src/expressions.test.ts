@@ -59,10 +59,12 @@ test('evaluateTuff("return true == 1;") => 0', () => {
 });
 
 test('evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;") => 7', () => {
-  expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual({
-    ok: true,
-    value: 7,
-  });
+  expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual(
+    {
+      ok: true,
+      value: 7,
+    },
+  );
 });
 
 test('evaluateTuff("let tuple = (1, 2); let other = tuple; return other.1;") => 2', () => {
@@ -82,10 +84,12 @@ test('evaluateTuff("let tuple = (1, 2, 3); return tuple.2;") => 3', () => {
 });
 
 test('evaluateTuff("let tuple = (1, 2); return tuple.0 + tuple.1;") => 3', () => {
-  expect(evaluateTuff("let tuple = (1, 2); return tuple.0 + tuple.1;")).toEqual({
-    ok: true,
-    value: 3,
-  });
+  expect(evaluateTuff("let tuple = (1, 2); return tuple.0 + tuple.1;")).toEqual(
+    {
+      ok: true,
+      value: 3,
+    },
+  );
 });
 
 test('evaluateTuff("let tuple = (1, 2); return tuple.0;") => 1', () => {
@@ -104,10 +108,20 @@ test('evaluateTuff("let tuple = (1, 2); return tuple.1;") => 2', () => {
 
 test('evaluateTuff("let array = [1, 2, 3]; return array[0] + array[1] + array[2];") => 6', () => {
   expect(
-    evaluateTuff("let array = [1, 2, 3]; return array[0] + array[1] + array[2];"),
+    evaluateTuff(
+      "let array = [1, 2, 3]; return array[0] + array[1] + array[2];",
+    ),
   ).toEqual({
     ok: true,
     value: 6,
+  });
+});
+
+test('evaluateTuff("let array = [1, 2]; return array[true];") => Err', () => {
+  const result = evaluateTuff("let array = [1, 2]; return array[true];");
+  expect(result).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "array", line: 2 },
   });
 });
 

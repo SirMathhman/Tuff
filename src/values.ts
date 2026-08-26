@@ -57,7 +57,6 @@ export function truthy(value: TuffValue): boolean {
   return true;
 }
 
-
 /**
  * Type guard distinguishing a runtime value from a structured error.
  * @param value {TuffValue | TuffError} - The value to test.
@@ -83,4 +82,3 @@ export function toResultValue(value: TuffValue): number {
   if (value.kind === "bool") return value.value ? 1 : 0;
   return value.elements.length;
 }
-

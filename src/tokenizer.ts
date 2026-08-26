@@ -178,8 +178,7 @@ function readPunct(text: string, j: number): ReadToken | null {
     return { kind: "token", token: { kind: "Assign" }, next: j + 1 };
   if (ch === ",")
     return { kind: "token", token: { kind: "Comma" }, next: j + 1 };
-  if (ch === ".")
-    return { kind: "token", token: { kind: "Dot" }, next: j + 1 };
+  if (ch === ".") return { kind: "token", token: { kind: "Dot" }, next: j + 1 };
   if (ch === ";")
     return { kind: "token", token: { kind: "Semicolon" }, next: j + 1 };
   if (ch === "{")
