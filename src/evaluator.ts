@@ -88,8 +88,7 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
       return { value: equal, kind: "boolean" };
     }
     if (expr.op === "<") {
-      const less =
-        left.kind === right.kind && left.value < right.value ? 1 : 0;
+      const less = left.kind === right.kind && left.value < right.value ? 1 : 0;
       return { value: less, kind: "boolean" };
     }
     return { value: right.value !== 0 ? 1 : 0, kind: "boolean" };
@@ -122,8 +121,8 @@ interface TypeInfo {
 /**
  * Statically check that every assignment matches the kind and mutability
  * of its binding, and that every referenced identifier is declared.
- * Walks all statements, including both branches of every `if`, so errors
- * are reported even in branches that would not execute.
+ * Walks all statements, including both branches of every `if` and every
+ * `while` body, so errors are reported even in code that would not execute.
  *
  * @param stmts - The statements to check.
  * @param types - The types of declared variables; each block and `if`
@@ -147,6 +146,13 @@ function typeCheck(
       if (!err.ok) return err;
       const elseErr = typeCheck(stmt.else, new Map(types));
       if (!elseErr.ok) return elseErr;
+      continue;
+    }
+    if (stmt.type === "While") {
+      const cond = exprKind(stmt.cond, types);
+      if (!cond.ok) return cond;
+      const err = typeCheck(stmt.body, new Map(types));
+      if (!err.ok) return err;
       continue;
     }
     const r = exprKind(stmt.value, types);
@@ -221,6 +227,12 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): number {
     if (stmt.type === "If") {
       const cond = evalExpr(stmt.cond, vars);
       exec(cond.value !== 0 ? stmt.then : stmt.else, vars);
+      continue;
+    }
+    if (stmt.type === "While") {
+      while (evalExpr(stmt.cond, vars).value !== 0) {
+        exec(stmt.body, vars);
+      }
       continue;
     }
     const value = evalExpr(stmt.value, vars);

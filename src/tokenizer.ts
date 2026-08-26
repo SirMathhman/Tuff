@@ -26,7 +26,7 @@ export interface TokenizeErr {
   error: TuffError;
 }
 
-const KEYWORDS = new Set(["let", "mut", "return", "if", "else"]);
+const KEYWORDS = new Set(["let", "mut", "return", "if", "else", "while"]);
 
 /**
  * Single-character punctuation tokens.

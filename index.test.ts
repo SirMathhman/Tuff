@@ -54,6 +54,11 @@ test("if without else skips the branch when false", () => {
     evaluateTuff("let mut x = 0; if (false) { x = 1; } return x;"),
   ).toEqual({ ok: true, value: 0 });
 });
+test("while loop runs until the condition is false", () => {
+  expect(
+    evaluateTuff("let mut x = 0; while (x < 4) { x += 1; } return x;"),
+  ).toEqual({ ok: true, value: 4 });
+});
 test("assignment to immutable binding returns Err", () => {
   expect(evaluateTuff("let x = 0; x = 1; return x;")).toEqual({
     ok: false,

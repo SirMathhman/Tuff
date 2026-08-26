@@ -51,9 +51,18 @@ export interface If {
 }
 
 /**
+ * A `while` loop: repeats its body while the condition is truthy.
+ */
+export interface While {
+  type: "While";
+  cond: Expr;
+  body: Stmt[];
+}
+
+/**
  * A statement in the program.
  */
-export type Stmt = LetDecl | Assign | Return | Block | If;
+export type Stmt = LetDecl | Assign | Return | Block | If | While;
 
 /**
  * A parsed program: an ordered list of statements.
@@ -119,6 +128,16 @@ function parseProgram(state: ParserState): ParseResult {
 }
 
 /**
+ * Whether a statement is block-like and does not require a trailing `;`.
+ *
+ * @param stmt - The statement to test.
+ * @returns True for block-like statements.
+ */
+function isBlockLike(stmt: Stmt): boolean {
+  return stmt.type === "Block" || stmt.type === "If" || stmt.type === "While";
+}
+
+/**
  * Parse a list of statements, optionally terminated by a closing `}`.
  *
  * @param state - The parser state.
@@ -139,11 +158,7 @@ function parseStmtList(
     const r = parseStmt(state);
     if (!r.ok) return r;
     stmts.push(r.stmt);
-    const sep = consumeSeparator(
-      state,
-      inBlock,
-      r.stmt.type === "Block" || r.stmt.type === "If",
-    );
+    const sep = consumeSeparator(state, inBlock, isBlockLike(r.stmt));
     if (!sep.ok) return sep;
   }
   if (inBlock) {
@@ -214,6 +229,9 @@ function parseStmt(state: ParserState): ParseStmtOk | ParseErr {
   }
   if (t.kind === "keyword" && t.value === "if") {
     return parseIf(state);
+  }
+  if (t.kind === "keyword" && t.value === "while") {
+    return parseWhile(state);
   }
   if (t.kind === "ident") {
     return parseAssign(state);
@@ -340,6 +358,42 @@ function parseIf(state: ParserState): ParseStmtOk | ParseErr {
       cond: cond.expr,
       then: (thenBlock.stmt as Block).stmts,
       else: elseStmts,
+    },
+  };
+}
+
+/**
+ * Parse a `while` statement: `while (cond) { ... }`.
+ *
+ * @param state - The parser state.
+ * @returns The statement, or a structured parse error.
+ */
+function parseWhile(state: ParserState): ParseStmtOk | ParseErr {
+  next(state);
+  const open = next(state);
+  if (open.value !== "(") {
+    return {
+      ok: false,
+      error: parseError("Expected '(' after 'while'", open.pos),
+    };
+  }
+  const cond = parseExpr(state);
+  if (!cond.ok) return cond;
+  const close = next(state);
+  if (close.value !== ")") {
+    return {
+      ok: false,
+      error: parseError("Expected ')' after condition", close.pos),
+    };
+  }
+  const body = parseBlock(state);
+  if (!body.ok) return body;
+  return {
+    ok: true,
+    stmt: {
+      type: "While",
+      cond: cond.expr,
+      body: (body.stmt as Block).stmts,
     },
   };
 }
