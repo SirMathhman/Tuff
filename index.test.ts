@@ -54,6 +54,18 @@ test("assignment to immutable binding returns Err", () => {
     error: { type: "ImmutableAssignment", name: "x", position: 11 },
   });
 });
+test("assigning a boolean to a number binding returns Err", () => {
+  expect(evaluateTuff("let mut x = 0; x = true;")).toEqual({
+    ok: false,
+    error: {
+      type: "TypeMismatch",
+      name: "x",
+      position: 15,
+      expected: "number",
+      actual: "boolean",
+    },
+  });
+});
 test("malformed statement returns ParseError", () => {
   expect(evaluateTuff("let x = ;")).toEqual({
     ok: false,

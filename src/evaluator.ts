@@ -1,6 +1,6 @@
 import type { TuffError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import type { Stmt } from "./parser.ts";
+import type { Assign, Stmt } from "./parser.ts";
 import type { Expr } from "./expr.ts";
 
 /**
@@ -94,6 +94,49 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): EvalResult {
 }
 
 /**
+ * Apply an assignment to an existing binding.
+ *
+ * @param stmt - The assignment statement.
+ * @param value - The evaluated value to assign.
+ * @param vars - The variable scope.
+ * @returns A structured error, or null when the assignment succeeded.
+ */
+function doAssign(
+  stmt: Assign,
+  value: Value,
+  vars: Map<string, Binding>,
+): Err | null {
+  const binding = vars.get(stmt.name);
+  if (binding === undefined) {
+    return { ok: false, error: { type: "UnknownIdentifier", name: stmt.name } };
+  }
+  if (!binding.mutable) {
+    return {
+      ok: false,
+      error: {
+        type: "ImmutableAssignment",
+        name: stmt.name,
+        position: stmt.pos,
+      },
+    };
+  }
+  if (binding.value.kind !== value.kind) {
+    return {
+      ok: false,
+      error: {
+        type: "TypeMismatch",
+        name: stmt.name,
+        position: stmt.pos,
+        expected: binding.value.kind,
+        actual: value.kind,
+      },
+    };
+  }
+  binding.value = value;
+  return null;
+}
+
+/**
  * Execute a sequence of statements against a variable scope.
  *
  * @param stmts - The statements to execute.
@@ -119,24 +162,8 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
     if (!value.ok) return value;
     if (stmt.type === "Return") return { ok: true, value: value.value.value };
     if (stmt.type === "Assign") {
-      const binding = vars.get(stmt.name);
-      if (binding === undefined) {
-        return {
-          ok: false,
-          error: { type: "UnknownIdentifier", name: stmt.name },
-        };
-      }
-      if (!binding.mutable) {
-        return {
-          ok: false,
-          error: {
-            type: "ImmutableAssignment",
-            name: stmt.name,
-            position: stmt.pos,
-          },
-        };
-      }
-      binding.value = value.value;
+      const err = doAssign(stmt, value.value, vars);
+      if (err !== null) return err;
       continue;
     }
     vars.set(stmt.name, { value: value.value, mutable: stmt.mutable });

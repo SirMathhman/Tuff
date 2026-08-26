@@ -25,12 +25,24 @@ export interface ParseError {
 }
 
 /**
+ * An error for assigning a value whose kind differs from the binding's kind.
+ */
+export interface TypeMismatchError {
+  type: "TypeMismatch";
+  name: string;
+  position: number;
+  expected: "number" | "boolean";
+  actual: "number" | "boolean";
+}
+
+/**
  * A structured error produced by the evaluator.
  */
 export type TuffError =
   | UnknownIdentifierError
   | ImmutableAssignmentError
-  | ParseError;
+  | ParseError
+  | TypeMismatchError;
 
 /**
  * Build a structured parse error.
