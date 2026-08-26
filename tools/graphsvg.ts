@@ -38,10 +38,12 @@ interface Drawing {
 /** Graphviz JSON, cut down to what placing children and edges needs. */
 interface DotJson {
   bb: string;
-  objects: { name: string; pos: string }[];
+  objects: { _gvid: number; name: string; pos: string }[];
   edges?: {
     _draw_: DrawOp[];
     _hdraw_?: DrawOp[];
+    tail: number;
+    head: number;
   }[];
 }
 
@@ -50,11 +52,30 @@ interface DrawOp {
   points?: [number, number][];
 }
 
-const EDGE_COLOR = "#64748b";
-const LABEL_COLOR = "#334155";
+const BACKGROUND = "#0f172a";
+const NODE_FILL = "#1e293b";
+const NODE_STROKE = "#475569";
+const NODE_TEXT = "#e2e8f0";
+const EDGE_COLOR = "#7c8da6";
+// Amber marks the way in and the way across: calls that leave a box, and the
+// function inside a box that nothing local calls.
+const ACCENT = "#f59e0b";
+const ACCENT_TEXT = "#fcd34d";
+// Violet, not red: a cycle here is usually recursive descent doing its job,
+// not a fault to fix.
+const CYCLE = "#a78bfa";
+const LABEL_COLOR = "#cbd5e1";
+// Inter would need installing first: dot sizes every box with the metrics of
+// the font it can actually load, so naming one Pango cannot find lays the
+// drawing out for the fallback and then labels it in something else.
+const FONT = "Arial";
 const PAD = { top: 24, side: 10, bottom: 10 };
-const LEAF_STYLE = { color: "#94a3b8", fontSize: 12 };
-const GROUP_STYLE = { color: "#64748b", fontSize: 13 };
+// Type grows outward: a function, then the file titling it, then the
+// directory. Left unset, dot would give the nodes its own default of 14 and
+// make the innermost text the largest thing on the page.
+const NODE_FONT_SIZE = 12;
+const LEAF_STYLE = { color: "#475569", fontSize: 13 };
+const GROUP_STYLE = { color: "#64748b", fontSize: 14 };
 const MARGIN = 8;
 
 // Every dot source this render produced, in the order it was run, so callers
@@ -100,6 +121,38 @@ function svgFragment(svg: string): Drawing {
   };
 }
 
+// An edge lies on a cycle exactly when its head can find its way back to its
+// tail -- a self-call included. One box is one file's functions or one
+// directory's children, small enough that a walk per edge costs nothing.
+function cyclicEdges(edges: [string, string][]): Set<string> {
+  const out = new Map<string, string[]>();
+  for (const [from, to] of edges) {
+    const seen = out.get(from);
+    if (seen) seen.push(to);
+    else out.set(from, [to]);
+  }
+  const cyclic = new Set<string>();
+  for (const [from, to] of edges) {
+    const visited = new Set<string>();
+    const stack = [to];
+    while (stack.length) {
+      const at = stack.pop()!;
+      if (at === from) {
+        cyclic.add(edgeKey(from, to));
+        break;
+      }
+      if (visited.has(at)) continue;
+      visited.add(at);
+      stack.push(...(out.get(at) ?? []));
+    }
+  }
+  return cyclic;
+}
+
+function edgeKey(from: string, to: string): string {
+  return JSON.stringify([from, to]);
+}
+
 function renderLeaf(box: LeafBox): Drawing {
   // Function names, not the qualified ids, keep the dot source readable and
   // free of the backslashes a Windows path drags in.
@@ -107,12 +160,27 @@ function renderLeaf(box: LeafBox): Drawing {
   const lines = [
     `digraph "${esc(box.label)}" {`,
     "  graph [nodesep=0.35, ranksep=0.45, splines=ortho];",
-    '  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", fontname="Consolas"];',
+    `  node [shape=box, style="rounded,filled", fillcolor="${NODE_FILL}",` +
+      ` color="${NODE_STROKE}", fontcolor="${NODE_TEXT}",` +
+      ` fontname="${FONT}", fontsize=${NODE_FONT_SIZE}];`,
     `  edge [color="${EDGE_COLOR}"];`,
   ];
-  for (const node of box.nodes) lines.push(`  "${esc(node.label)}";`);
+  // A function no local call reaches is how other files enter this one, so it
+  // gets the accent -- including in a file whose functions call none of each
+  // other, where every one of them is an entry.
+  const called = new Set(box.edges.map(([, to]) => to));
+  for (const node of box.nodes) {
+    const attrs = called.has(node.id)
+      ? ""
+      : ` [color="${ACCENT}", fontcolor="${ACCENT_TEXT}"]`;
+    lines.push(`  "${esc(node.label)}"${attrs};`);
+  }
+  const cyclic = cyclicEdges(box.edges);
   for (const [from, to] of box.edges) {
-    lines.push(`  "${esc(names.get(from)!)}" -> "${esc(names.get(to)!)}";`);
+    const attrs = cyclic.has(edgeKey(from, to)) ? ` [color="${CYCLE}"]` : "";
+    lines.push(
+      `  "${esc(names.get(from)!)}" -> "${esc(names.get(to)!)}"${attrs};`,
+    );
   }
   lines.push("}");
   return svgFragment(runDot(lines.join("\n"), "svg"));
@@ -158,19 +226,27 @@ function groupDot(
   return lines.join("\n");
 }
 
-function drawEdges(json: DotJson, flipY: (y: number) => number): string[] {
+// dot returns the edges in its own order, so which logical edge a drawing
+// belongs to has to come from its endpoints rather than its position.
+function drawEdges(
+  json: DotJson,
+  flipY: (y: number) => number,
+  colorOf: (tail: string, head: string) => string,
+): string[] {
+  const byGvid = new Map(json.objects.map((o) => [o._gvid, o.name] as const));
   const parts: string[] = [];
   for (const edge of json.edges ?? []) {
+    const stroke = colorOf(byGvid.get(edge.tail)!, byGvid.get(edge.head)!);
     const spline = pointsOf(edge._draw_, "b");
     if (spline.length) {
       const d = pathData(spline, flipY);
-      parts.push(`<path fill="none" stroke="${EDGE_COLOR}" d="${d}"/>`);
+      parts.push(`<path fill="none" stroke="${stroke}" d="${d}"/>`);
     }
     const arrow = pointsOf(edge._hdraw_, "P");
     if (arrow.length) {
       const pts = arrow.map(([x, y]) => `${x},${flipY(y)}`).join(" ");
       parts.push(
-        `<polygon fill="${EDGE_COLOR}" stroke="${EDGE_COLOR}" points="${pts}"/>`,
+        `<polygon fill="${stroke}" stroke="${stroke}" points="${pts}"/>`,
       );
     }
   }
@@ -188,7 +264,13 @@ function renderGroupContent(box: GroupBox): Drawing {
   const flipY = (y: number): number => height! - y;
 
   // Edges first so the children's boxes paint over their endpoints.
-  const parts = drawEdges(json, flipY);
+  const ids = new Map<string, string>(
+    [...names].map(([id, name]) => [name, id] as const),
+  );
+  const cyclic = cyclicEdges(box.edges);
+  const parts = drawEdges(json, flipY, (tail, head) =>
+    cyclic.has(edgeKey(ids.get(tail)!, ids.get(head)!)) ? CYCLE : ACCENT,
+  );
   for (const child of box.children) {
     const drawing = sizes.get(child.id)!;
     const name = names.get(child.id);
@@ -211,7 +293,7 @@ function decorate(box: Box, inner: Drawing): Drawing {
     `<rect x="0.5" y="0.5" width="${(width - 1).toFixed(2)}" height="${(height - 1).toFixed(2)}"` +
       ` rx="8" fill="none" stroke="${style.color}"/>`,
     `<text x="${(width / 2).toFixed(2)}" y="${PAD.top - 8}" text-anchor="middle"` +
-      ` font-family="Consolas" font-size="${style.fontSize}" fill="${LABEL_COLOR}">` +
+      ` font-family="${FONT}" font-size="${style.fontSize}" fill="${LABEL_COLOR}">` +
       `${escXml(box.label)}</text>`,
     `<g transform="translate(${((width - inner.width) / 2).toFixed(2)},${PAD.top})">`,
     inner.body,
@@ -242,7 +324,7 @@ export function renderGraph(root: GroupBox): {
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"' +
       ` width="${width.toFixed(0)}pt" height="${height.toFixed(0)}pt"` +
       ` viewBox="0 0 ${width.toFixed(2)} ${height.toFixed(2)}">`,
-    '<rect width="100%" height="100%" fill="white"/>',
+    `<rect width="100%" height="100%" fill="${BACKGROUND}"/>`,
     `<g transform="translate(${MARGIN},${MARGIN})">`,
     inner.body,
     "</g>",
