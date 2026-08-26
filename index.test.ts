@@ -13,4 +13,8 @@ describe("evaluateTuff", () => {
   test('evaluateTuff("let x = 1; return x;") => 1', () => {
     expect(evaluateTuff("let x = 1; return x;")).toBe(1);
   });
+
+  test('evaluateTuff("let x = 1; let y = x; return y;") => 1', () => {
+    expect(evaluateTuff("let x = 1; let y = x; return y;")).toBe(1);
+  });
 });
