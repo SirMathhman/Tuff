@@ -64,7 +64,7 @@ export function parseStmtList(
     if (atEnd(state)) {
       return {
         ok: false,
-        error: parseError("Expected '}' to close block", state.tokens.length),
+        error: parseError("Expected '}' to close block", state.end),
       };
     }
     next(state);
@@ -139,7 +139,10 @@ export function parseStmt(state: ParserState): ParseStmtResult {
   if (t.kind === "ident") {
     if (!atEnd(state)) {
       const after = state.tokens[state.idx + 1];
-      if (after !== undefined && (after.value === "=" || after.value === "+=")) {
+      if (
+        after !== undefined &&
+        (after.value === "=" || after.value === "+=")
+      ) {
         return parseAssign(state);
       }
     }

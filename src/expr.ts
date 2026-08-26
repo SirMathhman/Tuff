@@ -114,31 +114,44 @@ export interface ParseExprErr {
 export type ParseExprResult = ParseExprOk | ParseExprErr;
 
 /**
- * Mutable parser state: the token list and the current cursor.
+ * Mutable parser state: the token list, the cursor, and the source end
+ * offset (positions the synthetic `<eof>` token).
  */
 export interface ParserState {
   tokens: Token[];
   idx: number;
+  end: number;
+}
+
+/**
+ * The synthetic `<eof>` token returned past the last token, so truncated
+ * input yields a positioned `ParseError` instead of a throw.
+ *
+ * @param state - The parser state.
+ * @returns The `<eof>` token at the end of the source.
+ */
+function eofToken(state: ParserState): Token {
+  return { kind: "punct", value: "<eof>", pos: state.end };
 }
 
 /**
  * Peek at the current token without advancing.
  *
  * @param state - The parser state.
- * @returns The current token.
+ * @returns The current token, or `<eof>` at the end.
  */
 export function peek(state: ParserState): Token {
-  return state.tokens[state.idx] as Token;
+  return state.tokens[state.idx] ?? eofToken(state);
 }
 
 /**
  * Consume and return the current token.
  *
  * @param state - The parser state.
- * @returns The consumed token.
+ * @returns The consumed token, or `<eof>` at the end.
  */
 export function next(state: ParserState): Token {
-  const t = state.tokens[state.idx] as Token;
+  const t = state.tokens[state.idx] ?? eofToken(state);
   state.idx++;
   return t;
 }

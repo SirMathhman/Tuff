@@ -63,5 +63,5 @@ function parseProgram(state: ParserState): ParseResult {
 export function parse(input: string): ParseResult {
   const tok = tokenize(input);
   if (!tok.ok) return tok;
-  return parseProgram({ tokens: tok.tokens, idx: 0 });
+  return parseProgram({ tokens: tok.tokens, idx: 0, end: input.length });
 }

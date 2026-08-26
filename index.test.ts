@@ -177,3 +177,33 @@ test("malformed statement returns ParseError", () => {
     },
   });
 });
+test("truncated assignment returns ParseError", () => {
+  expect(evaluateTuff("x =")).toEqual({
+    ok: false,
+    error: {
+      type: "ParseError",
+      message: "Expected expression, got: <eof>",
+      position: 3,
+    },
+  });
+});
+test("truncated let declaration returns ParseError", () => {
+  expect(evaluateTuff("let x =")).toEqual({
+    ok: false,
+    error: {
+      type: "ParseError",
+      message: "Expected expression, got: <eof>",
+      position: 7,
+    },
+  });
+});
+test("truncated if statement returns ParseError", () => {
+  expect(evaluateTuff("if")).toEqual({
+    ok: false,
+    error: {
+      type: "ParseError",
+      message: "Expected '(' after 'if'",
+      position: 2,
+    },
+  });
+});
