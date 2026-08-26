@@ -113,6 +113,26 @@ function checkStatement(
 }
 
 /**
+ * Check a statement in a fresh scope, always popping it afterwards.
+ * @param stmt - The statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkInScope(
+  stmt: TuffStatement,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  scopes.push({});
+  try {
+    return checkStatement(stmt, line, scopes);
+  } finally {
+    scopes.pop();
+  }
+}
+
+/**
  * Check an `if` statement: its condition, then-branch, and optional else-branch.
  * @param stmt - The If statement to check.
  * @param line - The 1-based line number.
@@ -126,16 +146,9 @@ function checkIf(
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
   if (condError) return condError;
-  scopes.push({});
-  let error = checkStatement(stmt.then, line, scopes);
-  scopes.pop();
+  const error = checkInScope(stmt.then, line, scopes);
   if (error) return error;
-  if (stmt.else) {
-    scopes.push({});
-    error = checkStatement(stmt.else, line, scopes);
-    scopes.pop();
-  }
-  return error;
+  return stmt.else ? checkInScope(stmt.else, line, scopes) : null;
 }
 
 /**
@@ -152,12 +165,7 @@ function checkWhile(
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
   if (condError) return condError;
-  scopes.push({});
-  try {
-    return checkStatement(stmt.body, line, scopes);
-  } finally {
-    scopes.pop();
-  }
+  return checkInScope(stmt.body, line, scopes);
 }
 
 /**

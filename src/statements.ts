@@ -138,19 +138,17 @@ function parseAndCollect(
 }
 
 /**
- * Parse an `if` statement: `if (expr) { ... } [else { ... }]`.
- * @param tokens {TuffToken[]} - The token list; `if` already consumed.
- * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * Parse a parenthesized condition: `(expr)`, shared by `if` and `while`.
+ * @param tokens {TuffToken[]} - The token list; the keyword already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the condition.
  * @param line {number} - The 1-based line number.
- * @param parseStatement {ParseStatement} - The statement parser, breaking mutual recursion.
- * @returns {TuffStatement | TuffError} The If node, or a TuffError.
+ * @returns {TuffExpr | TuffError} The condition expression, or a TuffError.
  */
-function parseIf(
+function parseCondition(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
-  parseStatement: ParseStatement,
-): TuffStatement | TuffError {
+): TuffExpr | TuffError {
   if (tokens[pos.i]?.kind !== "LParen") {
     return {
       kind: "InvalidStatement",
@@ -169,6 +167,25 @@ function parseIf(
     };
   }
   pos.i++;
+  return condition;
+}
+
+/**
+ * Parse an `if` statement: `if (expr) { ... } [else { ... }]`.
+ * @param tokens {TuffToken[]} - The token list; `if` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, breaking mutual recursion.
+ * @returns {TuffStatement | TuffError} The If node, or a TuffError.
+ */
+function parseIf(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
+  const condition = parseCondition(tokens, pos, line);
+  if (!isExpr(condition)) return condition;
   const then = parseStatement(tokens, pos, line);
   if (!isStatement(then)) {
     return {
@@ -209,24 +226,8 @@ function parseWhile(
   line: number,
   parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
-  if (tokens[pos.i]?.kind !== "LParen") {
-    return {
-      kind: "InvalidStatement",
-      token: tokenDetail(tokens[pos.i]),
-      line,
-    };
-  }
-  pos.i++;
-  const condition = parseLevel(tokens, pos, line, 0);
+  const condition = parseCondition(tokens, pos, line);
   if (!isExpr(condition)) return condition;
-  if (tokens[pos.i]?.kind !== "RParen") {
-    return {
-      kind: "InvalidStatement",
-      token: tokenDetail(tokens[pos.i]),
-      line,
-    };
-  }
-  pos.i++;
   const body = parseStatement(tokens, pos, line);
   if (!isStatement(body)) {
     return {
