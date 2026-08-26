@@ -41,10 +41,35 @@ export interface BinaryExpr {
 }
 
 /**
- * An expression: a number or boolean literal, an identifier reference,
- * or a binary operator expression.
+ * A tuple literal expression: a comma-separated list of expressions.
  */
-export type Expr = NumberExpr | IdentifierExpr | BooleanExpr | BinaryExpr;
+export interface TupleExpr {
+  type: "Tuple";
+  elements: Expr[];
+  pos: number;
+}
+
+/**
+ * A field access expression: reads an element of a tuple by index.
+ */
+export interface FieldAccessExpr {
+  type: "FieldAccess";
+  object: Expr;
+  index: number;
+  pos: number;
+}
+
+/**
+ * An expression: a number or boolean literal, an identifier reference,
+ * a binary operator expression, a tuple literal, or a field access.
+ */
+export type Expr =
+  | NumberExpr
+  | IdentifierExpr
+  | BooleanExpr
+  | BinaryExpr
+  | TupleExpr
+  | FieldAccessExpr;
 
 /**
  * A successful expression parse result.
@@ -214,12 +239,44 @@ function parseTerm(state: ParserState): ParseExprResult {
 }
 
 /**
- * Parse a primary expression: a number or boolean literal, or an identifier.
+ * Parse a primary expression, including postfix `.index` field access.
  *
  * @param state - The parser state.
  * @returns The expression, or a structured parse error.
  */
 function parsePrimary(state: ParserState): ParseExprResult {
+  const first = parseAtom(state);
+  if (!first.ok) return first;
+  let expr = first.expr;
+  while (!atEnd(state) && peek(state).value === ".") {
+    const dot = next(state);
+    const idxTok = next(state);
+    if (idxTok?.kind !== "number" || !/^\d+$/.test(idxTok.value)) {
+      return {
+        ok: false,
+        error: parseError(
+          "Expected tuple index after '.'",
+          idxTok?.pos ?? dot.pos,
+        ),
+      };
+    }
+    expr = {
+      type: "FieldAccess",
+      object: expr,
+      index: Number(idxTok.value),
+      pos: dot.pos,
+    };
+  }
+  return { ok: true, expr };
+}
+
+/**
+ * Parse an atom: a number or boolean literal, an identifier, or a tuple.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseAtom(state: ParserState): ParseExprResult {
   const t = peek(state);
   if (t.kind === "number") {
     next(state);
@@ -242,8 +299,38 @@ function parsePrimary(state: ParserState): ParseExprResult {
       expr: { type: "Identifier", name: t.value, pos: t.pos },
     };
   }
+  if (t.value === "(") {
+    return parseTuple(state);
+  }
   return {
     ok: false,
     error: parseError(`Expected expression, got: ${t.value}`, t.pos),
   };
+}
+
+/**
+ * Parse a tuple literal: a comma-separated list of expressions in parens.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseTuple(state: ParserState): ParseExprResult {
+  const open = next(state);
+  const first = parseExpr(state);
+  if (!first.ok) return first;
+  const elements = [first.expr];
+  while (!atEnd(state) && peek(state).value === ",") {
+    next(state);
+    const el = parseExpr(state);
+    if (!el.ok) return el;
+    elements.push(el.expr);
+  }
+  const close = next(state);
+  if (close.value !== ")") {
+    return {
+      ok: false,
+      error: parseError("Expected ')' after tuple", close.pos),
+    };
+  }
+  return { ok: true, expr: { type: "Tuple", elements, pos: open.pos } };
 }

@@ -1,7 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import { parse } from "./parser.ts";
 import type { Stmt } from "./parser.ts";
-import type { Expr } from "./expr.ts";
+import type { BinaryExpr, Expr } from "./expr.ts";
 import { typeCheck } from "./typecheck.ts";
 
 /**
@@ -26,12 +26,33 @@ export interface Err {
 export type Result = Ok | Err;
 
 /**
- * A runtime value: its numeric representation and its type kind.
+ * A numeric runtime value.
  */
-interface Value {
+interface NumberValue {
+  kind: "number";
   value: number;
-  kind: "number" | "boolean";
 }
+
+/**
+ * A boolean runtime value (stored as 0 or 1).
+ */
+interface BooleanValue {
+  kind: "boolean";
+  value: number;
+}
+
+/**
+ * A tuple runtime value: an ordered list of element values.
+ */
+interface TupleValue {
+  kind: "tuple";
+  elements: Value[];
+}
+
+/**
+ * A runtime value: a number, a boolean, or a tuple of values.
+ */
+type Value = NumberValue | BooleanValue | TupleValue;
 
 /**
  * A variable binding: its value and whether it is mutable.
@@ -61,42 +82,97 @@ function assert(cond: unknown, message: string): asserts cond {
  */
 function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
   if (expr.type === "Number") {
-    return { value: expr.value, kind: "number" };
+    return { kind: "number", value: expr.value };
   }
   if (expr.type === "Boolean") {
-    return { value: expr.value ? 1 : 0, kind: "boolean" };
+    return { kind: "boolean", value: expr.value ? 1 : 0 };
+  }
+  if (expr.type === "Tuple") {
+    return {
+      kind: "tuple",
+      elements: expr.elements.map((el) => evalExpr(el, vars)),
+    };
+  }
+  if (expr.type === "FieldAccess") {
+    const obj = evalExpr(expr.object, vars);
+    assert(obj.kind === "tuple", `Expected tuple, got ${obj.kind}`);
+    const el = obj.elements[expr.index];
+    assert(el !== undefined, `Tuple index out of range: ${expr.index}`);
+    return el;
   }
   if (expr.type === "Binary") {
-    const left = evalExpr(expr.left, vars);
-    if (expr.op === "||" && left.value !== 0) {
-      return { value: 1, kind: "boolean" };
-    }
-    const right = evalExpr(expr.right, vars);
-    if (expr.op === "+" || expr.op === "-" || expr.op === "*") {
-      assert(left.kind === "number", `Expected number, got ${left.kind}`);
-      assert(right.kind === "number", `Expected number, got ${right.kind}`);
-      const value =
-        expr.op === "+"
-          ? left.value + right.value
-          : expr.op === "-"
-            ? left.value - right.value
-            : left.value * right.value;
-      return { value, kind: "number" };
-    }
-    if (expr.op === "==") {
-      const equal =
-        left.kind === right.kind && left.value === right.value ? 1 : 0;
-      return { value: equal, kind: "boolean" };
-    }
-    if (expr.op === "<") {
-      const less = left.kind === right.kind && left.value < right.value ? 1 : 0;
-      return { value: less, kind: "boolean" };
-    }
-    return { value: right.value !== 0 ? 1 : 0, kind: "boolean" };
+    return evalBinary(expr, vars);
   }
   const binding = vars.get(expr.name);
   assert(binding !== undefined, `Unknown identifier: ${expr.name}`);
   return binding.value;
+}
+
+/**
+ * Evaluate a binary operator expression.
+ *
+ * @param expr - The binary expression to evaluate.
+ * @param vars - The current variable scope.
+ * @returns The typed value.
+ */
+function evalBinary(expr: BinaryExpr, vars: Map<string, Binding>): Value {
+  const left = evalExpr(expr.left, vars);
+  if (expr.op === "||" && toNumber(left) !== 0) {
+    return { kind: "boolean", value: 1 };
+  }
+  const right = evalExpr(expr.right, vars);
+  if (expr.op === "+" || expr.op === "-" || expr.op === "*") {
+    assert(left.kind === "number", `Expected number, got ${left.kind}`);
+    assert(right.kind === "number", `Expected number, got ${right.kind}`);
+    const value =
+      expr.op === "+"
+        ? left.value + right.value
+        : expr.op === "-"
+          ? left.value - right.value
+          : left.value * right.value;
+    return { kind: "number", value };
+  }
+  if (expr.op === "==") {
+    return { kind: "boolean", value: valuesEqual(left, right) ? 1 : 0 };
+  }
+  if (expr.op === "<") {
+    if (left.kind === "tuple" || right.kind === "tuple") {
+      return { kind: "boolean", value: 0 };
+    }
+    const less = left.kind === right.kind && left.value < right.value ? 1 : 0;
+    return { kind: "boolean", value: less };
+  }
+  return { kind: "boolean", value: toNumber(right) !== 0 ? 1 : 0 };
+}
+
+/**
+ * Extract the numeric representation of a value.
+ *
+ * @param value - The value to read.
+ * @returns The numeric value (tuples have no numeric form and fail loudly).
+ */
+function toNumber(value: Value): number {
+  assert(value.kind !== "tuple", "Cannot use a tuple as a number");
+  return value.value;
+}
+
+/**
+ * Whether two runtime values are equal, comparing tuples element-wise.
+ *
+ * @param a - The first value.
+ * @param b - The second value.
+ * @returns True when the values are equal.
+ */
+function valuesEqual(a: Value, b: Value): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "tuple" && b.kind === "tuple") {
+    return (
+      a.elements.length === b.elements.length &&
+      a.elements.every((el, i) => valuesEqual(el, b.elements[i] as Value))
+    );
+  }
+  if (a.kind === "tuple" || b.kind === "tuple") return false;
+  return a.value === b.value;
 }
 
 /**
@@ -114,17 +190,17 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): number {
     }
     if (stmt.type === "If") {
       const cond = evalExpr(stmt.cond, vars);
-      exec(cond.value !== 0 ? stmt.then : stmt.else, vars);
+      exec(toNumber(cond) !== 0 ? stmt.then : stmt.else, vars);
       continue;
     }
     if (stmt.type === "While") {
-      while (evalExpr(stmt.cond, vars).value !== 0) {
+      while (toNumber(evalExpr(stmt.cond, vars)) !== 0) {
         exec(stmt.body, vars);
       }
       continue;
     }
     const value = evalExpr(stmt.value, vars);
-    if (stmt.type === "Return") return value.value;
+    if (stmt.type === "Return") return toNumber(value);
     if (stmt.type === "Assign") {
       const binding = vars.get(stmt.name);
       assert(binding !== undefined, `Unknown identifier: ${stmt.name}`);

@@ -31,8 +31,8 @@ export interface TypeMismatchError {
   type: "TypeMismatch";
   name: string;
   position: number;
-  expected: "number" | "boolean";
-  actual: "number" | "boolean";
+  expected: string;
+  actual: string;
 }
 
 /**
@@ -41,8 +41,8 @@ export interface TypeMismatchError {
 export interface OperandTypeMismatchError {
   type: "OperandTypeMismatch";
   position: number;
-  expected: "number" | "boolean";
-  actual: "number" | "boolean";
+  expected: string;
+  actual: string;
 }
 
 /**

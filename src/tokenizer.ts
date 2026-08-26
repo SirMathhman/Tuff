@@ -42,6 +42,8 @@ const SINGLE_CHAR_PUNCT = new Set([
   "-",
   "*",
   "<",
+  ".",
+  ",",
 ]);
 
 /**
