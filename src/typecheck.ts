@@ -69,6 +69,8 @@ function checkStatement(
     }
   }
   if (stmt.kind === "Let") {
+    const error = findUndeclared(stmt.value, line, scopes);
+    if (error) return error;
     const kind = literalKind(stmt.value);
     if (kind) declareBinding(stmt.name, kind, stmt.mut, scopes);
     return null;
@@ -128,6 +130,42 @@ function checkAssignment(
 function literalKind(expr: TuffExpr): "number" | "bool" | null {
   if (expr.kind !== "Literal") return null;
   return expr.value.kind === "bool" ? "bool" : "number";
+}
+
+/**
+ * Find an undeclared identifier referenced anywhere in an expression.
+ * @param expr - The expression to inspect.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns An UnidentifiedIdentifier error if an undeclared identifier is
+ * referenced, else null.
+ */
+function findUndeclared(
+  expr: TuffExpr,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  if (expr.kind === "Identifier") {
+    if (!findDeclared(scopes, expr.name)) {
+      return { kind: "UnidentifiedIdentifier", name: expr.name, line };
+    }
+    return null;
+  }
+  if (
+    expr.kind === "Or" ||
+    expr.kind === "And" ||
+    expr.kind === "Add" ||
+    expr.kind === "Equal" ||
+    expr.kind === "Less"
+  ) {
+    const left = findUndeclared(expr.left, line, scopes);
+    if (left) return left;
+    return findUndeclared(expr.right, line, scopes);
+  }
+  if (expr.kind === "Ref" || expr.kind === "Deref") {
+    return findUndeclared(expr.operand, line, scopes);
+  }
+  return null;
 }
 
 /**
