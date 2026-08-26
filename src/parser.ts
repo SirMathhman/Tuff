@@ -385,14 +385,24 @@ function parseWhile(state: ParserState): ParseStmtOk | ParseErr {
   next(state);
   const cond = parseCond(state, "while");
   if (!cond.ok) return cond;
-  const body = parseBlock(state);
-  if (!body.ok) return body;
+  let body: Stmt[];
+  if (!atEnd(state) && peek(state).value === "{") {
+    const block = parseBlock(state);
+    if (!block.ok) return block;
+    body = (block.stmt as Block).stmts;
+  } else {
+    const r = parseStmt(state);
+    if (!r.ok) return r;
+    const sep = consumeSeparator(state, false, isBlockLike(r.stmt));
+    if (!sep.ok) return sep;
+    body = [r.stmt];
+  }
   return {
     ok: true,
     stmt: {
       type: "While",
       cond: cond.expr,
-      body: (body.stmt as Block).stmts,
+      body,
     },
   };
 }
