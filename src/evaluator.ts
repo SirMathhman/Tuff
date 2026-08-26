@@ -1,6 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import type { Expr, Stmt } from "./parser.ts";
+import type { Stmt } from "./parser.ts";
+import type { Expr } from "./expr.ts";
 
 /**
  * A successful evaluation result.

@@ -1,4 +1,5 @@
 import type { TuffError } from "./errors.ts";
+import { parseError } from "./errors.ts";
 
 /**
  * A lexical token with its source position.
@@ -26,17 +27,6 @@ export interface TokenizeErr {
 }
 
 const KEYWORDS = new Set(["let", "mut", "return"]);
-
-/**
- * Build a structured parse error.
- *
- * @param message - Human-readable description of the failure.
- * @param position - Zero-based offset of the failure in the source.
- * @returns The structured error.
- */
-function parseError(message: string, position: number): TuffError {
-  return { type: "ParseError", message, position };
-}
 
 /**
  * A successful scan result: the token and the index after it.

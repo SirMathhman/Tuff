@@ -31,3 +31,14 @@ export type TuffError =
   | UnknownIdentifierError
   | ImmutableAssignmentError
   | ParseError;
+
+/**
+ * Build a structured parse error.
+ *
+ * @param message - Human-readable description of the failure.
+ * @param position - Zero-based offset of the failure in the source.
+ * @returns The structured error.
+ */
+export function parseError(message: string, position: number): TuffError {
+  return { type: "ParseError", message, position };
+}
