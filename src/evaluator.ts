@@ -1,6 +1,6 @@
 import type { TuffError } from "./errors.ts";
 import { parse } from "./parser.ts";
-import type { Assign, Stmt } from "./parser.ts";
+import type { Stmt } from "./parser.ts";
 import type { Expr } from "./expr.ts";
 
 /**
@@ -94,45 +94,54 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): EvalResult {
 }
 
 /**
- * Apply an assignment to an existing binding.
+ * Statically check that every assignment matches the kind of its binding.
+ * Walks all statements, including both branches of every `if`, so type
+ * errors are reported even in branches that would not execute.
  *
- * @param stmt - The assignment statement.
- * @param value - The evaluated value to assign.
- * @param vars - The variable scope.
- * @returns A structured error, or null when the assignment succeeded.
+ * @param stmts - The statements to check.
+ * @param kinds - The kinds of declared variables, shared with enclosing blocks.
+ * @returns A structured error, or null when the program is type-correct.
  */
-function doAssign(
-  stmt: Assign,
-  value: Value,
-  vars: Map<string, Binding>,
+function typeCheck(
+  stmts: readonly Stmt[],
+  kinds: Map<string, Value["kind"]>,
 ): Err | null {
-  const binding = vars.get(stmt.name);
-  if (binding === undefined) {
-    return { ok: false, error: { type: "UnknownIdentifier", name: stmt.name } };
+  for (const stmt of stmts) {
+    if (stmt.type === "Block") {
+      const err = typeCheck(stmt.stmts, kinds);
+      if (err !== null) return err;
+      continue;
+    }
+    if (stmt.type === "If") {
+      const err = typeCheck(stmt.then, kinds);
+      if (err !== null) return err;
+      const elseErr = typeCheck(stmt.else, kinds);
+      if (elseErr !== null) return elseErr;
+      continue;
+    }
+    const kind = exprKind(stmt.value, kinds);
+    if (stmt.type === "Assign") {
+      if (kind !== undefined) {
+        const expected = kinds.get(stmt.name);
+        if (expected !== undefined && expected !== kind) {
+          return {
+            ok: false,
+            error: {
+              type: "TypeMismatch",
+              name: stmt.name,
+              position: stmt.pos,
+              expected,
+              actual: kind,
+            },
+          };
+        }
+      }
+      continue;
+    }
+    if (stmt.type === "LetDecl" && kind !== undefined) {
+      kinds.set(stmt.name, kind);
+    }
   }
-  if (!binding.mutable) {
-    return {
-      ok: false,
-      error: {
-        type: "ImmutableAssignment",
-        name: stmt.name,
-        position: stmt.pos,
-      },
-    };
-  }
-  if (binding.value.kind !== value.kind) {
-    return {
-      ok: false,
-      error: {
-        type: "TypeMismatch",
-        name: stmt.name,
-        position: stmt.pos,
-        expected: binding.value.kind,
-        actual: value.kind,
-      },
-    };
-  }
-  binding.value = value;
   return null;
 }
 
@@ -162,8 +171,24 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
     if (!value.ok) return value;
     if (stmt.type === "Return") return { ok: true, value: value.value.value };
     if (stmt.type === "Assign") {
-      const err = doAssign(stmt, value.value, vars);
-      if (err !== null) return err;
+      const binding = vars.get(stmt.name);
+      if (binding === undefined) {
+        return {
+          ok: false,
+          error: { type: "UnknownIdentifier", name: stmt.name },
+        };
+      }
+      if (!binding.mutable) {
+        return {
+          ok: false,
+          error: {
+            type: "ImmutableAssignment",
+            name: stmt.name,
+            position: stmt.pos,
+          },
+        };
+      }
+      binding.value = value.value;
       continue;
     }
     vars.set(stmt.name, { value: value.value, mutable: stmt.mutable });
@@ -180,5 +205,24 @@ function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
 export function evaluateTuff(input: string): Result {
   const parsed = parse(input);
   if (!parsed.ok) return parsed;
+  const err = typeCheck(parsed.program.stmts, new Map());
+  if (err !== null) return err;
   return exec(parsed.program.stmts, new Map());
+}
+
+/**
+ * Determine the kind of an expression's value.
+ *
+ * @param expr - The expression to inspect.
+ * @param kinds - The kinds of declared variables, for identifier resolution.
+ * @returns The kind of the value the expression produces, or undefined when
+ * the expression references an undeclared identifier.
+ */
+function exprKind(
+  expr: Expr,
+  kinds: Map<string, Value["kind"]>,
+): Value["kind"] | undefined {
+  if (expr.type === "Number") return "number";
+  if (expr.type === "Identifier") return kinds.get(expr.name);
+  return "boolean";
 }

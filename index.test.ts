@@ -66,6 +66,18 @@ test("assigning a boolean to a number binding returns Err", () => {
     },
   });
 });
+test("type mismatch in unexecuted if branch returns Err", () => {
+  expect(evaluateTuff("if (false) { let mut x = 0; x = true; }")).toEqual({
+    ok: false,
+    error: {
+      type: "TypeMismatch",
+      name: "x",
+      position: 28,
+      expected: "number",
+      actual: "boolean",
+    },
+  });
+});
 test("malformed statement returns ParseError", () => {
   expect(evaluateTuff("let x = ;")).toEqual({
     ok: false,
