@@ -43,6 +43,14 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
   if (expr.type === "Boolean") {
     return { ok: true, value: expr.value ? 1 : 0 };
   }
+  if (expr.type === "Binary") {
+    const left = evalExpr(expr.left, vars);
+    if (!left.ok) return left;
+    if (left.value !== 0) return { ok: true, value: 1 };
+    const right = evalExpr(expr.right, vars);
+    if (!right.ok) return right;
+    return { ok: true, value: right.value !== 0 ? 1 : 0 };
+  }
   const binding = vars.get(expr.name);
   if (binding !== undefined) return { ok: true, value: binding.value };
   return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };

@@ -79,6 +79,11 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       i = j;
       continue;
     }
+    if (ch === "|" && input[i + 1] === "|") {
+      tokens.push({ kind: "punct", value: "||", pos: i });
+      i += 2;
+      continue;
+    }
     if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
       tokens.push({ kind: "punct", value: ch, pos: i });
       i++;

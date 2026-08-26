@@ -39,6 +39,14 @@ describe("evaluateTuff", () => {
       value: 1,
     });
   });
+  test("logical or of booleans", () => {
+    expect(evaluateTuff("let x = true; let y = false; return x || y;")).toEqual(
+      {
+        ok: true,
+        value: 1,
+      },
+    );
+  });
   test("block statement assigns to outer scope", () => {
     expect(evaluateTuff("let mut x = 0; { x = 1; } return x;")).toEqual({
       ok: true,

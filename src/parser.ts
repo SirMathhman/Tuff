@@ -30,9 +30,21 @@ export interface BooleanExpr {
 }
 
 /**
- * An expression: a number or boolean literal, or an identifier reference.
+ * A binary operator expression.
  */
-export type Expr = NumberExpr | IdentifierExpr | BooleanExpr;
+export interface BinaryExpr {
+  type: "Binary";
+  op: "||";
+  left: Expr;
+  right: Expr;
+  pos: number;
+}
+
+/**
+ * An expression: a number or boolean literal, an identifier reference,
+ * or a binary operator expression.
+ */
+export type Expr = NumberExpr | IdentifierExpr | BooleanExpr | BinaryExpr;
 
 /**
  * A `let` (optionally `mut`) variable declaration.
@@ -383,12 +395,37 @@ function parseAssign(state: ParserState): ParseStmtOk | ParseErr {
 }
 
 /**
- * Parse an expression: a number literal or an identifier.
+ * Parse an expression, including `||` binary operators.
  *
  * @param state - The parser state.
  * @returns The expression, or a structured parse error.
  */
 function parseExpr(state: ParserState): ParseExprOk | ParseErr {
+  const first = parsePrimary(state);
+  if (!first.ok) return first;
+  let expr = first.expr;
+  while (!atEnd(state) && peek(state).value === "||") {
+    const opTok = next(state);
+    const right = parsePrimary(state);
+    if (!right.ok) return right;
+    expr = {
+      type: "Binary",
+      op: "||",
+      left: expr,
+      right: right.expr,
+      pos: opTok.pos,
+    };
+  }
+  return { ok: true, expr };
+}
+
+/**
+ * Parse a primary expression: a number or boolean literal, or an identifier.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parsePrimary(state: ParserState): ParseExprOk | ParseErr {
   const t = peek(state);
   if (t.kind === "number") {
     next(state);
