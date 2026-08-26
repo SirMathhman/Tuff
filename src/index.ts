@@ -25,6 +25,7 @@ export type {
   AndNode,
   AddNode,
   EqualNode,
+  LessNode,
   RefNode,
   DerefNode,
   LetNode,

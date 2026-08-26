@@ -216,6 +216,13 @@ test('evaluateTuff("let x = 1; let y = 2; return x == y;") => 0', () => {
   });
 });
 
+test('evaluateTuff("let x = 1; let y = 2; return x < y;") => 1', () => {
+  expect(evaluateTuff("let x = 1; let y = 2; return x < y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; x;") => Err', () => {
   const result = evaluateTuff("let x = 1; x;");
   expect(result.ok).toBe(false);

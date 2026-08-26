@@ -36,6 +36,11 @@ export interface EqualToken {
   kind: "Equal";
 }
 
+/** A `<` operator token. */
+export interface LessToken {
+  kind: "Less";
+}
+
 /** A `&` reference token. */
 export interface RefToken {
   kind: "Ref";
@@ -85,6 +90,7 @@ export type TuffToken =
   | AndToken
   | PlusToken
   | EqualToken
+  | LessToken
   | RefToken
   | DerefToken
   | AssignToken
@@ -134,6 +140,7 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
     return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
     return { kind: "token", token: { kind: "Equal" }, next: j + 2 };
+  if (ch === "<") return { kind: "token", token: { kind: "Less" }, next: j + 1 };
   if (ch === "&") return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
   if (ch === "*")
     return { kind: "token", token: { kind: "Deref" }, next: j + 1 };

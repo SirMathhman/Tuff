@@ -41,6 +41,13 @@ export interface EqualNode {
   right: TuffExpr;
 }
 
+/** A binary `<` expression node. */
+export interface LessNode {
+  kind: "Less";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A prefix `&` reference expression node. */
 export interface RefNode {
   kind: "Ref";
@@ -62,6 +69,7 @@ export type TuffExpr =
   | AndNode
   | AddNode
   | EqualNode
+  | LessNode
   | RefNode
   | DerefNode;
 
@@ -102,8 +110,8 @@ interface Pos {
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
-  token: "Or" | "And" | "Plus" | "Equal";
-  node: "Or" | "And" | "Add" | "Equal";
+  token: "Or" | "And" | "Plus" | "Equal" | "Less";
+  node: "Or" | "And" | "Add" | "Equal" | "Less";
   assoc: "left" | "right";
 }
 
@@ -115,6 +123,7 @@ const BINARY_OPS: BinaryOp[] = [
   { token: "Or", node: "Or", assoc: "right" },
   { token: "And", node: "And", assoc: "right" },
   { token: "Equal", node: "Equal", assoc: "left" },
+  { token: "Less", node: "Less", assoc: "left" },
   { token: "Plus", node: "Add", assoc: "left" },
 ];
 
