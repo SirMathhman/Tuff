@@ -114,6 +114,7 @@ for (const id of calls.keys()) {
 
 // Build a directory tree so nested folders (e.g. src > parser) render as
 // nested boxes, each labeled with just its own name rather than the path.
+/** A node in the directory tree of the repo. */
 interface DirNode {
   name: string; // basename; "" for the repo root
   files: string[]; // full relative paths of files directly in this dir

@@ -39,7 +39,12 @@ export default defineConfig([
             ClassExpression: true,
             ArrowFunctionExpression: false,
             FunctionExpression: false,
-          },
+          },         
+          contexts: [
+            "TSInterfaceDeclaration",
+            "TSTypeAliasDeclaration",
+            "TSEnumDeclaration",
+          ],
         },
       ],
       // Turning this one off because of an editor quirk

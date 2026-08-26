@@ -32,6 +32,7 @@ export interface GroupBox {
   edges: [string, string][];
 }
 
+/** A box in the graph: either a leaf (file) or a group (directory). */
 export type Box = LeafBox | GroupBox;
 
 /** A finished piece of SVG plus the size of the area it occupies, in points. */
@@ -63,6 +64,7 @@ interface DotJson {
   edges?: DotEdge[];
 }
 
+/** A drawing operation in Graphviz JSON. */
 interface DrawOp {
   op: string;
   points?: [number, number][];
