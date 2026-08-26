@@ -31,3 +31,9 @@ test("equality of number and boolean is 0", () => {
     value: 0,
   });
 });
+test("identifier declared in a block is not visible after it", () => {
+  expect(evaluateTuff("{ let x = 0; } return x;")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "x" },
+  });
+});
