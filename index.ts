@@ -225,6 +225,8 @@ function resolveOrError(
 ): number | TuffError {
   const trimmed = expr.trim();
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  if (trimmed === "true") return 1;
+  if (trimmed === "false") return 0;
   if (/^\w+$/.test(trimmed)) {
     const binding = findBinding(scopes, trimmed);
     if (binding) return binding.value;
