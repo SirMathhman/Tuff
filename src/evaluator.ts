@@ -72,7 +72,7 @@ function executeStatement(
     if (!branch) return undefined;
     env.scopes.push(new Map());
     try {
-      return executeList(branch.statements, line, env);
+      return executeStatement(branch, line, env, executeList);
     } finally {
       env.scopes.pop();
     }

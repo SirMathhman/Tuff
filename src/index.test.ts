@@ -234,6 +234,15 @@ test('evaluateTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } return 
   });
 });
 
+test('evaluateTuff("let mut x = 0; if (false) x = 1; else x = 2; return x;") => 2', () => {
+  expect(
+    evaluateTuff("let mut x = 0; if (false) x = 1; else x = 2; return x;"),
+  ).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
 test('evaluateTuff("let x = 1; x;") => Err', () => {
   const result = evaluateTuff("let x = 1; x;");
   expect(result.ok).toBe(false);

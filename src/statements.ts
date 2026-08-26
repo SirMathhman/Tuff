@@ -1,7 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
-import type { BlockNode, Pos, TuffExpr, TuffStatement } from "./ast.ts";
+import type { Pos, TuffExpr, TuffStatement } from "./ast.ts";
 import { isExpr, parseLevel, parseOperand } from "./expr.ts";
 
 /**
@@ -122,28 +122,29 @@ function parseIf(
   }
   pos.i++;
   const then = parseStatement(tokens, pos, line);
-  if (!isStatement(then) || then.kind !== "Block") {
+  if (!isStatement(then)) {
     return {
       kind: "InvalidStatement",
       token: tokenDetail(tokens[pos.i]),
       line,
     };
   }
-  let elseBlock: BlockNode | null = null;
+  if (tokens[pos.i]?.kind === "Semicolon") pos.i++;
+  let elseStmt: TuffStatement | null = null;
   const next = tokens[pos.i];
   if (next?.kind === "Ident" && next.name === "else") {
     pos.i++;
-    const elseStmt = parseStatement(tokens, pos, line);
-    if (!isStatement(elseStmt) || elseStmt.kind !== "Block") {
+    const parsed = parseStatement(tokens, pos, line);
+    if (!isStatement(parsed)) {
       return {
         kind: "InvalidStatement",
         token: tokenDetail(tokens[pos.i]),
         line,
       };
     }
-    elseBlock = elseStmt;
+    elseStmt = parsed;
   }
-  return { kind: "If", condition, then, else: elseBlock };
+  return { kind: "If", condition, then, else: elseStmt };
 }
 
 /**

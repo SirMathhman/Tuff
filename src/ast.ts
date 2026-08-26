@@ -101,8 +101,8 @@ export interface BlockNode {
 export interface IfNode {
   kind: "If";
   condition: TuffExpr;
-  then: BlockNode;
-  else: BlockNode | null;
+  then: TuffStatement;
+  else: TuffStatement | null;
 }
 
 /** A parsed tuff statement. */
