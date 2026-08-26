@@ -67,6 +67,10 @@ export default defineConfig([
           selector: "ClassDeclaration",
           message: "Use plain functions.",
         },
+        {
+          selector: "ThrowStatement",
+          message : "Use Result."
+        }
       ],
     },
   },
