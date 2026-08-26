@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { evaluateTuff, type TuffResult } from "./index.ts";
 
 function expectUnidentifiedIdentifier(
@@ -16,7 +16,6 @@ function expectUnidentifiedIdentifier(
   }
 }
 
-describe("evaluateTuff", () => {
   test('evaluateTuff("") => 0', () => {
     expect(evaluateTuff("")).toEqual({ ok: true, value: 0 });
   });
@@ -80,4 +79,3 @@ describe("evaluateTuff", () => {
       1,
     );
   });
-});
