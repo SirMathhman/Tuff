@@ -1,19 +1,20 @@
 import type { TuffError } from "./errors.ts";
 import type { AssignNode, TuffExpr, TuffStatement } from "./ast.ts";
 
-/** A declared binding's type, tracked by the type checker. */
+/** A declared binding's type and mutability, tracked by the type checker. */
 interface DeclaredBinding {
   /** The kind of value the binding holds. */
   kind: "number" | "bool";
+  /** Whether the binding was declared with `mut`. */
+  mut: boolean;
 }
 
 /**
- * Statically check a parsed program for type mismatches.
- *
+ * Statically check a parsed program for assignment errors.
  * Walks every statement, including unreachable branches, tracking the kind
- * each binding is declared with. Assigning a literal of a different kind to
- * a declared binding is a TypeMismatch error.
- *
+ * and mutability each binding is declared with. Assigning to a non-`mut`
+ * binding is an ImmutableAssignment error; assigning a literal of a
+ * different kind to a declared binding is a TypeMismatch error.
  * @param statements - The parsed program statements.
  * @param baseLine - The 1-based line of the first statement.
  * @returns A TypeMismatch error if a mismatch is found, else null.
@@ -69,7 +70,7 @@ function checkStatement(
   }
   if (stmt.kind === "Let") {
     const kind = literalKind(stmt.value);
-    if (kind) declareBinding(stmt.name, kind, scopes);
+    if (kind) declareBinding(stmt.name, kind, stmt.mut, scopes);
     return null;
   }
   if (stmt.kind === "If") {
@@ -105,6 +106,9 @@ function checkAssignment(
   if (stmt.target.kind !== "Identifier") return null;
   const declared = findDeclared(scopes, stmt.target.name);
   if (!declared) return null;
+  if (!declared.mut) {
+    return { kind: "ImmutableAssignment", name: stmt.target.name, line };
+  }
   const kind = literalKind(stmt.value);
   if (!kind) return null;
   if (kind !== declared.kind) {
@@ -127,15 +131,17 @@ function literalKind(expr: TuffExpr): "number" | "bool" | null {
  * Declare a binding in the innermost scope.
  * @param name - The binding name.
  * @param kind - The value kind.
+ * @param mut - Whether the binding is mutable.
  * @param scopes - The stack of declared bindings.
  */
 function declareBinding(
   name: string,
   kind: "number" | "bool",
+  mut: boolean,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind };
+  if (scope) scope[name] = { kind, mut };
 }
 
 /**
