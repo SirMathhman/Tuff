@@ -46,9 +46,12 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
   if (expr.type === "Binary") {
     const left = evalExpr(expr.left, vars);
     if (!left.ok) return left;
-    if (left.value !== 0) return { ok: true, value: 1 };
+    if (expr.op === "||" && left.value !== 0) return { ok: true, value: 1 };
     const right = evalExpr(expr.right, vars);
     if (!right.ok) return right;
+    if (expr.op === "==") {
+      return { ok: true, value: left.value === right.value ? 1 : 0 };
+    }
     return { ok: true, value: right.value !== 0 ? 1 : 0 };
   }
   const binding = vars.get(expr.name);

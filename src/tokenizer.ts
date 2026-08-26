@@ -39,6 +39,58 @@ function parseError(message: string, position: number): TuffError {
 }
 
 /**
+ * A successful scan result: the token and the index after it.
+ */
+interface ScanOk {
+  token: Token;
+  next: number;
+}
+
+/**
+ * A failed scan result.
+ */
+interface ScanErr {
+  error: TuffError;
+}
+
+/**
+ * Scan a number literal starting at index i.
+ *
+ * @param input - The source text.
+ * @param i - The start index.
+ * @returns The token and the index after the literal, or a structured error.
+ */
+function scanNumber(input: string, i: number): ScanOk | ScanErr {
+  let j = i;
+  if (input[j] === "-") j++;
+  while (j < input.length && /[0-9.]/.test(input[j] ?? "")) j++;
+  const text = input.slice(i, j);
+  if (!/^-?\d+(\.\d+)?$/.test(text)) {
+    return { error: parseError(`Invalid number: ${text}`, i) };
+  }
+  return { token: { kind: "number", value: text, pos: i }, next: j };
+}
+
+/**
+ * Scan an identifier, keyword, or boolean literal starting at index i.
+ *
+ * @param input - The source text.
+ * @param i - The start index.
+ * @returns The token and the index after the literal.
+ */
+function scanIdent(input: string, i: number): ScanOk {
+  let j = i;
+  while (j < input.length && /[A-Za-z0-9_]/.test(input[j] ?? "")) j++;
+  const text = input.slice(i, j);
+  const kind = KEYWORDS.has(text)
+    ? "keyword"
+    : text === "true" || text === "false"
+      ? "boolean"
+      : "ident";
+  return { token: { kind, value: text, pos: i }, next: j };
+}
+
+/**
  * Tokenize source text into a flat token list.
  *
  * @param input - The source text.
@@ -55,32 +107,25 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       continue;
     }
     if (/[0-9]/.test(ch) || (ch === "-" && /[0-9]/.test(input[i + 1] ?? ""))) {
-      let j = i;
-      if (input[j] === "-") j++;
-      while (j < input.length && /[0-9.]/.test(input[j] ?? "")) j++;
-      const text = input.slice(i, j);
-      if (!/^-?\d+(\.\d+)?$/.test(text)) {
-        return { ok: false, error: parseError(`Invalid number: ${text}`, i) };
-      }
-      tokens.push({ kind: "number", value: text, pos: i });
-      i = j;
+      const r = scanNumber(input, i);
+      if ("error" in r) return { ok: false, error: r.error };
+      tokens.push(r.token);
+      i = r.next;
       continue;
     }
     if (/[A-Za-z_]/.test(ch)) {
-      let j = i;
-      while (j < input.length && /[A-Za-z0-9_]/.test(input[j] ?? "")) j++;
-      const text = input.slice(i, j);
-      const kind = KEYWORDS.has(text)
-        ? "keyword"
-        : text === "true" || text === "false"
-          ? "boolean"
-          : "ident";
-      tokens.push({ kind, value: text, pos: i });
-      i = j;
+      const r = scanIdent(input, i);
+      tokens.push(r.token);
+      i = r.next;
       continue;
     }
     if (ch === "|" && input[i + 1] === "|") {
       tokens.push({ kind: "punct", value: "||", pos: i });
+      i += 2;
+      continue;
+    }
+    if (ch === "=" && input[i + 1] === "=") {
+      tokens.push({ kind: "punct", value: "==", pos: i });
       i += 2;
       continue;
     }

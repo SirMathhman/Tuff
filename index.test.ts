@@ -47,6 +47,12 @@ describe("evaluateTuff", () => {
       },
     );
   });
+  test("equality of unequal numbers is 0", () => {
+    expect(evaluateTuff("let x = 1; let y = 2; return x == y;")).toEqual({
+      ok: true,
+      value: 0,
+    });
+  });
   test("block statement assigns to outer scope", () => {
     expect(evaluateTuff("let mut x = 0; { x = 1; } return x;")).toEqual({
       ok: true,

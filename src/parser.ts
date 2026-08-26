@@ -34,7 +34,7 @@ export interface BooleanExpr {
  */
 export interface BinaryExpr {
   type: "Binary";
-  op: "||";
+  op: "||" | "==";
   left: Expr;
   right: Expr;
   pos: number;
@@ -401,16 +401,41 @@ function parseAssign(state: ParserState): ParseStmtOk | ParseErr {
  * @returns The expression, or a structured parse error.
  */
 function parseExpr(state: ParserState): ParseExprOk | ParseErr {
-  const first = parsePrimary(state);
+  const first = parseOr(state);
   if (!first.ok) return first;
   let expr = first.expr;
   while (!atEnd(state) && peek(state).value === "||") {
+    const opTok = next(state);
+    const right = parseOr(state);
+    if (!right.ok) return right;
+    expr = {
+      type: "Binary",
+      op: "||",
+      left: expr,
+      right: right.expr,
+      pos: opTok.pos,
+    };
+  }
+  return { ok: true, expr };
+}
+
+/**
+ * Parse an `==` comparison expression.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseOr(state: ParserState): ParseExprOk | ParseErr {
+  const first = parsePrimary(state);
+  if (!first.ok) return first;
+  let expr = first.expr;
+  while (!atEnd(state) && peek(state).value === "==") {
     const opTok = next(state);
     const right = parsePrimary(state);
     if (!right.ok) return right;
     expr = {
       type: "Binary",
-      op: "||",
+      op: "==",
       left: expr,
       right: right.expr,
       pos: opTok.pos,
