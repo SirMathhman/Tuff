@@ -34,7 +34,7 @@ export interface BooleanExpr {
  */
 export interface BinaryExpr {
   type: "Binary";
-  op: "||" | "==";
+  op: "||" | "==" | "+";
   left: Expr;
   right: Expr;
   pos: number;
@@ -139,16 +139,41 @@ export function parseExpr(state: ParserState): ParseExprResult {
  * @returns The expression, or a structured parse error.
  */
 function parseEquality(state: ParserState): ParseExprResult {
-  const first = parsePrimary(state);
+  const first = parseAddition(state);
   if (!first.ok) return first;
   let expr = first.expr;
   while (!atEnd(state) && peek(state).value === "==") {
+    const opTok = next(state);
+    const right = parseAddition(state);
+    if (!right.ok) return right;
+    expr = {
+      type: "Binary",
+      op: "==",
+      left: expr,
+      right: right.expr,
+      pos: opTok.pos,
+    };
+  }
+  return { ok: true, expr };
+}
+
+/**
+ * Parse a `+` addition expression.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseAddition(state: ParserState): ParseExprResult {
+  const first = parsePrimary(state);
+  if (!first.ok) return first;
+  let expr = first.expr;
+  while (!atEnd(state) && peek(state).value === "+") {
     const opTok = next(state);
     const right = parsePrimary(state);
     if (!right.ok) return right;
     expr = {
       type: "Binary",
-      op: "==",
+      op: "+",
       left: expr,
       right: right.expr,
       pos: opTok.pos,
