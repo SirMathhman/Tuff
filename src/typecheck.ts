@@ -1,7 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type { Assign, Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr, FieldAccessExpr } from "./expr.ts";
-import { tupleElementsEqual } from "./expr.ts";
+import { tupleElementsEqual } from "./util.ts";
 
 /**
  * The static type of a number value.

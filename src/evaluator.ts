@@ -1,6 +1,6 @@
 import type { Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr } from "./expr.ts";
-import { tupleElementsEqual } from "./expr.ts";
+import { tupleElementsEqual } from "./util.ts";
 
 /**
  * A numeric runtime value.
