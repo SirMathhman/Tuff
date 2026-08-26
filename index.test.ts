@@ -96,6 +96,12 @@ test("assignment to undeclared variable returns Err", () => {
     error: { type: "UnknownIdentifier", name: "x" },
   });
 });
+test("immutable assignment in unexecuted if branch returns Err", () => {
+  expect(evaluateTuff("if (false) { let x = 0; x = 1; }")).toEqual({
+    ok: false,
+    error: { type: "ImmutableAssignment", name: "x", position: 24 },
+  });
+});
 test("malformed statement returns ParseError", () => {
   expect(evaluateTuff("let x = ;")).toEqual({
     ok: false,
