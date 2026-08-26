@@ -224,6 +224,16 @@ export function parseStatement(
   if (token.kind === "Ident") {
     const name = token.name;
     pos.i++;
+    if (tokens[pos.i]?.kind === "PlusAssign") {
+      pos.i++;
+      const rhs = parseLevel(tokens, pos, line, 0);
+      if (!isExpr(rhs)) return rhs;
+      return {
+        kind: "Assign",
+        target: { kind: "Identifier", name },
+        value: { kind: "Add", left: { kind: "Identifier", name }, right: rhs },
+      };
+    }
     const value = parseValue(tokens, pos, line);
     if (!isExpr(value)) return value;
     return {

@@ -99,6 +99,13 @@ test('evaluateTuff("let mut x = 0; x = 1; return x;") => 1', () => {
   });
 });
 
+test('evaluateTuff("let mut x = 1; x += 2; return x;") => 3', () => {
+  expect(evaluateTuff("let mut x = 1; x += 2; return x;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
 test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
   expectUnidentifiedIdentifier(
     evaluateTuff("let x = unidentifiedIdentifier;"),
@@ -352,9 +359,7 @@ test('evaluateTuff("if (false) { let x = 1; let y = &x; let z = *y; }") => Ok', 
 });
 
 test('evaluateTuff("if (false) { let mut x = 1 + 1; x = true; }") => Err', () => {
-  expect(
-    evaluateTuff("if (false) { let mut x = 1 + 1; x = true; }"),
-  ).toEqual({
+  expect(evaluateTuff("if (false) { let mut x = 1 + 1; x = true; }")).toEqual({
     ok: false,
     error: { kind: "TypeMismatch", name: "x", line: 2 },
   });
@@ -370,12 +375,12 @@ test('evaluateTuff("if (false) { let x = 1; let mut y = x; y = true; }") => Err'
 });
 
 test('evaluateTuff("if (false) { let x = 0; let y = &x; *y = 1; }") => Err', () => {
-  expect(
-    evaluateTuff("if (false) { let x = 0; let y = &x; *y = 1; }"),
-  ).toEqual({
-    ok: false,
-    error: { kind: "ImmutableAssignment", name: "x", line: 3 },
-  });
+  expect(evaluateTuff("if (false) { let x = 0; let y = &x; *y = 1; }")).toEqual(
+    {
+      ok: false,
+      error: { kind: "ImmutableAssignment", name: "x", line: 3 },
+    },
+  );
 });
 
 test('evaluateTuff("if (false) { let mut x = 0; let y = &mut x; *y = true; }") => Err', () => {

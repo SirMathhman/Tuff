@@ -8,13 +8,7 @@ import {
   type Environment,
   type RefEntry,
 } from "./scopes.ts";
-import {
-  bool,
-  num,
-  toResultValue,
-  truthy,
-  type TuffValue,
-} from "./values.ts";
+import { bool, num, toResultValue, truthy, type TuffValue } from "./values.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (

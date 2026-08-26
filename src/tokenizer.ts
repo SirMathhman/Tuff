@@ -56,6 +56,11 @@ export interface AssignToken {
   kind: "Assign";
 }
 
+/** A `+=` compound-assignment token. */
+export interface PlusAssignToken {
+  kind: "PlusAssign";
+}
+
 /** A `;` statement separator token. */
 export interface SemicolonToken {
   kind: "Semicolon";
@@ -94,6 +99,7 @@ export type TuffToken =
   | RefToken
   | DerefToken
   | AssignToken
+  | PlusAssignToken
   | SemicolonToken
   | LBraceToken
   | RBraceToken
@@ -136,6 +142,8 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
     return { kind: "token", token: { kind: "Or" }, next: j + 2 };
   if (text.startsWith("&&", j))
     return { kind: "token", token: { kind: "And" }, next: j + 2 };
+  if (text.startsWith("+=", j))
+    return { kind: "token", token: { kind: "PlusAssign" }, next: j + 2 };
   if (ch === "+")
     return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
