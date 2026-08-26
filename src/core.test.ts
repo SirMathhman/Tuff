@@ -1,0 +1,144 @@
+import { expect, test } from "bun:test";
+import { evaluateTuff } from "./index.ts";
+import {
+  expectImmutableAssignment,
+  expectUnidentifiedIdentifier,
+} from "./test-helpers.ts";
+
+test('evaluateTuff("") => 0', () => {
+  expect(evaluateTuff("")).toEqual({ ok: true, value: 0 });
+});
+
+test('evaluateTuff("return 1;") => 1', () => {
+  expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("let x = 1; return x;") => 1', () => {
+  expect(evaluateTuff("let x = 1; return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let x = 1; let y = x; return y;") => 1', () => {
+  expect(evaluateTuff("let x = 1; let y = x; return y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let x = 1; let y = 2; return y;") => 2', () => {
+  expect(evaluateTuff("let x = 1; let y = 2; return y;")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test('evaluateTuff("return unidentifiedIdentifier;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("return unidentifiedIdentifier;"),
+    "unidentifiedIdentifier",
+    1,
+  );
+});
+
+test('evaluateTuff("let x = missing; return x;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("let x = missing; return x;"),
+    "missing",
+    1,
+  );
+});
+
+test('evaluateTuff("let x = 100;") => 0', () => {
+  expect(evaluateTuff("let x = 100;")).toEqual({ ok: true, value: 0 });
+});
+
+test('evaluateTuff("let mut x = 0; x = 1; return x;") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; x = 1; return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let mut x = 1; x += 2; return x;") => 3', () => {
+  expect(evaluateTuff("let mut x = 1; x += 2; return x;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
+test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("let x = unidentifiedIdentifier;"),
+    "unidentifiedIdentifier",
+    1,
+  );
+});
+
+test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
+  expectImmutableAssignment(
+    evaluateTuff("let x = 0; x = 1; return x;"),
+    "x",
+    2,
+  );
+});
+
+test('evaluateTuff("let mut x = 0; x = true; return x;") => Err', () => {
+  const result = evaluateTuff("let mut x = 0; x = true; return x;");
+  expect(result).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "x", line: 2 },
+  });
+});
+
+test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("unidentifiedIdentifier = 1;"),
+    "unidentifiedIdentifier",
+    1,
+  );
+});
+
+test('evaluateTuff("let x = true; return x;") => 1', () => {
+  expect(evaluateTuff("let x = true; return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let x = 1; x;") => Err', () => {
+  const result = evaluateTuff("let x = 1; x;");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "InvalidStatement",
+      token: "Semicolon",
+      line: 2,
+    });
+  }
+});
+
+test('evaluateTuff("return 1; 2;") => Err', () => {
+  const result = evaluateTuff("return 1; 2;");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "InvalidStatement",
+      token: "2",
+      line: 2,
+    });
+  }
+});
+
+test('evaluateTuff("let x = 1;\nlet y = @") => Err', () => {
+  const result = evaluateTuff("let x = 1;\nlet y = @");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "UnexpectedCharacter",
+      character: "@",
+      line: 2,
+    });
+  }
+});
