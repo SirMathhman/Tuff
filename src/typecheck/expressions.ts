@@ -103,6 +103,25 @@ export function findUndeclared(
 }
 
 /**
+ * Check each element of a tuple or array literal for undeclared identifiers.
+ * @param elements - The element expressions to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns An UnidentifiedIdentifier error if one is found, else null.
+ */
+function checkElements(
+  elements: TuffExpr[],
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  for (const element of elements) {
+    const error = findUndeclared(element, line, scopes);
+    if (error) return error;
+  }
+  return null;
+}
+
+/**
  * Check a tuple or tuple-index expression for undeclared identifiers and
  * out-of-bounds indices.
  * @param expr - The tuple or tuple-index expression to check.
@@ -116,11 +135,7 @@ function checkTupleExpr(
   scopes: Record<string, DeclaredBinding>[],
 ): TuffError | null {
   if (expr.kind === "Tuple") {
-    for (const element of expr.elements) {
-      const error = findUndeclared(element, line, scopes);
-      if (error) return error;
-    }
-    return null;
+    return checkElements(expr.elements, line, scopes);
   }
   const error = findUndeclared(expr.operand, line, scopes);
   if (error) return error;
@@ -147,11 +162,7 @@ function checkArrayExpr(
   scopes: Record<string, DeclaredBinding>[],
 ): TuffError | null {
   if (expr.kind === "Array") {
-    for (const element of expr.elements) {
-      const error = findUndeclared(element, line, scopes);
-      if (error) return error;
-    }
-    return null;
+    return checkElements(expr.elements, line, scopes);
   }
   const error = findUndeclared(expr.operand, line, scopes);
   if (error) return error;

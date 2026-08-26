@@ -47,19 +47,23 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
 }
 
 /**
- * Parse the tail of a tuple literal: the first element is already parsed and
- * the first comma is the next token.
+ * Parse the tail of a tuple or array literal: the first element is already
+ * parsed and the first comma is the next token.
  * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the tuple.
+ * @param pos {Pos} - The mutable parse position, advanced past the literal.
  * @param line {number} - The 1-based line number.
  * @param first {TuffExpr} - The already-parsed first element.
- * @returns {TuffExpr | TuffError} The Tuple node, or a TuffError.
+ * @param close {"RParen" | "RBracket"} - The expected closing token kind.
+ * @param node {"Tuple" | "Array"} - The node kind to build.
+ * @returns {TuffExpr | TuffError} The Tuple or Array node, or a TuffError.
  */
-function parseTuple(
+function parseElementList(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
   first: TuffExpr,
+  close: "RParen" | "RBracket",
+  node: "Tuple" | "Array",
 ): TuffExpr | TuffError {
   const elements: TuffExpr[] = [first];
   while (tokens[pos.i]?.kind === "Comma") {
@@ -68,42 +72,12 @@ function parseTuple(
     if (!isExpr(element)) return element;
     elements.push(element);
   }
-  const close = tokens[pos.i];
-  if (close?.kind !== "RParen") {
+  const closeTok = tokens[pos.i];
+  if (closeTok?.kind !== close) {
     return { kind: "InvalidExpression", expression: "", line };
   }
   pos.i++;
-  return { kind: "Tuple", elements };
-}
-
-/**
- * Parse the tail of an array literal: the first element is already parsed
- * and the first comma is the next token.
- * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the array.
- * @param line {number} - The 1-based line number.
- * @param first {TuffExpr} - The already-parsed first element.
- * @returns {TuffExpr | TuffError} The Array node, or a TuffError.
- */
-function parseArray(
-  tokens: TuffToken[],
-  pos: Pos,
-  line: number,
-  first: TuffExpr,
-): TuffExpr | TuffError {
-  const elements: TuffExpr[] = [first];
-  while (tokens[pos.i]?.kind === "Comma") {
-    pos.i++;
-    const element = parseLevel(tokens, pos, line, 0);
-    if (!isExpr(element)) return element;
-    elements.push(element);
-  }
-  const close = tokens[pos.i];
-  if (close?.kind !== "RBracket") {
-    return { kind: "InvalidExpression", expression: "", line };
-  }
-  pos.i++;
-  return { kind: "Array", elements };
+  return { kind: node, elements };
 }
 
 /**
@@ -214,7 +188,7 @@ function parsePrimary(
     const first = parseLevel(tokens, pos, line, 0);
     if (!isExpr(first)) return first;
     if (tokens[pos.i]?.kind === "Comma") {
-      return parseTuple(tokens, pos, line, first);
+      return parseElementList(tokens, pos, line, first, "RParen", "Tuple");
     }
     const close = tokens[pos.i];
     if (close?.kind !== "RParen") {
@@ -235,7 +209,7 @@ function parsePrimary(
       pos.i++;
       return { kind: "Array", elements: [first] };
     }
-    return parseArray(tokens, pos, line, first);
+    return parseElementList(tokens, pos, line, first, "RBracket", "Array");
   }
   return { kind: "InvalidExpression", expression: "", line };
 }
