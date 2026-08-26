@@ -1,9 +1,14 @@
 // Generates callgraph.svg: a Graphviz call graph of all functions in the repo.
 // Usage: bun tools/callgraph.ts
-import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import * as ts from "typescript";
+import {
+  renderGraph,
+  type Box,
+  type GroupBox,
+  type LeafBox,
+} from "./graphsvg.ts";
 
 const root = join(import.meta.dir, "..");
 
@@ -18,8 +23,6 @@ function collectTsFiles(dir: string): string[] {
       out.push(join(dir, entry.name));
     }
   }
-
-  console.log(out);
   return out;
 }
 
@@ -81,20 +84,7 @@ for (const file of files) {
   }
 }
 
-function esc(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-const lines: string[] = [
-  "digraph tuff {",
-  "  rankdir=TB;",
-  "  compound=true;",
-  "  splines=ortho;",
-  '  node [shape=box, style="rounded,filled", fillcolor="#eef2ff", fontname="Consolas"];',
-  '  edge [color="#64748b"];',
-];
-
-// Group nodes by file so each file is drawn as a labeled cluster box.
+// Group nodes by file so each file is drawn as a labeled box.
 const byFile = new Map<string, string[]>();
 for (const id of calls.keys()) {
   const file = id.split("::")[0]!;
@@ -104,7 +94,7 @@ for (const id of calls.keys()) {
 }
 
 // Build a directory tree so nested folders (e.g. src > parser) render as
-// nested clusters, each labeled with just its own name rather than the path.
+// nested boxes, each labeled with just its own name rather than the path.
 interface DirNode {
   name: string; // basename; "" for the repo root
   files: string[]; // full relative paths of files directly in this dir
@@ -127,93 +117,78 @@ for (const file of byFile.keys()) {
   node.files.push(file);
 }
 
-function clusterOf(file: string): string {
-  return `cluster_${file.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+const leaves = new Map<string, LeafBox>();
+for (const [file, ids] of byFile) {
+  leaves.set(file, {
+    kind: "leaf",
+    id: file,
+    label: file.replace(/\\/g, "/").split("/").pop()!,
+    nodes: ids.map((id) => ({ id, label: id.split("::")[1]! })),
+    edges: [],
+  });
 }
 
-function dirClusterOf(relPath: string): string {
-  return `cluster_dir_${(relPath || "root").replace(/[^a-zA-Z0-9]+/g, "_")}`;
-}
-
-// A cross-file edge needs a concrete node at each end; any function in the file
-// works, since ltail/lhead clip the drawn edge back to the cluster border.
-function anchorOf(file: string): string {
-  return byFile.get(file)![0]!;
-}
-
-function fileCluster(file: string, ids: string[]): string[] {
-  const label = file.replace(/\\/g, "/").split("/").pop()!;
-  const out = [`  subgraph "${clusterOf(file)}" {`];
-  out.push(`    style="rounded";`);
-  out.push(`    color="#94a3b8";`);
-  out.push(`    fontname="Consolas";`);
-  out.push(`    fontsize=12;`);
-  out.push(`    label="${esc(label)}";`);
-  for (const id of ids) {
-    const name = id.split("::")[1]!;
-    out.push(`    "${esc(id)}" [label="${esc(name)}"];`);
-  }
-  out.push("  }");
-  return out;
-}
-
-// Render a directory's contents. A dir gets its own labeled box when it holds
-// more than one file or contains subdirectories; otherwise its single file is
-// emitted directly into the parent.
-function renderDir(node: DirNode, relPath: string, isRoot = false): string[] {
-  const out: string[] = [];
-  if (isRoot) {
-    for (const file of node.files)
-      out.push(...fileCluster(file, byFile.get(file)!));
-    for (const [name, child] of [...node.dirs.entries()].sort()) {
-      out.push(...renderDir(child, name));
-    }
-    return out;
-  }
-  if (node.files.length < 2 && node.dirs.size === 0) {
-    for (const file of node.files)
-      out.push(...fileCluster(file, byFile.get(file)!));
-    return out;
-  }
-  out.push(`  subgraph "${dirClusterOf(relPath)}" {`);
-  out.push(`    style="rounded";`);
-  out.push(`    color="#64748b";`);
-  out.push(`    fontname="Consolas";`);
-  out.push(`    fontsize=13;`);
-  out.push(`    label="${esc(node.name || ".")}";`);
-  for (const file of node.files)
-    out.push(...fileCluster(file, byFile.get(file)!));
-  for (const [name, child] of [...node.dirs.entries()].sort()) {
-    out.push(...renderDir(child, relPath ? `${relPath}/${name}` : name));
-  }
-  out.push("  }");
-  return out;
-}
-
-lines.push(...renderDir(rootDir, "", true));
-
-// For each file, the boxes enclosing it from outermost to innermost, ending in
-// its own file box. Follows renderDir's rules so it only names drawn clusters.
+// Every box that can own edges, and, per file, the boxes enclosing it from the
+// root inwards -- the pair of chains for a call locates the boxes its arrow
+// should join, and the box that arrow is drawn in.
+const groups = new Map<string, GroupBox>();
 const chains = new Map<string, string[]>();
-function recordChains(
-  node: DirNode,
-  relPath: string,
-  ancestors: string[],
-  isRoot = false,
-): void {
-  const boxed = !isRoot && (node.files.length >= 2 || node.dirs.size > 0);
-  const here = boxed ? [...ancestors, dirClusterOf(relPath)] : ancestors;
-  for (const file of node.files) chains.set(file, [...here, clusterOf(file)]);
-  for (const [name, child] of node.dirs) {
-    recordChains(child, relPath ? `${relPath}/${name}` : name, here);
+
+// A directory is drawn as its own box unless it holds a single file and no
+// subdirectories, in which case that file's box stands in for it.
+function buildDir(node: DirNode, relPath: string, ancestors: string[]): Box {
+  if (node.dirs.size === 0 && node.files.length === 1) {
+    const file = node.files[0]!;
+    chains.set(file, [...ancestors, file]);
+    return leaves.get(file)!;
   }
+  const id = `dir:${relPath}`;
+  const here = [...ancestors, id];
+  const group: GroupBox = {
+    kind: "group",
+    id,
+    label: node.name || ".",
+    children: [],
+    edges: [],
+  };
+  groups.set(id, group);
+  for (const file of node.files) {
+    chains.set(file, [...here, file]);
+    group.children.push(leaves.get(file)!);
+  }
+  for (const [name, child] of [...node.dirs.entries()].sort()) {
+    const childPath = relPath ? `${relPath}/${name}` : name;
+    group.children.push(buildDir(child, childPath, here));
+  }
+  return group;
 }
-recordChains(rootDir, "", [], true);
+
+const rootBox: GroupBox = {
+  kind: "group",
+  id: "dir:",
+  label: "",
+  children: [],
+  edges: [],
+};
+groups.set(rootBox.id, rootBox);
+for (const file of rootDir.files) {
+  chains.set(file, [rootBox.id, file]);
+  rootBox.children.push(leaves.get(file)!);
+}
+for (const [name, child] of [...rootDir.dirs.entries()].sort()) {
+  rootBox.children.push(buildDir(child, name, [rootBox.id]));
+}
 
 // Intra-file calls stay function-level; cross-file calls are collapsed into a
 // single box -> box edge to avoid a tangle of parallel lines between files.
 const seenEdges = new Set<string>();
-const seenBoxEdges = new Set<string>();
+function addEdge(edges: [string, string][], from: string, to: string): void {
+  const key = `${from}->${to}`;
+  if (seenEdges.has(key)) return;
+  seenEdges.add(key);
+  edges.push([from, to]);
+}
+
 for (const [id, called] of calls) {
   const fromFile = id.split("::")[0]!;
   for (const callee of called) {
@@ -221,45 +196,26 @@ for (const [id, called] of calls) {
     if (!targets) continue; // not a function in this repo
     for (const targetFile of targets) {
       if (targetFile === fromFile) {
-        const targetId = defId(targetFile, callee);
-        const key = `${id}->${targetId}`;
-        if (seenEdges.has(key)) continue;
-        seenEdges.add(key);
-        lines.push(`  "${esc(id)}" -> "${esc(targetId)}";`);
-      } else {
-        // Attach the edge to the outermost box holding one file but not the
-        // other, so a call leaving a directory is drawn as the directory's
-        // arrow rather than one escaping from a file nested inside it.
-        const fromChain = chains.get(fromFile)!;
-        const targetChain = chains.get(targetFile)!;
-        let depth = 0;
-        while (fromChain[depth] === targetChain[depth]) depth++;
-        const tail = fromChain[depth]!;
-        const head = targetChain[depth]!;
-        const key = `${tail}->${head}`;
-        if (seenBoxEdges.has(key)) continue;
-        seenBoxEdges.add(key);
-        // Graphviz has no cluster endpoints: the edge runs between a real node
-        // in each file, and ltail/lhead clip it back to the cluster borders.
-        lines.push(
-          `  "${esc(anchorOf(fromFile))}" -> "${esc(anchorOf(targetFile))}" ` +
-            `[ltail="${tail}", lhead="${head}"];`,
-        );
+        addEdge(leaves.get(fromFile)!.edges, id, defId(targetFile, callee));
+        continue;
       }
+      // Attach the edge to the outermost box holding one file but not the
+      // other, so a call leaving a directory is drawn as the directory's
+      // arrow rather than one escaping from a file nested inside it.
+      const fromChain = chains.get(fromFile)!;
+      const targetChain = chains.get(targetFile)!;
+      let depth = 0;
+      while (fromChain[depth] === targetChain[depth]) depth++;
+      const owner = groups.get(fromChain[depth - 1]!)!;
+      addEdge(owner.edges, fromChain[depth]!, targetChain[depth]!);
     }
   }
 }
-lines.push("}");
 
+const { svg, sources } = renderGraph(rootBox);
 const dotPath = join(root, "docs", "callgraph.dot");
 const svgPath = join(root, "docs", "callgraph.svg");
-writeFileSync(dotPath, lines.join("\n") + "\n");
+writeFileSync(svgPath, svg);
+writeFileSync(dotPath, sources.join("\n\n"));
 
-const result = spawnSync("dot", ["-Tsvg", "-o", svgPath, dotPath], {
-  stdio: "inherit",
-});
-if (result.status !== 0) {
-  console.error("dot failed with exit code", result.status);
-  process.exit(result.status ?? 1);
-}
 console.log(`wrote ${relative(root, svgPath)} (${calls.size} functions)`);
