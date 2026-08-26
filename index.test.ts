@@ -78,6 +78,12 @@ test("type mismatch in unexecuted if branch returns Err", () => {
     },
   });
 });
+test("unknown identifier in unexecuted if branch returns Err", () => {
+  expect(evaluateTuff("if (false) { let y = unknownIdentifier; }")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "unknownIdentifier" },
+  });
+});
 test("malformed statement returns ParseError", () => {
   expect(evaluateTuff("let x = ;")).toEqual({
     ok: false,

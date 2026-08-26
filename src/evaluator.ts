@@ -131,26 +131,26 @@ function typeCheck(
       if (!elseErr.ok) return elseErr;
       continue;
     }
-    const kind = exprKind(stmt.value, kinds);
+    const r = exprKind(stmt.value, kinds);
+    if (!r.ok) return r;
+    const kind = r.kind;
     if (stmt.type === "Assign") {
-      if (kind !== undefined) {
-        const expected = kinds.get(stmt.name);
-        if (expected !== undefined && expected !== kind) {
-          return {
-            ok: false,
-            error: {
-              type: "TypeMismatch",
-              name: stmt.name,
-              position: stmt.pos,
-              expected,
-              actual: kind,
-            },
-          };
-        }
+      const expected = kinds.get(stmt.name);
+      if (expected !== undefined && expected !== kind) {
+        return {
+          ok: false,
+          error: {
+            type: "TypeMismatch",
+            name: stmt.name,
+            position: stmt.pos,
+            expected,
+            actual: kind,
+          },
+        };
       }
       continue;
     }
-    if (stmt.type === "LetDecl" && kind !== undefined) {
+    if (stmt.type === "LetDecl") {
       kinds.set(stmt.name, kind);
     }
   }
@@ -223,18 +223,34 @@ export function evaluateTuff(input: string): Result {
 }
 
 /**
- * Determine the kind of an expression's value.
+ * A determined expression kind.
+ */
+interface ExprKind {
+  ok: true;
+  kind: Value["kind"];
+}
+
+/**
+ * Determine the kind of an expression's value, verifying that every
+ * referenced identifier is declared.
  *
  * @param expr - The expression to inspect.
  * @param kinds - The kinds of declared variables, for identifier resolution.
- * @returns The kind of the value the expression produces, or undefined when
- * the expression references an undeclared identifier.
+ * @returns The kind of the value the expression produces, or a structured error.
  */
-function exprKind(
-  expr: Expr,
-  kinds: Map<string, Value["kind"]>,
-): Value["kind"] | undefined {
-  if (expr.type === "Number") return "number";
-  if (expr.type === "Identifier") return kinds.get(expr.name);
-  return "boolean";
+function exprKind(expr: Expr, kinds: Map<string, Value["kind"]>): ExprKind | Err {
+  if (expr.type === "Number") return { ok: true, kind: "number" };
+  if (expr.type === "Boolean") return { ok: true, kind: "boolean" };
+  if (expr.type === "Identifier") {
+    const kind = kinds.get(expr.name);
+    if (kind === undefined) {
+      return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };
+    }
+    return { ok: true, kind };
+  }
+  const left = exprKind(expr.left, kinds);
+  if (!left.ok) return left;
+  const right = exprKind(expr.right, kinds);
+  if (!right.ok) return right;
+  return { ok: true, kind: "boolean" };
 }
