@@ -140,7 +140,8 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
     return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
     return { kind: "token", token: { kind: "Equal" }, next: j + 2 };
-  if (ch === "<") return { kind: "token", token: { kind: "Less" }, next: j + 1 };
+  if (ch === "<")
+    return { kind: "token", token: { kind: "Less" }, next: j + 1 };
   if (ch === "&") return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
   if (ch === "*")
     return { kind: "token", token: { kind: "Deref" }, next: j + 1 };

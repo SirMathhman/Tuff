@@ -1,5 +1,5 @@
 import type { TuffError, TuffResult } from "./errors.ts";
-import type { TuffExpr, TuffStatement } from "./parser.ts";
+import type { BinaryNodeKind, TuffExpr, TuffStatement } from "./parser.ts";
 import { findBinding, type Binding, type Environment } from "./scopes.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
@@ -170,7 +170,7 @@ interface BinaryRule {
 /**
  * The binary node evaluation rules, keyed by node kind.
  */
-const BINARY_RULES: Record<"Or" | "And" | "Add" | "Equal" | "Less", BinaryRule> = {
+const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   Or: {
     shortCircuit: (left) => (left !== 0 ? 1 : null),
     combine: (_left, right) => (right !== 0 ? 1 : 0),

@@ -108,10 +108,13 @@ interface Pos {
   i: number;
 }
 
+/** The node kinds of the binary operators, shared with the evaluator's rule table. */
+export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less";
+
 /** A binary operator's grammar properties. */
 interface BinaryOp {
   token: "Or" | "And" | "Plus" | "Equal" | "Less";
-  node: "Or" | "And" | "Add" | "Equal" | "Less";
+  node: BinaryNodeKind;
   assoc: "left" | "right";
 }
 
