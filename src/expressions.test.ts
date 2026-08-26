@@ -65,6 +65,13 @@ test('evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;") => 7', () =>
   });
 });
 
+test('evaluateTuff("let tuple = (1, 2, 3); return tuple.2;") => 3', () => {
+  expect(evaluateTuff("let tuple = (1, 2, 3); return tuple.2;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
 test('evaluateTuff("let tuple = (1, 2); return tuple.0 + tuple.1;") => 3', () => {
   expect(evaluateTuff("let tuple = (1, 2); return tuple.0 + tuple.1;")).toEqual({
     ok: true,
