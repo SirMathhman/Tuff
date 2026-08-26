@@ -198,3 +198,27 @@ test('evaluateTuff("let x = 1; let y = 2; return x == y;") => 0', () => {
     value: 0,
   });
 });
+
+test('evaluateTuff("let x = 1; x;") => Err', () => {
+  const result = evaluateTuff("let x = 1; x;");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "InvalidStatement",
+      statement: "let x = 1; x;",
+      line: 2,
+    });
+  }
+});
+
+test('evaluateTuff("return 1; 2;") => Err', () => {
+  const result = evaluateTuff("return 1; 2;");
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "InvalidStatement",
+      statement: "return 1; 2;",
+      line: 2,
+    });
+  }
+});

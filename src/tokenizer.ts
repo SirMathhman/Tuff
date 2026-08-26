@@ -36,6 +36,26 @@ export interface EqualToken {
   kind: "Equal";
 }
 
+/** A `=` assignment token. */
+export interface AssignToken {
+  kind: "Assign";
+}
+
+/** A `;` statement separator token. */
+export interface SemicolonToken {
+  kind: "Semicolon";
+}
+
+/** A `{` block-opening token. */
+export interface LBraceToken {
+  kind: "LBrace";
+}
+
+/** A `}` block-closing token. */
+export interface RBraceToken {
+  kind: "RBrace";
+}
+
 /** An opening parenthesis token. */
 export interface LParenToken {
   kind: "LParen";
@@ -55,6 +75,10 @@ export type TuffToken =
   | AndToken
   | PlusToken
   | EqualToken
+  | AssignToken
+  | SemicolonToken
+  | LBraceToken
+  | RBraceToken
   | LParenToken
   | RParenToken;
 
@@ -83,6 +107,10 @@ function readToken(text: string, i: number): ReadToken | null {
   if (ch === "+") return { token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
     return { token: { kind: "Equal" }, next: j + 2 };
+  if (ch === "=") return { token: { kind: "Assign" }, next: j + 1 };
+  if (ch === ";") return { token: { kind: "Semicolon" }, next: j + 1 };
+  if (ch === "{") return { token: { kind: "LBrace" }, next: j + 1 };
+  if (ch === "}") return { token: { kind: "RBrace" }, next: j + 1 };
   const rest = text.slice(j);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {

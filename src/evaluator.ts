@@ -1,58 +1,10 @@
 import type { TuffError, TuffResult } from "./errors.ts";
-import { isExpr, parseExpression, type TuffExpr } from "./parser.ts";
-
-/** A variable binding in a scope. */
-export interface Binding {
-  value: number;
-  mut: boolean;
-}
-
-/**
- * Find a binding by name, searching innermost scope first.
- * @param scopes {Map<string, Binding>[]} - The scope chain.
- * @param name {string} - The variable name to look up.
- * @returns {Binding | undefined} The binding, or undefined if not found.
- */
-export function findBinding(
-  scopes: Map<string, Binding>[],
-  name: string,
-): Binding | undefined {
-  for (let i = scopes.length - 1; i >= 0; i--) {
-    const binding = scopes[i]?.get(name);
-    if (binding) return binding;
-  }
-  return undefined;
-}
-
-/**
- * Split source into statements, respecting brace nesting.
- * @param s {string} - The source text.
- * @returns {string[]} The trimmed, non-empty statements.
- */
-export function splitStatements(s: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let current = "";
-  for (const ch of s) {
-    if (ch === "{") depth++;
-    else if (ch === "}") depth--;
-    if (ch === ";" && depth === 0) {
-      out.push(current);
-      current = "";
-    } else if (ch === "}" && depth === 0) {
-      out.push(current + ch);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  out.push(current);
-  return out.map((st) => st.trim()).filter(Boolean);
-}
+import type { TuffExpr, TuffStatement } from "./parser.ts";
+import { findBinding, type Binding } from "./scopes.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
-  statements: string[],
+  statements: TuffStatement[],
   scopes: Map<string, Binding>[],
   baseLine: number,
 ) => TuffResult | undefined;
@@ -65,7 +17,7 @@ type ExecuteList = (
  * @returns A result if a return or error is hit, else undefined.
  */
 export function executeStatements(
-  statements: string[],
+  statements: TuffStatement[],
   scopes: Map<string, Binding>[],
   baseLine: number,
 ): TuffResult | undefined {
@@ -84,61 +36,53 @@ export function executeStatements(
 }
 
 /**
- * Execute a single statement.
- * @param stmt - The statement text.
+ * Execute a single statement node.
+ * @param stmt - The statement to execute.
  * @param scopes - The scope chain.
  * @param line - The 1-based line number.
  * @param executeList - The list executor, for block statements.
  * @returns A result if the statement terminates, else undefined.
  */
 function executeStatement(
-  stmt: string,
+  stmt: TuffStatement,
   scopes: Map<string, Binding>[],
   line: number,
   executeList: ExecuteList,
 ): TuffResult | undefined {
-  const [, blockBody] = stmt.match(/^\{([\s\S]*)\}$/) ?? [];
-  if (blockBody !== undefined) {
+  if (stmt.kind === "Block") {
     scopes.push(new Map());
     try {
-      return executeList(splitStatements(blockBody), scopes, line);
+      return executeList(stmt.statements, scopes, line);
     } finally {
       scopes.pop();
     }
   }
-  const [, letMut, letName, letValue] =
-    stmt.match(/^let\s+(mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
-  if (letName && letValue) {
-    const value = resolveOrError(letValue, scopes, line);
-    if (typeof value !== "number") return { ok: false, error: value };
+  if (stmt.kind === "Let") {
+    const value = evalOrError(stmt.value, scopes, line);
+    if (!value.ok) return value;
     const scope = scopes[scopes.length - 1];
-    if (scope) scope.set(letName, { value, mut: Boolean(letMut) });
+    if (scope) scope.set(stmt.name, { value: value.value, mut: stmt.mut });
     return undefined;
   }
-  const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
-  if (returnValue) {
-    const value = resolveOrError(returnValue, scopes, line);
-    if (typeof value !== "number") return { ok: false, error: value };
-    return { ok: true, value };
+  if (stmt.kind === "Return") {
+    const value = evalOrError(stmt.value, scopes, line);
+    if (!value.ok) return value;
+    return value;
   }
-  const [, assignName, assignValue] = stmt.match(/^(\w+)\s*=\s*(.+)$/) ?? [];
-  if (assignName && assignValue) {
-    return executeAssignment(assignName, assignValue, scopes, line);
-  }
-  return undefined;
+  return executeAssignment(stmt.name, stmt.value, scopes, line);
 }
 
 /**
  * Execute an assignment statement.
  * @param name {string} - The variable being assigned.
- * @param valueExpr {string} - The expression to assign.
+ * @param value {TuffExpr} - The expression to assign.
  * @param scopes {Map<string, Binding>[]} - The scope chain.
  * @param line {number} - The 1-based line number.
  * @returns {TuffResult | undefined} A result if the statement terminates, else undefined.
  */
 function executeAssignment(
   name: string,
-  valueExpr: string,
+  value: TuffExpr,
   scopes: Map<string, Binding>[],
   line: number,
 ): TuffResult | undefined {
@@ -155,10 +99,27 @@ function executeAssignment(
       error: { kind: "ImmutableAssignment", name, line },
     };
   }
-  const value = resolveOrError(valueExpr, scopes, line);
-  if (typeof value !== "number") return { ok: false, error: value };
-  binding.value = value;
+  const result = evalOrError(value, scopes, line);
+  if (!result.ok) return result;
+  binding.value = result.value;
   return undefined;
+}
+
+/**
+ * Evaluate an expression node to a result, wrapping errors.
+ * @param node {TuffExpr} - The expression to evaluate.
+ * @param scopes {Map<string, Binding>[]} - The scope chain.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffResult} The numeric value, or a TuffErr.
+ */
+function evalOrError(
+  node: TuffExpr,
+  scopes: Map<string, Binding>[],
+  line: number,
+): TuffResult {
+  const value = evalExpr(node, scopes, line);
+  if (typeof value !== "number") return { ok: false, error: value };
+  return { ok: true, value };
 }
 
 /** A binary node kind's evaluation rule. */
@@ -226,21 +187,4 @@ function evalExpr(
   const right = evalExpr(node.right, scopes, line);
   if (typeof right !== "number") return right;
   return rule.combine(left, right);
-}
-
-/**
- * Resolve an expression to a number, or a structured error.
- * @param expr {string} - The expression text.
- * @param scopes {Map<string, Binding>[]} - The scope chain.
- * @param line {number} - The 1-based line number.
- * @returns {number | TuffError} The numeric value, or a TuffError.
- */
-function resolveOrError(
-  expr: string,
-  scopes: Map<string, Binding>[],
-  line: number,
-): number | TuffError {
-  const node = parseExpression(expr, line);
-  if (!isExpr(node)) return node;
-  return evalExpr(node, scopes, line);
 }

@@ -12,6 +12,13 @@ export interface InvalidExpressionError {
   line: number;
 }
 
+/** An error for a statement that is not a recognized statement form. */
+export interface InvalidStatementError {
+  kind: "InvalidStatement";
+  statement: string;
+  line: number;
+}
+
 /** An error for assigning to a binding declared without `mut`. */
 export interface ImmutableAssignmentError {
   kind: "ImmutableAssignment";
@@ -23,6 +30,7 @@ export interface ImmutableAssignmentError {
 export type TuffError =
   | UnidentifiedIdentifierError
   | InvalidExpressionError
+  | InvalidStatementError
   | ImmutableAssignmentError;
 
 /** A successful evaluation result. */
