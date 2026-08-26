@@ -263,7 +263,6 @@ export function evaluateTuff(input: string): Result {
   return exec(parsed.program.stmts, new Map());
 }
 
-
 /**
  * A determined expression kind.
  */
