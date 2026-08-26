@@ -275,3 +275,11 @@ test('evaluateTuff("let x = 1; let y = &mut x; *y = 5; return x;") => Err', () =
     2,
   );
 });
+
+test('evaluateTuff("let x = 0; let y = &mut x; *y = 1; return x;") => Err', () => {
+  expectImmutableAssignment(
+    evaluateTuff("let x = 0; let y = &mut x; *y = 1; return x;"),
+    "x",
+    2,
+  );
+});
