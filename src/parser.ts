@@ -1,4 +1,6 @@
 import type { TuffError } from "./errors.ts";
+import { tokenize } from "./tokenizer.ts";
+import type { Token } from "./tokenizer.ts";
 
 /**
  * A numeric literal expression.
@@ -93,14 +95,6 @@ export interface ParseErr {
 export type ParseResult = ParseOk | ParseErr;
 
 /**
- * A successful tokenize result.
- */
-interface TokenizeOk {
-  ok: true;
-  tokens: Token[];
-}
-
-/**
  * A successful statement parse result.
  */
 interface ParseStmtOk {
@@ -117,17 +111,6 @@ interface ParseExprOk {
 }
 
 /**
- * A lexical token with its source position.
- */
-interface Token {
-  kind: "number" | "ident" | "keyword" | "punct";
-  value: string;
-  pos: number;
-}
-
-const KEYWORDS = new Set(["let", "mut", "return"]);
-
-/**
  * Build a structured parse error.
  *
  * @param message - Human-readable description of the failure.
@@ -136,56 +119,6 @@ const KEYWORDS = new Set(["let", "mut", "return"]);
  */
 function parseError(message: string, position: number): TuffError {
   return { type: "ParseError", message, position };
-}
-
-/**
- * Tokenize source text into a flat token list.
- *
- * @param input - The source text.
- * @returns The tokens, or a structured parse error.
- */
-function tokenize(input: string): TokenizeOk | ParseErr {
-  const tokens: Token[] = [];
-  let i = 0;
-  while (i < input.length) {
-    const ch = input[i];
-    if (ch === undefined) break;
-    if (/\s/.test(ch)) {
-      i++;
-      continue;
-    }
-    if (/[0-9]/.test(ch) || (ch === "-" && /[0-9]/.test(input[i + 1] ?? ""))) {
-      let j = i;
-      if (input[j] === "-") j++;
-      while (j < input.length && /[0-9.]/.test(input[j] ?? "")) j++;
-      const text = input.slice(i, j);
-      if (!/^-?\d+(\.\d+)?$/.test(text)) {
-        return { ok: false, error: parseError(`Invalid number: ${text}`, i) };
-      }
-      tokens.push({ kind: "number", value: text, pos: i });
-      i = j;
-      continue;
-    }
-    if (/[A-Za-z_]/.test(ch)) {
-      let j = i;
-      while (j < input.length && /[A-Za-z0-9_]/.test(input[j] ?? "")) j++;
-      const text = input.slice(i, j);
-      tokens.push({
-        kind: KEYWORDS.has(text) ? "keyword" : "ident",
-        value: text,
-        pos: i,
-      });
-      i = j;
-      continue;
-    }
-    if (ch === "=" || ch === ";" || ch === "{" || ch === "}") {
-      tokens.push({ kind: "punct", value: ch, pos: i });
-      i++;
-      continue;
-    }
-    return { ok: false, error: parseError(`Unexpected character: ${ch}`, i) };
-  }
-  return { ok: true, tokens };
 }
 
 /**
