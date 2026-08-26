@@ -66,6 +66,13 @@ describe("evaluateTuff", () => {
     expect(evaluateTuff("let x = 100;")).toEqual({ ok: true, value: 0 });
   });
 
+  test('evaluateTuff("let mut x = 0; x = 1; return x;") => 1', () => {
+    expect(evaluateTuff("let mut x = 0; x = 1; return x;")).toEqual({
+      ok: true,
+      value: 1,
+    });
+  });
+
   test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
     expectUnidentifiedIdentifier(
       evaluateTuff("let x = unidentifiedIdentifier;"),

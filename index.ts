@@ -39,7 +39,8 @@ export function evaluateTuff(s: string): TuffResult {
     const stmt = statements[i];
     if (!stmt) continue;
     const line = i + 1;
-    const [, letName, letValue] = stmt.match(/^let\s+(\w+)\s*=\s*(.+)$/) ?? [];
+    const [, letName, letValue] =
+      stmt.match(/^let\s+(?:mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];
     if (letName && letValue) {
       const value = resolveOrError(letValue, env, line);
       if (typeof value !== "number") return { ok: false, error: value };
@@ -51,6 +52,19 @@ export function evaluateTuff(s: string): TuffResult {
       const value = resolveOrError(returnValue, env, line);
       if (typeof value !== "number") return { ok: false, error: value };
       return { ok: true, value };
+    }
+    const [, assignName, assignValue] = stmt.match(/^(\w+)\s*=\s*(.+)$/) ?? [];
+    if (assignName && assignValue) {
+      if (!env.has(assignName)) {
+        return {
+          ok: false,
+          error: { kind: "UnidentifiedIdentifier", name: assignName, line },
+        };
+      }
+      const value = resolveOrError(assignValue, env, line);
+      if (typeof value !== "number") return { ok: false, error: value };
+      env.set(assignName, value);
+      continue;
     }
   }
   return { ok: true, value: 0 };
