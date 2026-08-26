@@ -303,7 +303,7 @@ test('evaluateTuff("if (false) { let x = 0; let y = &mut x; }") => Err', () => {
 test('evaluateTuff("if (false) { let x = &(1); }") => Err', () => {
   expect(evaluateTuff("if (false) { let x = &(1); }")).toEqual({
     ok: false,
-    error: { kind: "InvalidDeref", line: 1 },
+    error: { kind: "InvalidReference", name: "", line: 1 },
   });
 });
 
@@ -338,7 +338,7 @@ test('evaluateTuff("if (false) { *y = 1; }") => Err', () => {
 test('evaluateTuff("if (false) { let x = 1; let z = *x; }") => Err', () => {
   expect(evaluateTuff("if (false) { let x = 1; let z = *x; }")).toEqual({
     ok: false,
-    error: { kind: "InvalidDeref", line: 2 },
+    error: { kind: "InvalidDeref", name: "x", line: 2 },
   });
 });
 

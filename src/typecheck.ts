@@ -142,7 +142,7 @@ function checkAssignment(
     name = resolved.name;
     declared = resolved.binding;
   } else {
-    return { kind: "InvalidDeref", line };
+    return { kind: "InvalidDeref", name: "", line };
   }
   if (!declared.mut) {
     return { kind: "ImmutableAssignment", name, line };
@@ -195,8 +195,8 @@ function inferKind(
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
- * @returns An UnidentifiedIdentifier, InvalidDeref, or ImmutableAssignment
- * error if one is found, else null.
+ * @returns An UnidentifiedIdentifier, InvalidReference, InvalidDeref, or
+ * ImmutableAssignment error if one is found, else null.
  */
 function findUndeclared(
   expr: TuffExpr,
@@ -222,7 +222,7 @@ function findUndeclared(
   }
   if (expr.kind === "Ref") {
     if (expr.operand.kind !== "Identifier") {
-      return { kind: "InvalidDeref", line };
+      return { kind: "InvalidReference", name: "", line };
     }
     const declared = findDeclared(scopes, expr.operand.name);
     if (!declared) {
@@ -254,14 +254,14 @@ function resolveDeref(
   scopes: Record<string, DeclaredBinding>[],
 ): ResolvedDeref | TuffError {
   if (operand.kind !== "Identifier") {
-    return { kind: "InvalidDeref", line };
+    return { kind: "InvalidDeref", name: "", line };
   }
   const declared = findDeclared(scopes, operand.name);
   if (!declared) {
     return { kind: "UnidentifiedIdentifier", name: operand.name, line };
   }
   if (!declared.refTo) {
-    return { kind: "InvalidDeref", line };
+    return { kind: "InvalidDeref", name: operand.name, line };
   }
   const referenced = findDeclared(scopes, declared.refTo);
   if (!referenced) {

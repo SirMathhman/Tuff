@@ -29,6 +29,16 @@ export interface ImmutableAssignmentError {
 /** An error for dereferencing a value that is not a reference. */
 export interface InvalidDerefError {
   kind: "InvalidDeref";
+  /** The identifier named by the operand, or "" if not an identifier. */
+  name: string;
+  line: number;
+}
+
+/** An error for taking a reference of an expression that is not an identifier. */
+export interface InvalidReferenceError {
+  kind: "InvalidReference";
+  /** The identifier named by the operand, or "" if not an identifier. */
+  name: string;
   line: number;
 }
 
@@ -53,6 +63,7 @@ export type TuffError =
   | InvalidStatementError
   | ImmutableAssignmentError
   | InvalidDerefError
+  | InvalidReferenceError
   | TypeMismatchError
   | UnexpectedCharacterError;
 

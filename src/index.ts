@@ -15,6 +15,7 @@ export type {
   InvalidStatementError,
   ImmutableAssignmentError,
   InvalidDerefError,
+  InvalidReferenceError,
   TypeMismatchError,
   UnexpectedCharacterError,
 } from "./errors.ts";
