@@ -3,9 +3,23 @@ export interface TuffOk {
   value: number;
 }
 
+export interface UnidentifiedIdentifierError {
+  kind: "UnidentifiedIdentifier";
+  name: string;
+  line: number;
+}
+
+export interface InvalidExpressionError {
+  kind: "InvalidExpression";
+  expression: string;
+  line: number;
+}
+
+export type TuffError = UnidentifiedIdentifierError | InvalidExpressionError;
+
 export interface TuffErr {
   ok: false;
-  error: string;
+  error: TuffError;
 }
 
 export type TuffResult = TuffOk | TuffErr;
@@ -21,30 +35,38 @@ export function evaluateTuff(s: string): TuffResult {
     .split(";")
     .map((st) => st.trim())
     .filter(Boolean);
-  for (const stmt of statements) {
+  for (let i = 0; i < statements.length; i++) {
+    const stmt = statements[i];
+    if (!stmt) continue;
+    const line = i + 1;
     const [, letName, letValue] = stmt.match(/^let\s+(\w+)\s*=\s*(.+)$/) ?? [];
     if (letName && letValue) {
-      const value = resolve(letValue, env);
-      if (value === undefined) {
-        return { ok: false, error: `Unidentified identifier: ${letValue}` };
-      }
+      const value = resolveOrError(letValue, env, line);
+      if (typeof value !== "number") return { ok: false, error: value };
       env.set(letName, value);
       continue;
     }
     const [, returnValue] = stmt.match(/^return\s+(.+)$/) ?? [];
     if (returnValue) {
-      const value = resolve(returnValue, env);
-      if (value === undefined) {
-        return { ok: false, error: `Unidentified identifier: ${returnValue}` };
-      }
+      const value = resolveOrError(returnValue, env, line);
+      if (typeof value !== "number") return { ok: false, error: value };
       return { ok: true, value };
     }
   }
   return { ok: true, value: 0 };
 }
 
-function resolve(expr: string, env: Map<string, number>): number | undefined {
+function resolveOrError(
+  expr: string,
+  env: Map<string, number>,
+  line: number,
+): number | TuffError {
   const trimmed = expr.trim();
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  return env.get(trimmed);
+  if (/^\w+$/.test(trimmed)) {
+    const value = env.get(trimmed);
+    if (value !== undefined) return value;
+    return { kind: "UnidentifiedIdentifier", name: trimmed, line };
+  }
+  return { kind: "InvalidExpression", expression: trimmed, line };
 }

@@ -35,9 +35,23 @@ describe("evaluateTuff", () => {
     const result = evaluateTuff("return unidentifiedIdentifier;");
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe(
-        "Unidentified identifier: unidentifiedIdentifier",
-      );
+      expect(result.error).toEqual({
+        kind: "UnidentifiedIdentifier",
+        name: "unidentifiedIdentifier",
+        line: 1,
+      });
+    }
+  });
+
+  test('evaluateTuff("let x = missing; return x;") => Err', () => {
+    const result = evaluateTuff("let x = missing; return x;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({
+        kind: "UnidentifiedIdentifier",
+        name: "missing",
+        line: 1,
+      });
     }
   });
 });
