@@ -178,6 +178,7 @@ function parseLevel(
     left = { kind: op.node, left, right };
   }
   return left;
+  v;
 }
 
 /**
@@ -343,7 +344,11 @@ export function parseProgram(
     const stmt = parseStatement(tokens, pos, stmtLine);
     if (!isStatement(stmt)) {
       if (stmt.kind === "InvalidStatement") {
-        return { kind: "InvalidStatement", statement: text.trim(), line: stmtLine };
+        return {
+          kind: "InvalidStatement",
+          statement: text.trim(),
+          line: stmtLine,
+        };
       }
       return stmt;
     }
@@ -355,7 +360,11 @@ export function parseProgram(
     }
     if (!sep) break;
     if (stmt.kind !== "Block") {
-      return { kind: "InvalidStatement", statement: text.trim(), line: stmtLine };
+      return {
+        kind: "InvalidStatement",
+        statement: text.trim(),
+        line: stmtLine,
+      };
     }
   }
   return statements;
