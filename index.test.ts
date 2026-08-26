@@ -58,4 +58,16 @@ describe("evaluateTuff", () => {
   test('evaluateTuff("let x = 100;") => 0', () => {
     expect(evaluateTuff("let x = 100;")).toEqual({ ok: true, value: 0 });
   });
+
+  test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
+    const result = evaluateTuff("let x = unidentifiedIdentifier;");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual({
+        kind: "UnidentifiedIdentifier",
+        name: "unidentifiedIdentifier",
+        line: 1,
+      });
+    }
+  });
 });
