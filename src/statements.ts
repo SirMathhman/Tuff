@@ -283,6 +283,34 @@ function parseBlock(
 }
 
 /**
+ * Parse a statement that begins with an identifier: a keyword (`let`,
+ * `return`, `if`, `while`, `break`, `continue`) or an assignment.
+ * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param name {string} - The leading identifier name.
+ * @returns {TuffStatement | TuffError} The statement node, or a TuffError.
+ */
+function parseIdentStatement(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  name: string,
+): TuffStatement | TuffError {
+  if (name === "let") return parseLet(tokens, pos, line);
+  if (name === "return") {
+    const value = parseLevel(tokens, pos, line, 0);
+    if (!isExpr(value)) return value;
+    return { kind: "Return", value };
+  }
+  if (name === "if") return parseIf(tokens, pos, line, parseStatement);
+  if (name === "while") return parseWhile(tokens, pos, line, parseStatement);
+  if (name === "break") return { kind: "Break" };
+  if (name === "continue") return { kind: "Continue" };
+  return parseAssign(tokens, pos, line, name);
+}
+
+/**
  * Parse a single statement: a block, `let`, `return`, `if`, or an assignment.
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
@@ -300,32 +328,10 @@ export function parseStatement(
     pos.i++;
     return parseBlock(tokens, pos, line, parseStatement);
   }
-  if (token.kind === "Ident" && token.name === "let") {
-    pos.i++;
-    return parseLet(tokens, pos, line);
-  }
-  if (token.kind === "Ident" && token.name === "return") {
-    pos.i++;
-    const value = parseLevel(tokens, pos, line, 0);
-    if (!isExpr(value)) return value;
-    return { kind: "Return", value };
-  }
-  if (token.kind === "Ident" && token.name === "if") {
-    pos.i++;
-    return parseIf(tokens, pos, line, parseStatement);
-  }
-  if (token.kind === "Ident" && token.name === "while") {
-    pos.i++;
-    return parseWhile(tokens, pos, line, parseStatement);
-  }
-  if (token.kind === "Ident" && token.name === "break") {
-    pos.i++;
-    return { kind: "Break" };
-  }
   if (token.kind === "Ident") {
     const name = token.name;
     pos.i++;
-    return parseAssign(tokens, pos, line, name);
+    return parseIdentStatement(tokens, pos, line, name);
   }
   if (token.kind === "Deref") {
     const target = parseOperand(tokens, pos, line);
@@ -352,6 +358,7 @@ export function isStatement(
     value.kind === "Block" ||
     value.kind === "If" ||
     value.kind === "While" ||
-    value.kind === "Break"
+    value.kind === "Break" ||
+    value.kind === "Continue"
   );
 }

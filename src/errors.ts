@@ -62,6 +62,12 @@ export interface BreakOutsideLoopError {
   line: number;
 }
 
+/** An error for a `continue` statement outside of a loop. */
+export interface ContinueOutsideLoopError {
+  kind: "ContinueOutsideLoop";
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -72,7 +78,8 @@ export type TuffError =
   | InvalidReferenceError
   | TypeMismatchError
   | UnexpectedCharacterError
-  | BreakOutsideLoopError;
+  | BreakOutsideLoopError
+  | ContinueOutsideLoopError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

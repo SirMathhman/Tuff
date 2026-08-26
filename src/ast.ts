@@ -119,6 +119,11 @@ export interface BreakNode {
   kind: "Break";
 }
 
+/** A `continue` statement node that skips to the next loop iteration. */
+export interface ContinueNode {
+  kind: "Continue";
+}
+
 /** A parsed tuff statement. */
 export type TuffStatement =
   | LetNode
@@ -127,7 +132,8 @@ export type TuffStatement =
   | BlockNode
   | IfNode
   | WhileNode
-  | BreakNode;
+  | BreakNode
+  | ContinueNode;
 
 /** A mutable parse position over a token list. */
 export interface Pos {

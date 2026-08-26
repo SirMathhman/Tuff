@@ -22,6 +22,7 @@ export type {
   IfNode,
   WhileNode,
   BreakNode,
+  ContinueNode,
   TuffStatement,
   Pos,
 } from "./ast.ts";

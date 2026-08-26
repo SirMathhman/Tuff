@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
-import { executeStatements, isBreak } from "./evaluator.ts";
+import { executeStatements, isBreak, isContinue } from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
 import { tokenize } from "./tokenizer.ts";
@@ -20,6 +20,7 @@ export type {
   TypeMismatchError,
   UnexpectedCharacterError,
   BreakOutsideLoopError,
+  ContinueOutsideLoopError,
 } from "./errors.ts";
 export type {
   TuffExpr,
@@ -40,6 +41,7 @@ export type {
   IfNode,
   WhileNode,
   BreakNode,
+  ContinueNode,
 } from "./parser.ts";
 export type { Binding, Environment } from "./scopes.ts";
 
@@ -71,8 +73,8 @@ export function evaluateTuff(s: string): TuffResult {
   const env = createEnvironment();
   const result = executeStatements(program, 1, env);
   assert(
-    !isBreak(result),
-    "break signal must be consumed by an enclosing loop",
+    !isBreak(result) && !isContinue(result),
+    "control-flow signal must be consumed by an enclosing loop",
   );
   return result ?? { ok: true, value: 0 };
 }

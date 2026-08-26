@@ -122,6 +122,9 @@ function checkStatement(
   if (stmt.kind === "Break") {
     return inLoop ? null : { kind: "BreakOutsideLoop", line };
   }
+  if (stmt.kind === "Continue") {
+    return inLoop ? null : { kind: "ContinueOutsideLoop", line };
+  }
   return null;
 }
 

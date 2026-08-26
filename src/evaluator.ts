@@ -15,8 +15,16 @@ interface BreakSignal {
   kind: "Break";
 }
 
+/** A control-flow signal: a `continue` skipped to the next loop iteration. */
+interface ContinueSignal {
+  kind: "Continue";
+}
+
+/** A control-flow signal: a `break` or a `continue`. */
+type ControlSignal = BreakSignal | ContinueSignal;
+
 /** A step result: a final value, or a control-flow signal. */
-type TuffStep = TuffResult | BreakSignal;
+type TuffStep = TuffResult | ControlSignal;
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
@@ -28,6 +36,9 @@ type ExecuteList = (
 /** The break control-flow signal. */
 const BREAK: BreakSignal = { kind: "Break" };
 
+/** The continue control-flow signal. */
+const CONTINUE: ContinueSignal = { kind: "Continue" };
+
 /**
  * Whether a step result is the break signal.
  * @param result {TuffStep | undefined} - The result to test.
@@ -35,6 +46,17 @@ const BREAK: BreakSignal = { kind: "Break" };
  */
 export function isBreak(result: TuffStep | undefined): result is BreakSignal {
   return result !== undefined && "kind" in result && result.kind === "Break";
+}
+
+/**
+ * Whether a step result is the continue signal.
+ * @param result {TuffStep | undefined} - The result to test.
+ * @returns {boolean} True if the result is the continue signal.
+ */
+export function isContinue(
+  result: TuffStep | undefined,
+): result is ContinueSignal {
+  return result !== undefined && "kind" in result && result.kind === "Continue";
 }
 
 /**
@@ -107,6 +129,9 @@ function executeStatement(
   if (stmt.kind === "Break") {
     return BREAK;
   }
+  if (stmt.kind === "Continue") {
+    return CONTINUE;
+  }
   executeAssignment(stmt.target, stmt.value, env);
   return undefined;
 }
@@ -130,6 +155,7 @@ function executeWhile(
     try {
       const result = executeStatement(stmt.body, line, env, executeList);
       if (isBreak(result)) return undefined;
+      if (isContinue(result)) continue;
       if (result) return result;
     } finally {
       env.scopes.pop();
