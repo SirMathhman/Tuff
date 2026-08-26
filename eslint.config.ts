@@ -42,6 +42,8 @@ export default defineConfig([
           },
         },
       ],
+      // Turning this one off because of an editor quirk
+      "jsdoc/require-param-type": "off",
       "jsdoc/require-param": "error",
       "jsdoc/require-param-description": "error",
       "jsdoc/require-returns": "error",
