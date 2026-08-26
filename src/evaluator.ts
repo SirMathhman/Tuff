@@ -238,13 +238,19 @@ interface ExprKind {
  * @param kinds - The kinds of declared variables, for identifier resolution.
  * @returns The kind of the value the expression produces, or a structured error.
  */
-function exprKind(expr: Expr, kinds: Map<string, Value["kind"]>): ExprKind | Err {
+function exprKind(
+  expr: Expr,
+  kinds: Map<string, Value["kind"]>,
+): ExprKind | Err {
   if (expr.type === "Number") return { ok: true, kind: "number" };
   if (expr.type === "Boolean") return { ok: true, kind: "boolean" };
   if (expr.type === "Identifier") {
     const kind = kinds.get(expr.name);
     if (kind === undefined) {
-      return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };
+      return {
+        ok: false,
+        error: { type: "UnknownIdentifier", name: expr.name },
+      };
     }
     return { ok: true, kind };
   }
