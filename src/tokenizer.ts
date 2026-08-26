@@ -126,7 +126,9 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       ch === "}" ||
       ch === "(" ||
       ch === ")" ||
-      ch === "+"
+      ch === "+" ||
+      ch === "-" ||
+      ch === "*"
     ) {
       tokens.push({ kind: "punct", value: ch, pos: i });
       i++;

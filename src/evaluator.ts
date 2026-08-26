@@ -71,10 +71,16 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
       return { value: 1, kind: "boolean" };
     }
     const right = evalExpr(expr.right, vars);
-    if (expr.op === "+") {
+    if (expr.op === "+" || expr.op === "-" || expr.op === "*") {
       assert(left.kind === "number", `Expected number, got ${left.kind}`);
       assert(right.kind === "number", `Expected number, got ${right.kind}`);
-      return { value: left.value + right.value, kind: "number" };
+      const value =
+        expr.op === "+"
+          ? left.value + right.value
+          : expr.op === "-"
+            ? left.value - right.value
+            : left.value * right.value;
+      return { value, kind: "number" };
     }
     if (expr.op === "==") {
       const equal =
@@ -273,7 +279,7 @@ function exprKind(expr: Expr, types: Map<string, TypeInfo>): ExprKind | Err {
   if (!left.ok) return left;
   const right = exprKind(expr.right, types);
   if (!right.ok) return right;
-  if (expr.op === "+") {
+  if (expr.op === "+" || expr.op === "-" || expr.op === "*") {
     if (left.kind !== "number") {
       return {
         ok: false,

@@ -48,6 +48,52 @@ test("addition with a boolean operand returns Err", () => {
     },
   });
 });
+test("subtraction of numbers", () => {
+  expect(evaluateTuff("return 5 - 2;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+test("subtraction can yield a negative number", () => {
+  expect(evaluateTuff("return 2 - 5;")).toEqual({
+    ok: true,
+    value: -3,
+  });
+});
+test("multiplication of numbers", () => {
+  expect(evaluateTuff("return 3 * 4;")).toEqual({
+    ok: true,
+    value: 12,
+  });
+});
+test("multiplication binds tighter than addition", () => {
+  expect(evaluateTuff("return 2 + 3 * 4;")).toEqual({
+    ok: true,
+    value: 14,
+  });
+});
+test("subtraction with a boolean operand returns Err", () => {
+  expect(evaluateTuff("let x = true; return 1 - x;")).toEqual({
+    ok: false,
+    error: {
+      type: "OperandTypeMismatch",
+      position: 25,
+      expected: "number",
+      actual: "boolean",
+    },
+  });
+});
+test("multiplication with a boolean operand returns Err", () => {
+  expect(evaluateTuff("let x = true; return 1 * x;")).toEqual({
+    ok: false,
+    error: {
+      type: "OperandTypeMismatch",
+      position: 25,
+      expected: "number",
+      actual: "boolean",
+    },
+  });
+});
 test("identifier declared in a block is not visible after it", () => {
   expect(evaluateTuff("{ let x = 0; } return x;")).toEqual({
     ok: false,
