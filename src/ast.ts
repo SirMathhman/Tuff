@@ -1,7 +1,9 @@
+import type { TuffValue } from "./values.ts";
+
 /** A literal expression node (number or boolean). */
 export interface LiteralNode {
   kind: "Literal";
-  value: number;
+  value: TuffValue;
 }
 
 /** An identifier expression node. */

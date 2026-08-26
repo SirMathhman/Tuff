@@ -1,6 +1,8 @@
+import type { TuffValue } from "./values.ts";
+
 /** A variable binding in a scope. */
 export interface Binding {
-  value: number;
+  value: TuffValue;
   mut: boolean;
 }
 

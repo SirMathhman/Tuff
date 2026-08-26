@@ -1,6 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import type { Pos, TuffExpr } from "./ast.ts";
+import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
 export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less";
@@ -57,7 +58,9 @@ export function parseOperand(
   if (!token) return { kind: "InvalidExpression", expression: "", line };
   if (token.kind === "Number" || token.kind === "Bool") {
     pos.i++;
-    return { kind: "Literal", value: token.value };
+    const value =
+      token.kind === "Number" ? num(token.value) : bool(token.value !== 0);
+    return { kind: "Literal", value };
   }
   if (token.kind === "Ref") {
     pos.i++;

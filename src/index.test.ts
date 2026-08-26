@@ -223,6 +223,13 @@ test('evaluateTuff("let x = 1; let y = 2; return x < y;") => 1', () => {
   });
 });
 
+test('evaluateTuff("return true == 1;") => 0', () => {
+  expect(evaluateTuff("return true == 1;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
 test('evaluateTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;") => 2', () => {
   expect(
     evaluateTuff(

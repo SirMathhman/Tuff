@@ -1,7 +1,20 @@
 import type { TuffError, TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
 import type { TuffExpr, TuffStatement } from "./ast.ts";
-import { findBinding, type Binding, type Environment } from "./scopes.ts";
+import {
+  findBinding,
+  type Binding,
+  type Environment,
+  type RefEntry,
+} from "./scopes.ts";
+import {
+  bool,
+  isValue,
+  num,
+  toResultValue,
+  truthy,
+  type TuffValue,
+} from "./values.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
@@ -54,21 +67,21 @@ function executeStatement(
     }
   }
   if (stmt.kind === "Let") {
-    const value = evalOrError(stmt.value, line, env);
-    if (!value.ok) return value;
+    const value = evalExpr(stmt.value, line, env);
+    if (!isValue(value)) return { ok: false, error: value };
     const scope = env.scopes[env.scopes.length - 1];
-    if (scope) scope.set(stmt.name, { value: value.value, mut: stmt.mut });
+    if (scope) scope.set(stmt.name, { value, mut: stmt.mut });
     return undefined;
   }
   if (stmt.kind === "Return") {
-    const value = evalOrError(stmt.value, line, env);
-    if (!value.ok) return value;
-    return value;
+    const value = evalExpr(stmt.value, line, env);
+    if (!isValue(value)) return { ok: false, error: value };
+    return { ok: true, value: toResultValue(value) };
   }
   if (stmt.kind === "If") {
-    const condition = evalOrError(stmt.condition, line, env);
-    if (!condition.ok) return condition;
-    const branch = condition.value !== 0 ? stmt.then : stmt.else;
+    const condition = evalExpr(stmt.condition, line, env);
+    if (!isValue(condition)) return { ok: false, error: condition };
+    const branch = truthy(condition) ? stmt.then : stmt.else;
     if (!branch) return undefined;
     env.scopes.push(new Map());
     try {
@@ -85,6 +98,24 @@ interface Lvalue {
   binding: Binding;
   name: string;
   mut: boolean;
+}
+
+/**
+ * Look up a reference entry from an evaluated operand value.
+ * @param operand {TuffValue} - The evaluated operand; must be a reference id.
+ * @param line {number} - The 1-based line number.
+ * @param env {Environment} - The evaluation environment.
+ * @returns {RefEntry | TuffError} The reference entry, or a TuffError.
+ */
+function lookupRef(
+  operand: TuffValue,
+  line: number,
+  env: Environment,
+): RefEntry | TuffError {
+  if (operand.kind !== "number") return { kind: "InvalidDeref", line };
+  const entry = env.refs.refs.get(operand.value);
+  if (!entry) return { kind: "InvalidDeref", line };
+  return entry;
 }
 
 /**
@@ -108,9 +139,9 @@ function resolveLvalue(
   }
   if (target.kind === "Deref") {
     const operand = evalExpr(target.operand, line, env);
-    if (typeof operand !== "number") return operand;
-    const entry = env.refs.refs.get(operand);
-    if (!entry) return { kind: "InvalidDeref", line };
+    if (!isValue(operand)) return operand;
+    const entry = lookupRef(operand, line, env);
+    if ("kind" in entry) return entry;
     return { binding: entry.binding, name: entry.name, mut: entry.mut };
   }
   return { kind: "InvalidDeref", line };
@@ -140,44 +171,27 @@ function executeAssignment(
       error: { kind: "ImmutableAssignment", name: lvalue.name, line },
     };
   }
-  const result = evalOrError(value, line, env);
-  if (!result.ok) return result;
-  lvalue.binding.value = result.value;
+  const result = evalExpr(value, line, env);
+  if (!isValue(result)) return { ok: false, error: result };
+  lvalue.binding.value = result;
   return undefined;
-}
-
-/**
- * Evaluate an expression node to a result, wrapping errors.
- * @param node {TuffExpr} - The expression to evaluate.
- * @param line {number} - The 1-based line number.
- * @param env {Environment} - The evaluation environment.
- * @returns {TuffResult} The numeric value, or a TuffErr.
- */
-function evalOrError(
-  node: TuffExpr,
-  line: number,
-  env: Environment,
-): TuffResult {
-  const value = evalExpr(node, line, env);
-  if (typeof value !== "number") return { ok: false, error: value };
-  return { ok: true, value };
 }
 
 /** A binary node kind's evaluation rule. */
 interface BinaryRule {
   /**
    * Decide the result from the left value alone, or null to evaluate the right.
-   * @param left {number} - The evaluated left value.
-   * @returns {number | null} The short-circuit result, or null.
+   * @param left {TuffValue} - The evaluated left value.
+   * @returns {TuffValue | null} The short-circuit result, or null.
    */
-  shortCircuit: (left: number) => number | null;
+  shortCircuit: (left: TuffValue) => TuffValue | null;
   /**
    * Combine both evaluated sides.
-   * @param left {number} - The evaluated left value.
-   * @param right {number} - The evaluated right value.
-   * @returns {number} The combined result.
+   * @param left {TuffValue} - The evaluated left value.
+   * @param right {TuffValue} - The evaluated right value.
+   * @returns {TuffValue} The combined result.
    */
-  combine: (left: number, right: number) => number;
+  combine: (left: TuffValue, right: TuffValue) => TuffValue;
 }
 
 /**
@@ -185,39 +199,40 @@ interface BinaryRule {
  */
 const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   Or: {
-    shortCircuit: (left) => (left !== 0 ? 1 : null),
-    combine: (_left, right) => (right !== 0 ? 1 : 0),
+    shortCircuit: (left) => (truthy(left) ? bool(true) : null),
+    combine: (left, right) => bool(truthy(left) || truthy(right)),
   },
   And: {
-    shortCircuit: (left) => (left === 0 ? 0 : null),
-    combine: (_left, right) => (right !== 0 ? 1 : 0),
+    shortCircuit: (left) => (!truthy(left) ? bool(false) : null),
+    combine: (left, right) => bool(truthy(left) && truthy(right)),
   },
   Add: {
     shortCircuit: () => null,
-    combine: (left, right) => left + right,
+    combine: (left, right) => num(toResultValue(left) + toResultValue(right)),
   },
   Equal: {
     shortCircuit: () => null,
-    combine: (left, right) => (left === right ? 1 : 0),
+    combine: (left, right) =>
+      bool(left.kind === right.kind && left.value === right.value),
   },
   Less: {
     shortCircuit: () => null,
-    combine: (left, right) => (left < right ? 1 : 0),
+    combine: (left, right) => bool(toResultValue(left) < toResultValue(right)),
   },
 };
 
 /**
- * Evaluate a parsed expression to a number, or a structured error.
+ * Evaluate a parsed expression to a runtime value, or a structured error.
  * @param node {TuffExpr} - The expression node.
  * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
- * @returns {number | TuffError} The numeric value, or a TuffError.
+ * @returns {TuffValue | TuffError} The runtime value, or a TuffError.
  */
 function evalExpr(
   node: TuffExpr,
   line: number,
   env: Environment,
-): number | TuffError {
+): TuffValue | TuffError {
   if (node.kind === "Literal") return node.value;
   if (node.kind === "Identifier") {
     const binding = findBinding(env.scopes, node.name);
@@ -241,21 +256,21 @@ function evalExpr(
       name: node.operand.name,
       mut: binding.mut,
     });
-    return id;
+    return num(id);
   }
   if (node.kind === "Deref") {
     const operand = evalExpr(node.operand, line, env);
-    if (typeof operand !== "number") return operand;
-    const entry = env.refs.refs.get(operand);
-    if (!entry) return { kind: "InvalidDeref", line };
+    if (!isValue(operand)) return operand;
+    const entry = lookupRef(operand, line, env);
+    if ("kind" in entry) return entry;
     return entry.binding.value;
   }
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, line, env);
-  if (typeof left !== "number") return left;
+  if (!isValue(left)) return left;
   const shortcut = rule.shortCircuit(left);
   if (shortcut !== null) return shortcut;
   const right = evalExpr(node.right, line, env);
-  if (typeof right !== "number") return right;
+  if (!isValue(right)) return right;
   return rule.combine(left, right);
 }
