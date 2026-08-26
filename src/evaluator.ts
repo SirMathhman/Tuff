@@ -1,5 +1,4 @@
-import type { For, Stmt } from "./parser.ts";
-import type { BinaryExpr, Expr } from "./expr.ts";
+import type { BinaryExpr, BlockExpr, Expr, For, Stmt } from "./ast.ts";
 import { tupleElementsEqual } from "./util.ts";
 
 /**
@@ -98,6 +97,9 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
     assert(binding !== undefined, `Unknown identifier: ${name}`);
     return { kind: "ref", name };
   }
+  if (expr.type === "BlockExpr") {
+    return evalBlock(expr, vars);
+  }
   if (expr.type === "Deref") {
     const ref = evalExpr(expr.operand, vars);
     assert(ref.kind === "ref", `Expected reference, got ${ref.kind}`);
@@ -108,6 +110,20 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
   const binding = vars.get(expr.name);
   assert(binding !== undefined, `Unknown identifier: ${expr.name}`);
   return binding.value;
+}
+
+/**
+ * Evaluate a block expression: run its statements in a nested scope, so
+ * declarations inside the block stay local, and take the value they
+ * return (0 when they return nothing).
+ *
+ * @param expr - The block expression to evaluate.
+ * @param vars - The enclosing variable scope.
+ * @returns The typed value the block produces.
+ */
+function evalBlock(expr: BlockExpr, vars: Map<string, Binding>): Value {
+  const value = execStmts(expr.stmts, new Map(vars));
+  return value ?? { kind: "number", value: 0 };
 }
 
 /**
@@ -184,7 +200,7 @@ function valuesEqual(a: Value, b: Value): boolean {
 }
 
 /**
- * Execute a sequence of statements against a variable scope.
+ * Execute a program against a variable scope.
  *
  * @param stmts - The statements to execute.
  * @param vars - The variable scope, shared with enclosing blocks.
@@ -194,19 +210,34 @@ export function exec(
   stmts: readonly Stmt[],
   vars: Map<string, Binding>,
 ): number {
+  const value = execStmts(stmts, vars);
+  return value === undefined ? 0 : toNumber(value);
+}
+
+/**
+ * Execute a sequence of statements against a variable scope.
+ *
+ * @param stmts - The statements to execute.
+ * @param vars - The variable scope, shared with enclosing blocks.
+ * @returns The returned value, or undefined when nothing was returned.
+ */
+function execStmts(
+  stmts: readonly Stmt[],
+  vars: Map<string, Binding>,
+): Value | undefined {
   for (const stmt of stmts) {
     if (stmt.type === "Block") {
-      exec(stmt.stmts, vars);
+      execStmts(stmt.stmts, vars);
       continue;
     }
     if (stmt.type === "If") {
       const cond = evalExpr(stmt.cond, vars);
-      exec(toNumber(cond) !== 0 ? stmt.then : stmt.else, vars);
+      execStmts(toNumber(cond) !== 0 ? stmt.then : stmt.else, vars);
       continue;
     }
     if (stmt.type === "While") {
       while (toNumber(evalExpr(stmt.cond, vars)) !== 0) {
-        exec(stmt.body, vars);
+        execStmts(stmt.body, vars);
       }
       continue;
     }
@@ -215,7 +246,7 @@ export function exec(
       continue;
     }
     const value = evalExpr(stmt.value, vars);
-    if (stmt.type === "Return") return toNumber(value);
+    if (stmt.type === "Return") return value;
     if (stmt.type === "Assign") {
       const binding = vars.get(stmt.name);
       assert(binding !== undefined, `Unknown identifier: ${stmt.name}`);
@@ -225,7 +256,7 @@ export function exec(
     }
     vars.set(stmt.name, { value, mutable: stmt.mutable });
   }
-  return 0;
+  return undefined;
 }
 
 /**
@@ -244,7 +275,7 @@ function execFor(stmt: For, vars: Map<string, Binding>): void {
       value: { kind: "number", value: i },
       mutable: true,
     });
-    exec(stmt.body, vars);
+    execStmts(stmt.body, vars);
   }
   if (prev === undefined) {
     vars.delete(stmt.name);

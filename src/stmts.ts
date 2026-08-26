@@ -1,80 +1,8 @@
+import type { Expr, Stmt } from "./ast.ts";
 import type { TuffError } from "./errors.ts";
 import { parseError } from "./errors.ts";
 import { next, parseExpr, peek } from "./expr.ts";
-import type { Expr, ParserState } from "./expr.ts";
-
-/**
- * A `let` (optionally `mut`) variable declaration.
- */
-export interface LetDecl {
-  type: "LetDecl";
-  mutable: boolean;
-  name: string;
-  value: Expr;
-}
-
-/**
- * An assignment to a variable.
- */
-export interface Assign {
-  type: "Assign";
-  name: string;
-  value: Expr;
-  pos: number;
-}
-
-/**
- * A return statement.
- */
-export interface Return {
-  type: "Return";
-  value: Expr;
-}
-
-/**
- * A block of statements delimited by braces.
- */
-export interface Block {
-  type: "Block";
-  stmts: Stmt[];
-}
-
-/**
- * An `if` statement with an optional `else` branch.
- */
-export interface If {
-  type: "If";
-  cond: Expr;
-  then: Stmt[];
-  else: Stmt[];
-}
-
-/**
- * A `while` loop: repeats its body while the condition is truthy.
- */
-export interface While {
-  type: "While";
-  cond: Expr;
-  body: Stmt[];
-}
-
-/**
- * A `for` loop over a numeric range: `for (name in start..end) body`.
- * The end is exclusive; the loop variable is a fresh number binding
- * visible only inside the body.
- */
-export interface For {
-  type: "For";
-  name: string;
-  start: Expr;
-  end: Expr;
-  body: Stmt[];
-}
-
-/**
- * A statement in the program.
- */
-export type Stmt = LetDecl | Assign | Return | Block | If | While | For;
+import type { ParserState } from "./expr.ts";
 
 /**
  * A successful statement parse result.

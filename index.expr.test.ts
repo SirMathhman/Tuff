@@ -124,3 +124,43 @@ test("identifier declared in an if branch is not visible after it", () => {
     error: { type: "UnknownIdentifier", name: "x" },
   });
 });
+test("block expression evaluates to the value it returns", () => {
+  expect(evaluateTuff("let x = { let y = 1; y }; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+test("block expression with no return evaluates to 0", () => {
+  expect(evaluateTuff("let x = { let y = 1; }; return x;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+test("block expression is an operand of the enclosing expression", () => {
+  expect(evaluateTuff("let x = { let y = 1; y } + 10; return x;")).toEqual({
+    ok: true,
+    value: 11,
+  });
+});
+test("identifier declared in a block expression is not visible after it", () => {
+  expect(evaluateTuff("let x = { let y = 1; y }; return y;")).toEqual({
+    ok: false,
+    error: { type: "UnknownIdentifier", name: "y" },
+  });
+});
+test("block expression shadows an outer binding only inside itself", () => {
+  expect(evaluateTuff("let y = 5; let x = { let y = 1; y }; return y;")).toEqual(
+    { ok: true, value: 5 },
+  );
+});
+test("block expression returning a tuple returns Err", () => {
+  expect(evaluateTuff("let x = { let y = (1, 2); y }; return x;")).toEqual({
+    ok: false,
+    error: {
+      type: "OperandTypeMismatch",
+      position: 26,
+      expected: "number | boolean",
+      actual: "tuple",
+    },
+  });
+});

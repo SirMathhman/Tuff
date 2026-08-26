@@ -1,96 +1,7 @@
+import type { Expr } from "./ast.ts";
 import type { TuffError } from "./errors.ts";
 import { parseError } from "./errors.ts";
 import type { Token } from "./tokenizer.ts";
-
-/**
- * A numeric literal expression.
- */
-export interface NumberExpr {
-  type: "Number";
-  value: number;
-  pos: number;
-}
-
-/**
- * An identifier reference expression.
- */
-export interface IdentifierExpr {
-  type: "Identifier";
-  name: string;
-  pos: number;
-}
-
-/**
- * A boolean literal expression.
- */
-export interface BooleanExpr {
-  type: "Boolean";
-  value: boolean;
-  pos: number;
-}
-
-/**
- * A binary operator expression.
- */
-export interface BinaryExpr {
-  type: "Binary";
-  op: "||" | "==" | "<" | "+" | "-" | "*";
-  left: Expr;
-  right: Expr;
-  pos: number;
-}
-
-/**
- * A tuple literal expression: a comma-separated list of expressions.
- */
-export interface TupleExpr {
-  type: "Tuple";
-  elements: Expr[];
-  pos: number;
-}
-
-/**
- * A field access expression: reads an element of a tuple by index.
- */
-export interface FieldAccessExpr {
-  type: "FieldAccess";
-  object: Expr;
-  index: number;
-  pos: number;
-}
-
-/**
- * A reference expression: takes the address of its operand variable.
- */
-export interface RefExpr {
-  type: "Ref";
-  operand: Expr;
-  pos: number;
-}
-
-/**
- * A dereference expression: reads the value pointed to by its operand.
- */
-export interface DerefExpr {
-  type: "Deref";
-  operand: Expr;
-  pos: number;
-}
-
-/**
- * An expression: a number or boolean literal, an identifier reference,
- * a binary operator expression, a tuple literal, a field access, a
- * reference, or a dereference.
- */
-export type Expr =
-  | NumberExpr
-  | IdentifierExpr
-  | BooleanExpr
-  | BinaryExpr
-  | TupleExpr
-  | FieldAccessExpr
-  | RefExpr
-  | DerefExpr;
 
 /**
  * A successful expression parse result.
@@ -114,13 +25,17 @@ export interface ParseExprErr {
 export type ParseExprResult = ParseExprOk | ParseExprErr;
 
 /**
- * Mutable parser state: the token list, the cursor, and the source end
- * offset (positions the synthetic `<eof>` token).
+ * Mutable parser state: the token list, the cursor, the source end offset
+ * (positions the synthetic `<eof>` token), and the block-expression parser.
+ *
+ * `parseBlockExpr` is supplied by the statement parser so that expressions
+ * can contain blocks without this module depending on statement parsing.
  */
 export interface ParserState {
   tokens: Token[];
   idx: number;
   end: number;
+  parseBlockExpr: (state: ParserState) => ParseExprResult;
 }
 
 /**
@@ -378,7 +293,8 @@ function parsePostfix(state: ParserState, object: Expr): ParseExprResult {
 }
 
 /**
- * Parse an atom: a number or boolean literal, an identifier, or a tuple.
+ * Parse an atom: a number or boolean literal, an identifier, a tuple, an
+ * array, or a block expression.
  *
  * @param state - The parser state.
  * @returns The expression, or a structured parse error.
@@ -411,6 +327,9 @@ function parseAtom(state: ParserState): ParseExprResult {
   }
   if (t.value === "[") {
     return parseArray(state);
+  }
+  if (t.value === "{") {
+    return state.parseBlockExpr(state);
   }
   return {
     ok: false,

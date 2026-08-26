@@ -1,8 +1,8 @@
+import type { Stmt } from "./ast.ts";
 import type { TuffError } from "./errors.ts";
 import type { ParserState } from "./expr.ts";
 import { tokenize } from "./tokenizer.ts";
-import { parseStmtList } from "./stmts-control.ts";
-import type { Stmt } from "./stmts.ts";
+import { parseBlockExpr, parseStmtList } from "./stmts-control.ts";
 export type {
   Assign,
   Block,
@@ -12,7 +12,7 @@ export type {
   Return,
   Stmt,
   While,
-} from "./stmts.ts";
+} from "./ast.ts";
 
 /**
  * A parsed program: an ordered list of statements.
@@ -63,5 +63,10 @@ function parseProgram(state: ParserState): ParseResult {
 export function parse(input: string): ParseResult {
   const tok = tokenize(input);
   if (!tok.ok) return tok;
-  return parseProgram({ tokens: tok.tokens, idx: 0, end: input.length });
+  return parseProgram({
+    tokens: tok.tokens,
+    idx: 0,
+    end: input.length,
+    parseBlockExpr,
+  });
 }

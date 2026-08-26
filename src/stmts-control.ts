@@ -1,8 +1,8 @@
+import type { Block, Expr, Stmt } from "./ast.ts";
 import type { TuffError } from "./errors.ts";
 import { parseError } from "./errors.ts";
 import { atEnd, next, parseExpr, peek } from "./expr.ts";
-import type { Expr, ParseExprResult, ParserState } from "./expr.ts";
-import type { Block, Stmt } from "./stmts.ts";
+import type { ParseExprResult, ParserState } from "./expr.ts";
 import type { ParseStmtErr, ParseStmtResult } from "./stmts.ts";
 import { parseAssign, parseLetDecl, parseReturn } from "./stmts.ts";
 
@@ -73,7 +73,9 @@ export function parseStmtList(
 }
 
 /**
- * Consume the separator following a parsed statement.
+ * Consume the separator following a parsed statement. A `;` is optional
+ * after a block-like statement, and after the last statement of a block,
+ * where the closing `}` ends the list.
  *
  * @param state - The parser state.
  * @param inBlock - Whether the list is inside a block.
@@ -94,12 +96,6 @@ function consumeSeparator(
   if (sep.value === "}") {
     if (!inBlock) {
       return { ok: false, error: parseError("Unexpected '}'", sep.pos) };
-    }
-    if (!isBlock) {
-      return {
-        ok: false,
-        error: parseError("Expected ';' after statement", sep.pos),
-      };
     }
     return { ok: true };
   }
@@ -169,6 +165,28 @@ function parseBareExpr(state: ParserState): ParseStmtResult {
   const value = parseExpr(state);
   if (!value.ok) return value;
   return { ok: true, stmt: { type: "Return", value: value.expr } };
+}
+
+/**
+ * Parse a block expression: statements delimited by `{` and `}`, producing
+ * the value the block returns. Wired into the expression parser through
+ * `ParserState.parseBlockExpr`.
+ *
+ * @param state - The parser state, positioned at the opening `{`.
+ * @returns The block expression, or a structured parse error.
+ */
+export function parseBlockExpr(state: ParserState): ParseExprResult {
+  const open = peek(state);
+  const block = parseBlock(state);
+  if (!block.ok) return block;
+  return {
+    ok: true,
+    expr: {
+      type: "BlockExpr",
+      stmts: (block.stmt as Block).stmts,
+      pos: open.pos,
+    },
+  };
 }
 
 /**
