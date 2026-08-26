@@ -29,6 +29,11 @@ export interface TokenizeErr {
 const KEYWORDS = new Set(["let", "mut", "return", "if", "else"]);
 
 /**
+ * Single-character punctuation tokens.
+ */
+const SINGLE_CHAR_PUNCT = new Set(["=", ";", "{", "}", "(", ")", "+", "-", "*"]);
+
+/**
  * A successful scan result: the token and the index after it.
  */
 interface ScanOk {
@@ -119,17 +124,7 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       i += 2;
       continue;
     }
-    if (
-      ch === "=" ||
-      ch === ";" ||
-      ch === "{" ||
-      ch === "}" ||
-      ch === "(" ||
-      ch === ")" ||
-      ch === "+" ||
-      ch === "-" ||
-      ch === "*"
-    ) {
+    if (SINGLE_CHAR_PUNCT.has(ch)) {
       tokens.push({ kind: "punct", value: ch, pos: i });
       i++;
       continue;
