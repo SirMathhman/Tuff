@@ -33,19 +33,6 @@ interface Value {
 }
 
 /**
- * A successful expression evaluation result.
- */
-interface EvalOk {
-  ok: true;
-  value: Value;
-}
-
-/**
- * The result of evaluating an expression: a typed value or a structured error.
- */
-type EvalResult = EvalOk | Err;
-
-/**
  * A variable binding: its value and whether it is mutable.
  */
 interface Binding {
@@ -54,43 +41,46 @@ interface Binding {
 }
 
 /**
+ * Assert a condition that the static type checker has already guaranteed.
+ * Fails loudly if the invariant is ever violated.
+ *
+ * @param cond - The condition that must hold.
+ * @param message - Message describing the violated invariant.
+ */
+function assert(cond: unknown, message: string): asserts cond {
+  if (!cond) throw new Error(message);
+}
+
+/**
  * Evaluate an expression node against the current variable scope.
  *
  * @param expr - The expression to evaluate.
  * @param vars - The current variable scope.
- * @returns The typed value, or a structured error.
+ * @returns The typed value.
  */
-function evalExpr(expr: Expr, vars: Map<string, Binding>): EvalResult {
+function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
   if (expr.type === "Number") {
-    return { ok: true, value: { value: expr.value, kind: "number" } };
+    return { value: expr.value, kind: "number" };
   }
   if (expr.type === "Boolean") {
-    return { ok: true, value: { value: expr.value ? 1 : 0, kind: "boolean" } };
+    return { value: expr.value ? 1 : 0, kind: "boolean" };
   }
   if (expr.type === "Binary") {
     const left = evalExpr(expr.left, vars);
-    if (!left.ok) return left;
-    if (expr.op === "||" && left.value.value !== 0) {
-      return { ok: true, value: { value: 1, kind: "boolean" } };
+    if (expr.op === "||" && left.value !== 0) {
+      return { value: 1, kind: "boolean" };
     }
     const right = evalExpr(expr.right, vars);
-    if (!right.ok) return right;
     if (expr.op === "==") {
       const equal =
-        left.value.kind === right.value.kind &&
-        left.value.value === right.value.value
-          ? 1
-          : 0;
-      return { ok: true, value: { value: equal, kind: "boolean" } };
+        left.kind === right.kind && left.value === right.value ? 1 : 0;
+      return { value: equal, kind: "boolean" };
     }
-    return {
-      ok: true,
-      value: { value: right.value.value !== 0 ? 1 : 0, kind: "boolean" },
-    };
+    return { value: right.value !== 0 ? 1 : 0, kind: "boolean" };
   }
   const binding = vars.get(expr.name);
-  if (binding !== undefined) return { ok: true, value: binding.value };
-  return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };
+  assert(binding !== undefined, `Unknown identifier: ${expr.name}`);
+  return binding.value;
 }
 
 /**
@@ -204,50 +194,31 @@ function checkAssign(
  *
  * @param stmts - The statements to execute.
  * @param vars - The variable scope, shared with enclosing blocks.
- * @returns The return value (or 0 if none), or a structured error.
+ * @returns The return value (or 0 if none).
  */
-function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): Result {
+function exec(stmts: readonly Stmt[], vars: Map<string, Binding>): number {
   for (const stmt of stmts) {
     if (stmt.type === "Block") {
-      const r = exec(stmt.stmts, vars);
-      if (!r.ok) return r;
+      exec(stmt.stmts, vars);
       continue;
     }
     if (stmt.type === "If") {
       const cond = evalExpr(stmt.cond, vars);
-      if (!cond.ok) return cond;
-      const branch = cond.value.value !== 0 ? stmt.then : stmt.else;
-      const r = exec(branch, vars);
-      if (!r.ok) return r;
+      exec(cond.value !== 0 ? stmt.then : stmt.else, vars);
       continue;
     }
     const value = evalExpr(stmt.value, vars);
-    if (!value.ok) return value;
-    if (stmt.type === "Return") return { ok: true, value: value.value.value };
+    if (stmt.type === "Return") return value.value;
     if (stmt.type === "Assign") {
       const binding = vars.get(stmt.name);
-      if (binding === undefined) {
-        return {
-          ok: false,
-          error: { type: "UnknownIdentifier", name: stmt.name },
-        };
-      }
-      if (!binding.mutable) {
-        return {
-          ok: false,
-          error: {
-            type: "ImmutableAssignment",
-            name: stmt.name,
-            position: stmt.pos,
-          },
-        };
-      }
-      binding.value = value.value;
+      assert(binding !== undefined, `Unknown identifier: ${stmt.name}`);
+      assert(binding.mutable, `Immutable assignment: ${stmt.name}`);
+      binding.value = value;
       continue;
     }
-    vars.set(stmt.name, { value: value.value, mutable: stmt.mutable });
+    vars.set(stmt.name, { value, mutable: stmt.mutable });
   }
-  return { ok: true, value: 0 };
+  return 0;
 }
 
 /**
@@ -261,7 +232,7 @@ export function evaluateTuff(input: string): Result {
   if (!parsed.ok) return parsed;
   const err = typeCheck(parsed.program.stmts, new Map());
   if (!err.ok) return err;
-  return exec(parsed.program.stmts, new Map());
+  return { ok: true, value: exec(parsed.program.stmts, new Map()) };
 }
 
 /**
