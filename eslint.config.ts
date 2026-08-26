@@ -8,7 +8,7 @@ export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
     plugins: { js, jsdoc },
-    extends: ["js/recommended"],
+    extends: ["js/recommended", "jsdoc/flat/recommended"],
     languageOptions: { globals: globals.node },
     rules: {
       "no-new-func": "error",
@@ -30,6 +30,25 @@ export default defineConfig([
         },
       ],
       "jsdoc/check-syntax": "error",
+      "jsdoc/require-jsdoc": [
+        "error",
+        {
+          require: {
+            FunctionDeclaration: true,
+            MethodDefinition: true,
+            ClassExpression: true,
+            ArrowFunctionExpression: false,
+            FunctionExpression: false,
+          },
+        },
+      ],
+      "jsdoc/require-param": "error",
+      "jsdoc/require-param-description": "error",
+      "jsdoc/require-returns": "error",
+      "jsdoc/require-returns-description": "error",
+      "jsdoc/check-param-names": "error",
+      "jsdoc/check-alignment": "error",
+      "jsdoc/valid-types": "error",
       "no-restricted-syntax": [
         "error",
         {
