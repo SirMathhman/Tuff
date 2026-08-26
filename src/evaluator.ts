@@ -274,15 +274,25 @@ function exprKind(expr: Expr, types: Map<string, TypeInfo>): ExprKind | Err {
   const right = exprKind(expr.right, types);
   if (!right.ok) return right;
   if (expr.op === "+") {
-    if (left.kind !== "number" || right.kind !== "number") {
+    if (left.kind !== "number") {
       return {
         ok: false,
         error: {
-          type: "TypeMismatch",
-          name: "",
-          position: expr.pos,
+          type: "OperandTypeMismatch",
+          position: expr.left.pos,
           expected: "number",
-          actual: left.kind !== "number" ? left.kind : right.kind,
+          actual: left.kind,
+        },
+      };
+    }
+    if (right.kind !== "number") {
+      return {
+        ok: false,
+        error: {
+          type: "OperandTypeMismatch",
+          position: expr.right.pos,
+          expected: "number",
+          actual: right.kind,
         },
       };
     }

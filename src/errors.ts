@@ -36,13 +36,24 @@ export interface TypeMismatchError {
 }
 
 /**
+ * An error for a binary operator whose operand has the wrong kind.
+ */
+export interface OperandTypeMismatchError {
+  type: "OperandTypeMismatch";
+  position: number;
+  expected: "number" | "boolean";
+  actual: "number" | "boolean";
+}
+
+/**
  * A structured error produced by the evaluator.
  */
 export type TuffError =
   | UnknownIdentifierError
   | ImmutableAssignmentError
   | ParseError
-  | TypeMismatchError;
+  | TypeMismatchError
+  | OperandTypeMismatchError;
 
 /**
  * Build a structured parse error.

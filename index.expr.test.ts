@@ -37,6 +37,17 @@ test("addition of numbers", () => {
     value: 3,
   });
 });
+test("addition with a boolean operand returns Err", () => {
+  expect(evaluateTuff("let x = true; return 1 + x;")).toEqual({
+    ok: false,
+    error: {
+      type: "OperandTypeMismatch",
+      position: 25,
+      expected: "number",
+      actual: "boolean",
+    },
+  });
+});
 test("identifier declared in a block is not visible after it", () => {
   expect(evaluateTuff("{ let x = 0; } return x;")).toEqual({
     ok: false,
