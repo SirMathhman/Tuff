@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { evaluateTuff, type TuffResult } from "./index.ts";
 
+/**
+ * Assert that a result is an UnidentifiedIdentifier error.
+ * @param result - The result to assert on.
+ * @param name - The expected identifier name.
+ * @param line - The expected line number.
+ */
 function expectUnidentifiedIdentifier(
   result: TuffResult,
   name: string,
@@ -120,4 +126,12 @@ test('evaluateTuff("let mut x = 0; { { x = 1; } } return x;") => 1', () => {
 
 test('evaluateTuff("{ missing = 1; }") => Err', () => {
   expectUnidentifiedIdentifier(evaluateTuff("{ missing = 1; }"), "missing", 1);
+});
+
+test('evaluateTuff("{ let x = 0; } return x;") => Err', () => {
+  expectUnidentifiedIdentifier(
+    evaluateTuff("{ let x = 0; } return x;"),
+    "x",
+    2,
+  );
 });

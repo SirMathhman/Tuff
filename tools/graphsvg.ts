@@ -98,14 +98,30 @@ const MARGIN = 8;
 // can write them out as a debugging artifact.
 const sources: string[] = [];
 
+/**
+ * Escape a string for use inside a dot quoted string.
+ * @param s - The string to escape.
+ * @returns The escaped string.
+ */
 function esc(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+/**
+ * Escape a string for use inside XML text.
+ * @param s - The string to escape.
+ * @returns The escaped string.
+ */
 function escXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * Run the dot layout engine on a source string.
+ * @param source - The dot source to lay out.
+ * @param format - The output format.
+ * @returns The rendered output.
+ */
 function runDot(source: string, format: "svg" | "json"): string {
   sources.push(source);
   const result = spawnSync("dot", [`-T${format}`], {
@@ -122,6 +138,11 @@ function runDot(source: string, format: "svg" | "json"): string {
 // Pull the drawing out of a standalone Graphviz SVG so it can be nested inside
 // a larger one: drop the page background, drop the ids that would collide with
 // the other fragments, and keep the transform that puts it in a top-left box.
+/**
+ * Extract the drawing from a standalone Graphviz SVG.
+ * @param svg - The SVG document to extract from.
+ * @returns The extracted drawing.
+ */
 function svgFragment(svg: string): Drawing {
   const viewBox = /viewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"/.exec(svg);
   const open = /<g id="graph0"[^>]*transform="([^"]*)"[^>]*>/.exec(svg);
@@ -140,6 +161,11 @@ function svgFragment(svg: string): Drawing {
 // An edge lies on a cycle exactly when its head can find its way back to its
 // tail -- a self-call included. One box is one file's functions or one
 // directory's children, small enough that a walk per edge costs nothing.
+/**
+ * Find the edges that lie on a cycle.
+ * @param edges - The edges to inspect.
+ * @returns The set of cyclic edge keys.
+ */
 function cyclicEdges(edges: [string, string][]): Set<string> {
   const out = new Map<string, string[]>();
   for (const [from, to] of edges) {
@@ -165,10 +191,21 @@ function cyclicEdges(edges: [string, string][]): Set<string> {
   return cyclic;
 }
 
+/**
+ * Build a canonical key for an edge.
+ * @param from - The source box id.
+ * @param to - The target box id.
+ * @returns The edge key.
+ */
 function edgeKey(from: string, to: string): string {
   return JSON.stringify([from, to]);
 }
 
+/**
+ * Render a leaf box (a single file's functions) to a drawing.
+ * @param box - The leaf box to render.
+ * @returns The rendered drawing.
+ */
 function renderLeaf(box: LeafBox): Drawing {
   // Function names, not the qualified ids, keep the dot source readable and
   // free of the backslashes a Windows path drags in.
@@ -202,11 +239,23 @@ function renderLeaf(box: LeafBox): Drawing {
   return svgFragment(runDot(lines.join("\n"), "svg"));
 }
 
+/**
+ * Find the points for a draw operation.
+ * @param ops - The draw operations to search.
+ * @param op - The operation name to find.
+ * @returns The points, or an empty array.
+ */
 function pointsOf(ops: DrawOp[] | undefined, op: string): [number, number][] {
   return ops?.find((entry) => entry.op === op)?.points ?? [];
 }
 
 // A Graphviz spline is a start point followed by cubic Bezier triples.
+/**
+ * Build an SVG path data string from spline points.
+ * @param points - The spline points.
+ * @param flipY - The y-axis flip function.
+ * @returns The path data string.
+ */
 function pathData(
   points: [number, number][],
   flipY: (y: number) => number,
@@ -219,6 +268,13 @@ function pathData(
   return d;
 }
 
+/**
+ * Build the dot source for a group box.
+ * @param box - The group box to render.
+ * @param sizes - The child drawings' sizes.
+ * @param names - The child box names.
+ * @returns The dot source.
+ */
 function groupDot(
   box: GroupBox,
   sizes: Map<string, Drawing>,
@@ -244,6 +300,13 @@ function groupDot(
 
 // dot returns the edges in its own order, so which logical edge a drawing
 // belongs to has to come from its endpoints rather than its position.
+/**
+ * Draw the edges from a dot JSON layout.
+ * @param json - The dot JSON layout.
+ * @param flipY - The y-axis flip function.
+ * @param colorOf - The function that colors an edge.
+ * @returns The SVG parts for the edges.
+ */
 function drawEdges(
   json: DotJson,
   flipY: (y: number) => number,
@@ -269,6 +332,11 @@ function drawEdges(
   return parts;
 }
 
+/**
+ * Render a group box's content (children and edges) to a drawing.
+ * @param box - The group box to render.
+ * @returns The rendered drawing.
+ */
 function renderGroupContent(box: GroupBox): Drawing {
   const sizes = new Map(box.children.map((c) => [c.id, renderBox(c)] as const));
   // Children are addressed by plain names so an id can be any shape of path.
@@ -300,6 +368,12 @@ function renderGroupContent(box: GroupBox): Drawing {
 }
 
 // Wrap a box's contents in its own labeled, rounded border.
+/**
+ * Wrap a box's contents in its own labeled, rounded border.
+ * @param box - The box to decorate.
+ * @param inner - The inner drawing.
+ * @returns The decorated drawing.
+ */
 function decorate(box: Box, inner: Drawing): Drawing {
   const style = box.kind === "leaf" ? LEAF_STYLE : GROUP_STYLE;
   const labelWidth = box.label.length * style.fontSize * 0.62 + 2 * PAD.side;
@@ -318,6 +392,11 @@ function decorate(box: Box, inner: Drawing): Drawing {
   return { width, height, body };
 }
 
+/**
+ * Render a box (leaf or group) to a drawing.
+ * @param box - The box to render.
+ * @returns The rendered drawing.
+ */
 function renderBox(box: Box): Drawing {
   const inner = box.kind === "leaf" ? renderLeaf(box) : renderGroupContent(box);
   return decorate(box, inner);
@@ -332,6 +411,8 @@ export interface GraphResult {
 /**
  * Render a nested box graph to an SVG document. The returned dot sources are
  * every graph that was laid out along the way, outermost last.
+ * @param root - The root group box to render.
+ * @returns The SVG document and the dot sources used.
  */
 export function renderGraph(root: GroupBox): GraphResult {
   sources.length = 0;

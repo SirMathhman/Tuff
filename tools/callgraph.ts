@@ -12,6 +12,11 @@ import {
 
 const root = join(import.meta.dir, "..");
 
+/**
+ * Collect all non-test TypeScript files under a directory.
+ * @param dir - The directory to scan.
+ * @returns The collected file paths.
+ */
 function collectTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -33,6 +38,12 @@ const defs = new Map<string, Set<string>>();
 // file::name -> set of called names
 const calls = new Map<string, Set<string>>();
 
+/**
+ * Build a unique definition id for a function.
+ * @param file - The file defining the function.
+ * @param name - The function name.
+ * @returns The definition id.
+ */
 function defId(file: string, name: string): string {
   return `${relative(root, file)}::${name}`;
 }
@@ -51,6 +62,10 @@ for (const file of files) {
 
   const functions: FunctionDef[] = [];
 
+  /**
+   * Visit a node, collecting function definitions.
+   * @param node - The node to visit.
+   */
   function visit(node: ts.Node): void {
     if (ts.isFunctionDeclaration(node) && node.name) {
       functions.push({ name: node.name.text, node });
@@ -74,6 +89,10 @@ for (const file of files) {
     const called = calls.get(id) ?? new Set<string>();
     calls.set(id, called);
 
+    /**
+     * Walk a node, collecting called function names.
+     * @param body - The node to walk.
+     */
     function walk(body: ts.Node): void {
       if (ts.isCallExpression(body) && ts.isIdentifier(body.expression)) {
         called.add(body.expression.text);
@@ -136,6 +155,13 @@ const chains = new Map<string, string[]>();
 
 // A directory is drawn as its own box unless it holds a single file and no
 // subdirectories, in which case that file's box stands in for it.
+/**
+ * Build a box for a directory node.
+ * @param node - The directory node.
+ * @param relPath - The relative path of the directory.
+ * @param ancestors - The ancestor box ids.
+ * @returns The box for the directory.
+ */
 function buildDir(node: DirNode, relPath: string, ancestors: string[]): Box {
   if (node.dirs.size === 0 && node.files.length === 1) {
     const file = node.files[0]!;
@@ -182,6 +208,12 @@ for (const [name, child] of [...rootDir.dirs.entries()].sort()) {
 // Intra-file calls stay function-level; cross-file calls are collapsed into a
 // single box -> box edge to avoid a tangle of parallel lines between files.
 const seenEdges = new Set<string>();
+/**
+ * Add a deduplicated edge to a list.
+ * @param edges - The edge list to append to.
+ * @param from - The source box id.
+ * @param to - The target box id.
+ */
 function addEdge(edges: [string, string][], from: string, to: string): void {
   const key = `${from}->${to}`;
   if (seenEdges.has(key)) return;
