@@ -39,6 +39,11 @@ test("if/else executes the matching branch", () => {
     ),
   ).toEqual({ ok: true, value: 2 });
 });
+test("if without else skips the branch when false", () => {
+  expect(evaluateTuff("let mut x = 0; if (false) { x = 1; } return x;")).toEqual(
+    { ok: true, value: 0 },
+  );
+});
 test("assignment to immutable binding returns Err", () => {
   expect(evaluateTuff("let x = 0; x = 1; return x;")).toEqual({
     ok: false,
