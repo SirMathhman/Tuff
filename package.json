@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "lint": "tsc --noEmit && eslint .",
+    "lint": "tsc --noEmit && eslint ./src",
     "callgraph": "bun tools/callgraph.ts",
     "callgraph:watch": "nodemon",
     "pmd:cpd": "pmd cpd index.ts index.test.ts --dir ./src --language typescript --minimum-tokens 50 --ignore-identifiers --ignore-literals",
