@@ -265,6 +265,13 @@ test('evaluateTuff("if (false) { let mut x = 0; x = true; }") => Err', () => {
   });
 });
 
+test('evaluateTuff("if (true) let mut x = 0; x = true;") => Err', () => {
+  expect(evaluateTuff("if (true) let mut x = 0; x = true;")).toEqual({
+    ok: false,
+    error: { kind: "UnidentifiedIdentifier", name: "x", line: 2 },
+  });
+});
+
 test('evaluateTuff("let mut x = 0; if (false) x = 1; return x;") => 0', () => {
   expect(evaluateTuff("let mut x = 0; if (false) x = 1; return x;")).toEqual({
     ok: true,

@@ -73,10 +73,16 @@ function checkStatement(
     return null;
   }
   if (stmt.kind === "If") {
-    const error = checkStatement(stmt.then, line, scopes);
+    scopes.push({});
+    let error = checkStatement(stmt.then, line, scopes);
+    scopes.pop();
     if (error) return error;
-    if (stmt.else) return checkStatement(stmt.else, line, scopes);
-    return null;
+    if (stmt.else) {
+      scopes.push({});
+      error = checkStatement(stmt.else, line, scopes);
+      scopes.pop();
+    }
+    return error;
   }
   if (stmt.kind === "Assign") {
     return checkAssignment(stmt, line, scopes);
