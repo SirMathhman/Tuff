@@ -1,23 +1,33 @@
 import type { TuffError } from "./errors.ts";
 import type { AssignNode, TuffExpr, TuffStatement } from "./ast.ts";
 
-/** A declared binding's type and mutability, tracked by the type checker. */
+/** A declared binding's type, mutability, and reference target. */
 interface DeclaredBinding {
   /** The kind of value the binding holds. */
   kind: "number" | "bool";
   /** Whether the binding was declared with `mut`. */
   mut: boolean;
+  /** The name of the binding this is a reference to, if a `&`/`&mut`. */
+  refTo?: string;
+}
+
+/** A successfully resolved dereference target. */
+interface ResolvedDeref {
+  /** The binding the dereference reads or writes. */
+  binding: DeclaredBinding;
+  /** The name of the referenced binding. */
+  name: string;
 }
 
 /**
- * Statically check a parsed program for assignment errors.
- * Walks every statement, including unreachable branches, tracking the kind
- * and mutability each binding is declared with. Assigning to a non-`mut`
- * binding is an ImmutableAssignment error; assigning a literal of a
- * different kind to a declared binding is a TypeMismatch error.
+ * Statically check a parsed program for semantic errors.
+ * Walks every statement, including unreachable branches, tracking the kind,
+ * mutability, and reference target each binding is declared with. Catches
+ * undeclared identifiers, invalid references and dereferences, assignments to
+ * non-`mut` bindings, and kind mismatches on assignment.
  * @param statements - The parsed program statements.
  * @param baseLine - The 1-based line of the first statement.
- * @returns A TypeMismatch error if a mismatch is found, else null.
+ * @returns A TuffError if a semantic error is found, else null.
  */
 export function typecheckProgram(
   statements: TuffStatement[],
@@ -71,11 +81,19 @@ function checkStatement(
   if (stmt.kind === "Let") {
     const error = findUndeclared(stmt.value, line, scopes);
     if (error) return error;
-    const kind = literalKind(stmt.value);
-    if (kind) declareBinding(stmt.name, kind, stmt.mut, scopes);
+    const kind = inferKind(stmt.value, scopes);
+    if (kind) {
+      const refTo =
+        stmt.value.kind === "Ref" && stmt.value.operand.kind === "Identifier"
+          ? stmt.value.operand.name
+          : undefined;
+      declareBinding(stmt.name, kind, stmt.mut, refTo, scopes);
+    }
     return null;
   }
   if (stmt.kind === "If") {
+    const condError = findUndeclared(stmt.condition, line, scopes);
+    if (condError) return condError;
     scopes.push({});
     let error = checkStatement(stmt.then, line, scopes);
     scopes.pop();
@@ -90,46 +108,85 @@ function checkStatement(
   if (stmt.kind === "Assign") {
     return checkAssignment(stmt, line, scopes);
   }
+  if (stmt.kind === "Return") {
+    return findUndeclared(stmt.value, line, scopes);
+  }
   return null;
 }
 
 /**
  * Check an assignment statement against the target binding's declaration.
+ * Handles both identifier targets and dereference targets.
  * @param stmt - The assignment statement to check.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
- * @returns An UnidentifiedIdentifier, ImmutableAssignment, or TypeMismatch
- * error if one is found, else null.
+ * @returns A TuffError if a semantic error is found, else null.
  */
 function checkAssignment(
   stmt: AssignNode,
   line: number,
   scopes: Record<string, DeclaredBinding>[],
 ): TuffError | null {
-  if (stmt.target.kind !== "Identifier") return null;
-  const declared = findDeclared(scopes, stmt.target.name);
-  if (!declared) {
-    return { kind: "UnidentifiedIdentifier", name: stmt.target.name, line };
+  let name: string;
+  let declared: DeclaredBinding;
+  if (stmt.target.kind === "Identifier") {
+    name = stmt.target.name;
+    const found = findDeclared(scopes, name);
+    if (!found) {
+      return { kind: "UnidentifiedIdentifier", name, line };
+    }
+    declared = found;
+  } else if (stmt.target.kind === "Deref") {
+    const resolved = resolveDeref(stmt.target.operand, line, scopes);
+    if ("kind" in resolved) return resolved;
+    name = resolved.name;
+    declared = resolved.binding;
+  } else {
+    return { kind: "InvalidDeref", line };
   }
   if (!declared.mut) {
-    return { kind: "ImmutableAssignment", name: stmt.target.name, line };
+    return { kind: "ImmutableAssignment", name, line };
   }
-  const kind = literalKind(stmt.value);
-  if (!kind) return null;
-  if (kind !== declared.kind) {
-    return { kind: "TypeMismatch", name: stmt.target.name, line };
+  const valueError = findUndeclared(stmt.value, line, scopes);
+  if (valueError) return valueError;
+  const kind = inferKind(stmt.value, scopes);
+  if (kind && kind !== declared.kind) {
+    return { kind: "TypeMismatch", name, line };
   }
   return null;
 }
 
 /**
- * Get the value kind of a literal expression, or null if not a literal.
+ * Infer the value kind of an expression, or null if not statically inferable.
  * @param expr - The expression to inspect.
- * @returns "number" or "bool" for literals, else null.
+ * @param scopes - The stack of declared bindings.
+ * @returns "number" or "bool" if inferable, else null.
  */
-function literalKind(expr: TuffExpr): "number" | "bool" | null {
-  if (expr.kind !== "Literal") return null;
-  return expr.value.kind === "bool" ? "bool" : "number";
+function inferKind(
+  expr: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+): "number" | "bool" | null {
+  if (expr.kind === "Literal") {
+    return expr.value.kind === "bool" ? "bool" : "number";
+  }
+  if (expr.kind === "Identifier") {
+    return findDeclared(scopes, expr.name)?.kind ?? null;
+  }
+  if (expr.kind === "Add") return "number";
+  if (
+    expr.kind === "Equal" ||
+    expr.kind === "Less" ||
+    expr.kind === "And" ||
+    expr.kind === "Or"
+  ) {
+    return "bool";
+  }
+  if (expr.kind === "Ref") return "number";
+  if (expr.kind === "Deref") {
+    const resolved = resolveDeref(expr.operand, 0, scopes);
+    return "kind" in resolved ? null : resolved.binding.kind;
+  }
+  return null;
 }
 
 /**
@@ -177,9 +234,40 @@ function findUndeclared(
     return null;
   }
   if (expr.kind === "Deref") {
-    return findUndeclared(expr.operand, line, scopes);
+    const resolved = resolveDeref(expr.operand, line, scopes);
+    if ("kind" in resolved) return resolved;
+    return null;
   }
   return null;
+}
+
+/**
+ * Resolve a dereference operand to the binding it references.
+ * @param operand - The operand expression of the dereference.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns The referenced binding and name, or a TuffError.
+ */
+function resolveDeref(
+  operand: TuffExpr,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): ResolvedDeref | TuffError {
+  if (operand.kind !== "Identifier") {
+    return { kind: "InvalidDeref", line };
+  }
+  const declared = findDeclared(scopes, operand.name);
+  if (!declared) {
+    return { kind: "UnidentifiedIdentifier", name: operand.name, line };
+  }
+  if (!declared.refTo) {
+    return { kind: "InvalidDeref", line };
+  }
+  const referenced = findDeclared(scopes, declared.refTo);
+  if (!referenced) {
+    return { kind: "UnidentifiedIdentifier", name: declared.refTo, line };
+  }
+  return { binding: referenced, name: declared.refTo };
 }
 
 /**
@@ -187,16 +275,18 @@ function findUndeclared(
  * @param name - The binding name.
  * @param kind - The value kind.
  * @param mut - Whether the binding is mutable.
+ * @param refTo - The name of the binding this is a reference to, if any.
  * @param scopes - The stack of declared bindings.
  */
 function declareBinding(
   name: string,
   kind: "number" | "bool",
   mut: boolean,
+  refTo: string | undefined,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind, mut };
+  if (scope) scope[name] = { kind, mut, refTo };
 }
 
 /**

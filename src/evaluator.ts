@@ -1,4 +1,5 @@
-import type { TuffError, TuffResult } from "./errors.ts";
+import assert from "node:assert";
+import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
 import type { TuffExpr, TuffStatement } from "./ast.ts";
 import {
@@ -9,7 +10,6 @@ import {
 } from "./scopes.ts";
 import {
   bool,
-  isValue,
   num,
   toResultValue,
   truthy,
@@ -67,20 +67,17 @@ function executeStatement(
     }
   }
   if (stmt.kind === "Let") {
-    const value = evalExpr(stmt.value, line, env);
-    if (!isValue(value)) return { ok: false, error: value };
+    const value = evalExpr(stmt.value, env);
     const scope = env.scopes[env.scopes.length - 1];
     if (scope) scope.set(stmt.name, { value, mut: stmt.mut });
     return undefined;
   }
   if (stmt.kind === "Return") {
-    const value = evalExpr(stmt.value, line, env);
-    if (!isValue(value)) return { ok: false, error: value };
+    const value = evalExpr(stmt.value, env);
     return { ok: true, value: toResultValue(value) };
   }
   if (stmt.kind === "If") {
-    const condition = evalExpr(stmt.condition, line, env);
-    if (!isValue(condition)) return { ok: false, error: condition };
+    const condition = evalExpr(stmt.condition, env);
     const branch = truthy(condition) ? stmt.then : stmt.else;
     if (!branch) return undefined;
     env.scopes.push(new Map());
@@ -90,7 +87,8 @@ function executeStatement(
       env.scopes.pop();
     }
   }
-  return executeAssignment(stmt.target, stmt.value, line, env);
+  executeAssignment(stmt.target, stmt.value, env);
+  return undefined;
 }
 
 /** A resolved assignment target: the binding to write and its mutability. */
@@ -103,84 +101,56 @@ interface Lvalue {
 /**
  * Look up a reference entry from an evaluated operand value.
  * @param operand {TuffValue} - The evaluated operand; must be a reference id.
- * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
- * @returns {RefEntry | TuffError} The reference entry, or a TuffError.
+ * @returns {RefEntry} The reference entry.
  */
-function lookupRef(
-  operand: TuffValue,
-  line: number,
-  env: Environment,
-): RefEntry | TuffError {
-  if (operand.kind !== "number") return { kind: "InvalidDeref", line };
+function lookupRef(operand: TuffValue, env: Environment): RefEntry {
+  assert(operand.kind === "number", "deref operand must be a reference id");
   const entry = env.refs.refs.get(operand.value);
-  if (!entry) return { kind: "InvalidDeref", line };
+  assert(entry, "reference id must be registered");
   return entry;
 }
 
 /**
  * Resolve an assignment target expression to the binding it writes to.
  * @param target {TuffExpr} - The target: an identifier or a dereference.
- * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
- * @returns {Lvalue | TuffError} The resolved target, or a TuffError.
+ * @returns {Lvalue} The resolved target.
  */
-function resolveLvalue(
-  target: TuffExpr,
-  line: number,
-  env: Environment,
-): Lvalue | TuffError {
+function resolveLvalue(target: TuffExpr, env: Environment): Lvalue {
   if (target.kind === "Identifier") {
     const binding = findBinding(env.scopes, target.name);
-    if (!binding) {
-      return { kind: "UnidentifiedIdentifier", name: target.name, line };
-    }
+    assert(binding, `unidentified identifier ${target.name}`);
     return { binding, name: target.name, mut: binding.mut };
   }
-  if (target.kind === "Deref") {
-    const operand = evalExpr(target.operand, line, env);
-    if (!isValue(operand)) return operand;
-    const entry = lookupRef(operand, line, env);
-    if ("kind" in entry) return entry;
-    return { binding: entry.binding, name: entry.name, mut: entry.mut };
-  }
-  return { kind: "InvalidDeref", line };
+  assert(
+    target.kind === "Deref",
+    "assignment target must be an identifier or dereference",
+  );
+  const operand = evalExpr(target.operand, env);
+  const entry = lookupRef(operand, env);
+  return { binding: entry.binding, name: entry.name, mut: entry.mut };
 }
 
 /**
  * Execute an assignment statement.
  * @param target {TuffExpr} - The target: an identifier or a dereference.
  * @param value {TuffExpr} - The expression to assign.
- * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
- * @returns {TuffResult | undefined} A result if the statement terminates, else undefined.
  */
 function executeAssignment(
   target: TuffExpr,
   value: TuffExpr,
-  line: number,
   env: Environment,
-): TuffResult | undefined {
-  const lvalue = resolveLvalue(target, line, env);
-  if ("kind" in lvalue) {
-    return { ok: false, error: lvalue };
-  }
-  if (!lvalue.mut) {
-    return {
-      ok: false,
-      error: { kind: "ImmutableAssignment", name: lvalue.name, line },
-    };
-  }
-  const result = evalExpr(value, line, env);
-  if (!isValue(result)) return { ok: false, error: result };
-  if (result.kind !== lvalue.binding.value.kind) {
-    return {
-      ok: false,
-      error: { kind: "TypeMismatch", name: lvalue.name, line },
-    };
-  }
+): void {
+  const lvalue = resolveLvalue(target, env);
+  assert(lvalue.mut, `immutable assignment to ${lvalue.name}`);
+  const result = evalExpr(value, env);
+  assert(
+    result.kind === lvalue.binding.value.kind,
+    `type mismatch assigning to ${lvalue.name}`,
+  );
   lvalue.binding.value = result;
-  return undefined;
 }
 
 /** A binary node kind's evaluation rule. */
@@ -228,33 +198,29 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
 };
 
 /**
- * Evaluate a parsed expression to a runtime value, or a structured error.
+ * Evaluate a parsed expression to a runtime value.
  * @param node {TuffExpr} - The expression node.
- * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
- * @returns {TuffValue | TuffError} The runtime value, or a TuffError.
+ * @returns {TuffValue} The runtime value.
  */
-function evalExpr(
-  node: TuffExpr,
-  line: number,
-  env: Environment,
-): TuffValue | TuffError {
+function evalExpr(node: TuffExpr, env: Environment): TuffValue {
   if (node.kind === "Literal") return node.value;
   if (node.kind === "Identifier") {
     const binding = findBinding(env.scopes, node.name);
-    if (binding) return binding.value;
-    return { kind: "UnidentifiedIdentifier", name: node.name, line };
+    assert(binding, `unidentified identifier ${node.name}`);
+    return binding.value;
   }
   if (node.kind === "Ref") {
-    if (node.operand.kind !== "Identifier")
-      return { kind: "InvalidDeref", line };
+    assert(
+      node.operand.kind === "Identifier",
+      "reference operand must be an identifier",
+    );
     const binding = findBinding(env.scopes, node.operand.name);
-    if (!binding) {
-      return { kind: "UnidentifiedIdentifier", name: node.operand.name, line };
-    }
-    if (node.mut && !binding.mut) {
-      return { kind: "ImmutableAssignment", name: node.operand.name, line };
-    }
+    assert(binding, `unidentified identifier ${node.operand.name}`);
+    assert(
+      !node.mut || binding.mut,
+      `immutable reference to ${node.operand.name}`,
+    );
     const id = env.refs.next;
     env.refs.next++;
     env.refs.refs.set(id, {
@@ -265,18 +231,14 @@ function evalExpr(
     return num(id);
   }
   if (node.kind === "Deref") {
-    const operand = evalExpr(node.operand, line, env);
-    if (!isValue(operand)) return operand;
-    const entry = lookupRef(operand, line, env);
-    if ("kind" in entry) return entry;
+    const operand = evalExpr(node.operand, env);
+    const entry = lookupRef(operand, env);
     return entry.binding.value;
   }
   const rule = BINARY_RULES[node.kind];
-  const left = evalExpr(node.left, line, env);
-  if (!isValue(left)) return left;
+  const left = evalExpr(node.left, env);
   const shortcut = rule.shortCircuit(left);
   if (shortcut !== null) return shortcut;
-  const right = evalExpr(node.right, line, env);
-  if (!isValue(right)) return right;
+  const right = evalExpr(node.right, env);
   return rule.combine(left, right);
 }
