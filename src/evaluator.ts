@@ -40,6 +40,9 @@ interface Binding {
  */
 function evalExpr(expr: Expr, vars: Map<string, Binding>): Result {
   if (expr.type === "Number") return { ok: true, value: expr.value };
+  if (expr.type === "Boolean") {
+    return { ok: true, value: expr.value ? 1 : 0 };
+  }
   const binding = vars.get(expr.name);
   if (binding !== undefined) return { ok: true, value: binding.value };
   return { ok: false, error: { type: "UnknownIdentifier", name: expr.name } };

@@ -21,9 +21,18 @@ export interface IdentifierExpr {
 }
 
 /**
- * An expression: a number literal or an identifier reference.
+ * A boolean literal expression.
  */
-export type Expr = NumberExpr | IdentifierExpr;
+export interface BooleanExpr {
+  type: "Boolean";
+  value: boolean;
+  pos: number;
+}
+
+/**
+ * An expression: a number or boolean literal, or an identifier reference.
+ */
+export type Expr = NumberExpr | IdentifierExpr | BooleanExpr;
 
 /**
  * A `let` (optionally `mut`) variable declaration.
@@ -386,6 +395,13 @@ function parseExpr(state: ParserState): ParseExprOk | ParseErr {
     return {
       ok: true,
       expr: { type: "Number", value: Number(t.value), pos: t.pos },
+    };
+  }
+  if (t.kind === "boolean") {
+    next(state);
+    return {
+      ok: true,
+      expr: { type: "Boolean", value: t.value === "true", pos: t.pos },
     };
   }
   if (t.kind === "ident") {

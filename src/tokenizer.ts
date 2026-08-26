@@ -4,7 +4,7 @@ import type { TuffError } from "./errors.ts";
  * A lexical token with its source position.
  */
 export interface Token {
-  kind: "number" | "ident" | "keyword" | "punct";
+  kind: "number" | "ident" | "keyword" | "boolean" | "punct";
   value: string;
   pos: number;
 }
@@ -70,11 +70,12 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
       let j = i;
       while (j < input.length && /[A-Za-z0-9_]/.test(input[j] ?? "")) j++;
       const text = input.slice(i, j);
-      tokens.push({
-        kind: KEYWORDS.has(text) ? "keyword" : "ident",
-        value: text,
-        pos: i,
-      });
+      const kind = KEYWORDS.has(text)
+        ? "keyword"
+        : text === "true" || text === "false"
+          ? "boolean"
+          : "ident";
+      tokens.push({ kind, value: text, pos: i });
       i = j;
       continue;
     }
