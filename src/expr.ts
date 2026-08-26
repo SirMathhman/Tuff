@@ -249,51 +249,73 @@ function parsePrimary(state: ParserState): ParseExprResult {
   const first = parseAtom(state);
   if (!first.ok) return first;
   let expr = first.expr;
-  while (!atEnd(state) && (peek(state).value === "." || peek(state).value === "[")) {
-    if (peek(state).value === ".") {
-      const dot = next(state);
-      const idxTok = next(state);
-      if (idxTok?.kind !== "number" || !/^\d+$/.test(idxTok.value)) {
-        return {
-          ok: false,
-          error: parseError(
-            "Expected tuple index after '.'",
-            idxTok?.pos ?? dot.pos,
-          ),
-        };
-      }
-      expr = {
-        type: "FieldAccess",
-        object: expr,
-        index: Number(idxTok.value),
-        pos: dot.pos,
-      };
-      continue;
-    }
-    const open = next(state);
-    const idx = parseExpr(state);
-    if (!idx.ok) return idx;
-    if (idx.expr.type !== "Number" || !Number.isInteger(idx.expr.value)) {
-      return {
-        ok: false,
-        error: parseError("Expected integer index in '[]'", idx.expr.pos),
-      };
-    }
-    const close = next(state);
-    if (close.value !== "]") {
-      return {
-        ok: false,
-        error: parseError("Expected ']' after index", close.pos),
-      };
-    }
-    expr = {
-      type: "FieldAccess",
-      object: expr,
-      index: idx.expr.value,
-      pos: open.pos,
-    };
+  while (
+    !atEnd(state) &&
+    (peek(state).value === "." || peek(state).value === "[")
+  ) {
+    const r = parsePostfix(state, expr);
+    if (!r.ok) return r;
+    expr = r.expr;
   }
   return { ok: true, expr };
+}
+
+/**
+ * Parse one postfix operator (`.index` or `[index]`) applied to an
+ * already-parsed expression.
+ *
+ * @param state - The parser state, positioned at the postfix operator.
+ * @param object - The expression the postfix operator applies to.
+ * @returns The field access expression, or a structured parse error.
+ */
+function parsePostfix(state: ParserState, object: Expr): ParseExprResult {
+  if (peek(state).value === ".") {
+    const dot = next(state);
+    const idxTok = next(state);
+    if (idxTok?.kind !== "number" || !/^\d+$/.test(idxTok.value)) {
+      return {
+        ok: false,
+        error: parseError(
+          "Expected tuple index after '.'",
+          idxTok?.pos ?? dot.pos,
+        ),
+      };
+    }
+    return {
+      ok: true,
+      expr: {
+        type: "FieldAccess",
+        object,
+        index: Number(idxTok.value),
+        pos: dot.pos,
+      },
+    };
+  }
+  const open = next(state);
+  const idx = parseExpr(state);
+  if (!idx.ok) return idx;
+  if (idx.expr.type !== "Number" || !Number.isInteger(idx.expr.value)) {
+    return {
+      ok: false,
+      error: parseError("Expected integer index in '[]'", idx.expr.pos),
+    };
+  }
+  const close = next(state);
+  if (close.value !== "]") {
+    return {
+      ok: false,
+      error: parseError("Expected ']' after index", close.pos),
+    };
+  }
+  return {
+    ok: true,
+    expr: {
+      type: "FieldAccess",
+      object,
+      index: idx.expr.value,
+      pos: open.pos,
+    },
+  };
 }
 
 /**

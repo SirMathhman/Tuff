@@ -71,7 +71,9 @@ test("tuple field access", () => {
 });
 test("array index access", () => {
   expect(
-    evaluateTuff("let array = [1, 2, 3]; return array[0] + array[1] + array[2];"),
+    evaluateTuff(
+      "let array = [1, 2, 3]; return array[0] + array[1] + array[2];",
+    ),
   ).toEqual({ ok: true, value: 6 });
 });
 test("returning a tuple returns Err", () => {
