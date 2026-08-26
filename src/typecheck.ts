@@ -133,12 +133,13 @@ function literalKind(expr: TuffExpr): "number" | "bool" | null {
 }
 
 /**
- * Find an undeclared identifier or an invalid `&mut` in an expression.
+ * Find an undeclared identifier, an invalid reference, or an invalid `&mut`
+ * in an expression.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
- * @returns An UnidentifiedIdentifier or ImmutableAssignment error if one is
- * found, else null.
+ * @returns An UnidentifiedIdentifier, InvalidDeref, or ImmutableAssignment
+ * error if one is found, else null.
  */
 function findUndeclared(
   expr: TuffExpr,
@@ -163,13 +164,15 @@ function findUndeclared(
     return findUndeclared(expr.right, line, scopes);
   }
   if (expr.kind === "Ref") {
-    const operandError = findUndeclared(expr.operand, line, scopes);
-    if (operandError) return operandError;
-    if (expr.mut && expr.operand.kind === "Identifier") {
-      const declared = findDeclared(scopes, expr.operand.name);
-      if (declared && !declared.mut) {
-        return { kind: "ImmutableAssignment", name: expr.operand.name, line };
-      }
+    if (expr.operand.kind !== "Identifier") {
+      return { kind: "InvalidDeref", line };
+    }
+    const declared = findDeclared(scopes, expr.operand.name);
+    if (!declared) {
+      return { kind: "UnidentifiedIdentifier", name: expr.operand.name, line };
+    }
+    if (expr.mut && !declared.mut) {
+      return { kind: "ImmutableAssignment", name: expr.operand.name, line };
     }
     return null;
   }

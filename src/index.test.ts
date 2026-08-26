@@ -294,11 +294,16 @@ test('evaluateTuff("if (false) { let y = x + 1; }") => Err', () => {
 });
 
 test('evaluateTuff("if (false) { let x = 0; let y = &mut x; }") => Err', () => {
-  expect(
-    evaluateTuff("if (false) { let x = 0; let y = &mut x; }"),
-  ).toEqual({
+  expect(evaluateTuff("if (false) { let x = 0; let y = &mut x; }")).toEqual({
     ok: false,
     error: { kind: "ImmutableAssignment", name: "x", line: 2 },
+  });
+});
+
+test('evaluateTuff("if (false) { let x = &(1); }") => Err', () => {
+  expect(evaluateTuff("if (false) { let x = &(1); }")).toEqual({
+    ok: false,
+    error: { kind: "InvalidDeref", line: 1 },
   });
 });
 
