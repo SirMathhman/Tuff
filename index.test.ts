@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateTuff } from "./index.ts";
+import { evaluateTuff, type TuffResult } from "./index.ts";
+
+function expectUnidentifiedIdentifier(
+  result: TuffResult,
+  name: string,
+  line: number,
+) {
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error).toEqual({
+      kind: "UnidentifiedIdentifier",
+      name,
+      line,
+    });
+  }
+}
 
 describe("evaluateTuff", () => {
   test('evaluateTuff("") => 0', () => {
@@ -32,27 +47,19 @@ describe("evaluateTuff", () => {
   });
 
   test('evaluateTuff("return unidentifiedIdentifier;") => Err', () => {
-    const result = evaluateTuff("return unidentifiedIdentifier;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual({
-        kind: "UnidentifiedIdentifier",
-        name: "unidentifiedIdentifier",
-        line: 1,
-      });
-    }
+    expectUnidentifiedIdentifier(
+      evaluateTuff("return unidentifiedIdentifier;"),
+      "unidentifiedIdentifier",
+      1,
+    );
   });
 
   test('evaluateTuff("let x = missing; return x;") => Err', () => {
-    const result = evaluateTuff("let x = missing; return x;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual({
-        kind: "UnidentifiedIdentifier",
-        name: "missing",
-        line: 1,
-      });
-    }
+    expectUnidentifiedIdentifier(
+      evaluateTuff("let x = missing; return x;"),
+      "missing",
+      1,
+    );
   });
 
   test('evaluateTuff("let x = 100;") => 0', () => {
@@ -60,14 +67,10 @@ describe("evaluateTuff", () => {
   });
 
   test('evaluateTuff("let x = unidentifiedIdentifier;") => Err', () => {
-    const result = evaluateTuff("let x = unidentifiedIdentifier;");
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toEqual({
-        kind: "UnidentifiedIdentifier",
-        name: "unidentifiedIdentifier",
-        line: 1,
-      });
-    }
+    expectUnidentifiedIdentifier(
+      evaluateTuff("let x = unidentifiedIdentifier;"),
+      "unidentifiedIdentifier",
+      1,
+    );
   });
 });
