@@ -3,6 +3,7 @@ import { executeStatements } from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
 import { tokenize } from "./tokenizer.ts";
+import { typecheckProgram } from "./typecheck.ts";
 
 export type {
   TuffError,
@@ -57,6 +58,10 @@ export function evaluateTuff(s: string): TuffResult {
   const program = parseProgram(tokens, 1);
   if (!Array.isArray(program)) {
     return { ok: false, error: program };
+  }
+  const typeError = typecheckProgram(program, 1);
+  if (typeError) {
+    return { ok: false, error: typeError };
   }
   const env = createEnvironment();
   const result = executeStatements(program, 1, env);
