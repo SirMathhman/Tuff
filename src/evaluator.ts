@@ -10,23 +10,31 @@ import {
 } from "./scopes.ts";
 import { bool, num, toResultValue, truthy, type TuffValue } from "./values.ts";
 
+/** A control-flow signal: a `break` exited the enclosing loop. */
+interface BreakSignal {
+  kind: "Break";
+}
+
+/** A step result: a final value, or a control-flow signal. */
+type TuffStep = TuffResult | BreakSignal;
+
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
   statements: TuffStatement[],
   baseLine: number,
   env: Environment,
-) => TuffResult | undefined;
+) => TuffStep | undefined;
 
-/** A sentinel result signaling that a `break` exited the enclosing loop. */
-const BREAK: TuffResult = { ok: true, value: 0 };
+/** The break control-flow signal. */
+const BREAK: BreakSignal = { kind: "Break" };
 
 /**
- * Whether a statement result is the break sentinel.
- * @param result {TuffResult | undefined} - The result to test.
- * @returns {boolean} True if the result is the break sentinel.
+ * Whether a step result is the break signal.
+ * @param result {TuffStep | undefined} - The result to test.
+ * @returns {boolean} True if the result is the break signal.
  */
-function isBreak(result: TuffResult | undefined): result is TuffResult {
-  return result === BREAK;
+export function isBreak(result: TuffStep | undefined): result is BreakSignal {
+  return result !== undefined && "kind" in result && result.kind === "Break";
 }
 
 /**
@@ -40,7 +48,7 @@ export function executeStatements(
   statements: TuffStatement[],
   baseLine: number,
   env: Environment,
-): TuffResult | undefined {
+): TuffStep | undefined {
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
@@ -63,7 +71,7 @@ function executeStatement(
   line: number,
   env: Environment,
   executeList: ExecuteList,
-): TuffResult | undefined {
+): TuffStep | undefined {
   if (stmt.kind === "Block") {
     env.scopes.push(new Map());
     try {
@@ -116,7 +124,7 @@ function executeWhile(
   line: number,
   env: Environment,
   executeList: ExecuteList,
-): TuffResult | undefined {
+): TuffStep | undefined {
   while (truthy(evalExpr(stmt.condition, env))) {
     env.scopes.push(new Map());
     try {
