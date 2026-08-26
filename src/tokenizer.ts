@@ -136,15 +136,12 @@ export interface TokenizeError {
 export type TokenizeResult = TuffToken[] | TokenizeError;
 
 /**
- * Read one token starting at an index, skipping leading whitespace.
+ * Read a punctuation or operator token starting at an index.
  * @param text {string} - The expression text.
- * @param i {number} - The index to read from.
- * @returns {ReadToken | TokenizeError | null} The token and the index just past it, a tokenization error, or null if only whitespace remains.
+ * @param j {number} - The index of the first non-whitespace character.
+ * @returns {ReadToken | null} The token and the index just past it, or null if no punctuation matches.
  */
-function readToken(text: string, i: number): ReadToken | TokenizeError | null {
-  let j = i;
-  while (j < text.length && /\s/.test(text[j] ?? "")) j++;
-  if (j >= text.length) return null;
+function readPunct(text: string, j: number): ReadToken | null {
   const ch = text[j] ?? "";
   if (ch === "(")
     return { kind: "token", token: { kind: "LParen" }, next: j + 1 };
@@ -177,6 +174,16 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
     return { kind: "token", token: { kind: "LBrace" }, next: j + 1 };
   if (ch === "}")
     return { kind: "token", token: { kind: "RBrace" }, next: j + 1 };
+  return null;
+}
+
+/**
+ * Read a number, boolean, or identifier token starting at an index.
+ * @param text {string} - The expression text.
+ * @param j {number} - The index of the first non-whitespace character.
+ * @returns {ReadToken | TokenizeError} The token and the index just past it, or a tokenization error.
+ */
+function readWord(text: string, j: number): ReadToken | TokenizeError {
   const rest = text.slice(j);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {
@@ -200,9 +207,22 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
   }
   return {
     kind: "error",
-    character: ch,
+    character: text[j] ?? "",
     line: 1 + (text.slice(0, j).match(/\n/g) ?? []).length,
   };
+}
+
+/**
+ * Read one token starting at an index, skipping leading whitespace.
+ * @param text {string} - The expression text.
+ * @param i {number} - The index to read from.
+ * @returns {ReadToken | TokenizeError | null} The token and the index just past it, a tokenization error, or null if only whitespace remains.
+ */
+function readToken(text: string, i: number): ReadToken | TokenizeError | null {
+  let j = i;
+  while (j < text.length && /\s/.test(text[j] ?? "")) j++;
+  if (j >= text.length) return null;
+  return readPunct(text, j) ?? readWord(text, j);
 }
 
 /**
