@@ -86,6 +86,17 @@ test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; if (x == 2) { continu
   });
 });
 
+test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; if (x == 2) { break; } } return x;") => 2', () => {
+  expect(
+    evaluateTuff(
+      "let mut x = 0; while (x < 4) { x += 1; if (x == 2) { break; } } return x;",
+    ),
+  ).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
 test('evaluateTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } return x;") => 2', () => {
   expect(
     evaluateTuff(
