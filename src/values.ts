@@ -18,8 +18,14 @@ export interface TupleValue {
   elements: TuffValue[];
 }
 
-/** A runtime value: a number, a boolean, or a tuple. */
-export type TuffValue = NumberValue | BoolValue | TupleValue;
+/** An array value: an ordered list of element values. */
+export interface ArrayValue {
+  kind: "array";
+  elements: TuffValue[];
+}
+
+/** A runtime value: a number, a boolean, a tuple, or an array. */
+export type TuffValue = NumberValue | BoolValue | TupleValue | ArrayValue;
 
 /**
  * Wrap a number as a value.
@@ -51,6 +57,7 @@ export function truthy(value: TuffValue): boolean {
   return true;
 }
 
+
 /**
  * Type guard distinguishing a runtime value from a structured error.
  * @param value {TuffValue | TuffError} - The value to test.
@@ -58,7 +65,10 @@ export function truthy(value: TuffValue): boolean {
  */
 export function isValue(value: TuffValue | TuffError): value is TuffValue {
   return (
-    value.kind === "number" || value.kind === "bool" || value.kind === "tuple"
+    value.kind === "number" ||
+    value.kind === "bool" ||
+    value.kind === "tuple" ||
+    value.kind === "array"
   );
 }
 
@@ -73,3 +83,4 @@ export function toResultValue(value: TuffValue): number {
   if (value.kind === "bool") return value.value ? 1 : 0;
   return value.elements.length;
 }
+

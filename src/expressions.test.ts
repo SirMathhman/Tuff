@@ -102,6 +102,15 @@ test('evaluateTuff("let tuple = (1, 2); return tuple.1;") => 2', () => {
   });
 });
 
+test('evaluateTuff("let array = [1, 2, 3]; return array[0] + array[1] + array[2];") => 6', () => {
+  expect(
+    evaluateTuff("let array = [1, 2, 3]; return array[0] + array[1] + array[2];"),
+  ).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+
 test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
   expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
     ok: true,

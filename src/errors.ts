@@ -77,6 +77,15 @@ export interface InvalidTupleIndexError {
   line: number;
 }
 
+/** An error for indexing an array with an out-of-bounds index. */
+export interface InvalidArrayIndexError {
+  kind: "InvalidArrayIndex";
+  /** The identifier named by the operand, or "" if not an identifier. */
+  name: string;
+  index: number;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -89,7 +98,8 @@ export type TuffError =
   | UnexpectedCharacterError
   | BreakOutsideLoopError
   | ContinueOutsideLoopError
-  | InvalidTupleIndexError;
+  | InvalidTupleIndexError
+  | InvalidArrayIndexError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

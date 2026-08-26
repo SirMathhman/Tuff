@@ -96,6 +96,16 @@ export interface RParenToken {
   kind: "RParen";
 }
 
+/** An opening square-bracket token. */
+export interface LBracketToken {
+  kind: "LBracket";
+}
+
+/** A closing square-bracket token. */
+export interface RBracketToken {
+  kind: "RBracket";
+}
+
 /** A token produced by the tuff expression tokenizer. */
 export type TuffToken =
   | NumberToken
@@ -116,7 +126,9 @@ export type TuffToken =
   | LBraceToken
   | RBraceToken
   | LParenToken
-  | RParenToken;
+  | RParenToken
+  | LBracketToken
+  | RBracketToken;
 
 /** A single token plus the index just past it. */
 interface ReadToken {
@@ -174,6 +186,10 @@ function readPunct(text: string, j: number): ReadToken | null {
     return { kind: "token", token: { kind: "LBrace" }, next: j + 1 };
   if (ch === "}")
     return { kind: "token", token: { kind: "RBrace" }, next: j + 1 };
+  if (ch === "[")
+    return { kind: "token", token: { kind: "LBracket" }, next: j + 1 };
+  if (ch === "]")
+    return { kind: "token", token: { kind: "RBracket" }, next: j + 1 };
   return null;
 }
 

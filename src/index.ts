@@ -22,6 +22,7 @@ export type {
   BreakOutsideLoopError,
   ContinueOutsideLoopError,
   InvalidTupleIndexError,
+  InvalidArrayIndexError,
 } from "./errors.ts";
 export type {
   TuffExpr,
@@ -37,6 +38,8 @@ export type {
   DerefNode,
   TupleNode,
   TupleIndexNode,
+  ArrayNode,
+  ArrayIndexNode,
   LetNode,
   AssignNode,
   ReturnNode,

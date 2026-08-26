@@ -16,6 +16,8 @@ export type {
   DerefNode,
   TupleNode,
   TupleIndexNode,
+  ArrayNode,
+  ArrayIndexNode,
   TuffExpr,
   LetNode,
   AssignNode,

@@ -1,5 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type {
+  ArrayIndexNode,
+  ArrayNode,
   AssignNode,
   IfNode,
   LetNode,
@@ -16,16 +18,21 @@ import type {
  */
 type LoopContext = boolean;
 
+/** The statically known kinds a binding or element can hold. */
+type ValueKind = "number" | "bool" | "tuple" | "array";
+
 /** A declared binding's type, mutability, and reference target. */
 interface DeclaredBinding {
   /** The kind of value the binding holds. */
-  kind: "number" | "bool" | "tuple";
+  kind: ValueKind;
   /** Whether the binding was declared with `mut`. */
   mut: boolean;
   /** The name of the binding this is a reference to, if a `&`/`&mut`. */
   refTo?: string;
   /** The element kinds, if the binding holds a tuple literal. */
-  tupleKinds?: Array<"number" | "bool" | "tuple">;
+  tupleKinds?: ValueKind[];
+  /** The element kinds, if the binding holds an array literal. */
+  arrayKinds?: ValueKind[];
 }
 
 /** A successfully resolved dereference target. */
@@ -135,7 +142,11 @@ function checkLet(
       stmt.value.kind === "Tuple"
         ? stmt.value.elements.map((element) => inferKind(element, scopes) ?? "number")
         : undefined;
-    declareBinding(stmt.name, kind, stmt.mut, refTo, tupleKinds, scopes);
+    const arrayKinds =
+      stmt.value.kind === "Array"
+        ? stmt.value.elements.map((element) => inferKind(element, scopes) ?? "number")
+        : undefined;
+    declareBinding(stmt.name, kind, stmt.mut, refTo, tupleKinds, arrayKinds, scopes);
   }
   return null;
 }
@@ -240,12 +251,12 @@ function checkAssignment(
  * Infer the value kind of an expression, or null if not statically inferable.
  * @param expr - The expression to inspect.
  * @param scopes - The stack of declared bindings.
- * @returns "number" or "bool" if inferable, else null.
+ * @returns The inferred kind, or null if not statically inferable.
  */
 function inferKind(
   expr: TuffExpr,
   scopes: Record<string, DeclaredBinding>[],
-): "number" | "bool" | "tuple" | null {
+): ValueKind | null {
   if (expr.kind === "Literal") {
     return expr.value.kind === "bool" ? "bool" : "number";
   }
@@ -270,7 +281,28 @@ function inferKind(
     const kinds = tupleElementKinds(expr.operand, scopes);
     return kinds ? (kinds[expr.index] ?? null) : null;
   }
+  if (expr.kind === "Array") return "array";
+  if (expr.kind === "ArrayIndex") {
+    const kinds = arrayElementKinds(expr.operand, scopes);
+    if (!kinds) return null;
+    const index = literalIndex(expr.index);
+    return index !== null && index < kinds.length ? (kinds[index] ?? null) : null;
+  }
   return null;
+}
+
+/**
+ * The literal index of an array-index expression, or null if the index is
+ * not a non-negative integer literal.
+ * @param expr - The index expression to inspect.
+ * @returns {number | null} The literal index, or null.
+ */
+function literalIndex(expr: TuffExpr): number | null {
+  if (expr.kind !== "Literal") return null;
+  if (expr.value.kind !== "number") return null;
+  return Number.isInteger(expr.value.value) && expr.value.value >= 0
+    ? expr.value.value
+    : null;
 }
 
 /**
@@ -282,12 +314,31 @@ function inferKind(
 function tupleElementKinds(
   expr: TuffExpr,
   scopes: Record<string, DeclaredBinding>[],
-): Array<"number" | "bool" | "tuple"> | null {
+): ValueKind[] | null {
   if (expr.kind === "Tuple") {
     return expr.elements.map((element) => inferKind(element, scopes) ?? "number");
   }
   if (expr.kind === "Identifier") {
     return findDeclared(scopes, expr.name)?.tupleKinds ?? null;
+  }
+  return null;
+}
+
+/**
+ * The element kinds of an array expression, or null if not statically an array.
+ * @param expr - The expression to inspect.
+ * @param scopes - The stack of declared bindings.
+ * @returns {Array<"number" | "bool" | "tuple" | "array"> | null} The element kinds, or null.
+ */
+function arrayElementKinds(
+  expr: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+): ValueKind[] | null {
+  if (expr.kind === "Array") {
+    return expr.elements.map((element) => inferKind(element, scopes) ?? "number");
+  }
+  if (expr.kind === "Identifier") {
+    return findDeclared(scopes, expr.name)?.arrayKinds ?? null;
   }
   return null;
 }
@@ -343,6 +394,9 @@ function findUndeclared(
   if (expr.kind === "Tuple" || expr.kind === "TupleIndex") {
     return checkTupleExpr(expr, line, scopes);
   }
+  if (expr.kind === "Array" || expr.kind === "ArrayIndex") {
+    return checkArrayExpr(expr, line, scopes);
+  }
   return null;
 }
 
@@ -372,6 +426,39 @@ function checkTupleExpr(
   if (kinds && expr.index >= kinds.length) {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "InvalidTupleIndex", name, index: expr.index, line };
+  }
+  return null;
+}
+
+/**
+ * Check an array or array-index expression for undeclared identifiers and
+ * out-of-bounds literal indices.
+ * @param expr - The array or array-index expression to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns An UnidentifiedIdentifier or InvalidArrayIndex error, else null.
+ */
+function checkArrayExpr(
+  expr: ArrayNode | ArrayIndexNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  if (expr.kind === "Array") {
+    for (const element of expr.elements) {
+      const error = findUndeclared(element, line, scopes);
+      if (error) return error;
+    }
+    return null;
+  }
+  const error = findUndeclared(expr.operand, line, scopes);
+  if (error) return error;
+  const indexError = findUndeclared(expr.index, line, scopes);
+  if (indexError) return indexError;
+  const kinds = arrayElementKinds(expr.operand, scopes);
+  const index = literalIndex(expr.index);
+  if (kinds && index !== null && index >= kinds.length) {
+    const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
+    return { kind: "InvalidArrayIndex", name, index, line };
   }
   return null;
 }
@@ -412,18 +499,20 @@ function resolveDeref(
  * @param mut - Whether the binding is mutable.
  * @param refTo - The name of the binding this is a reference to, if any.
  * @param tupleKinds - The element kinds, if the binding holds a tuple.
+ * @param arrayKinds - The element kinds, if the binding holds an array.
  * @param scopes - The stack of declared bindings.
  */
 function declareBinding(
   name: string,
-  kind: "number" | "bool" | "tuple",
+  kind: ValueKind,
   mut: boolean,
   refTo: string | undefined,
-  tupleKinds: Array<"number" | "bool" | "tuple"> | undefined,
+  tupleKinds: ValueKind[] | undefined,
+  arrayKinds: ValueKind[] | undefined,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind, mut, refTo, tupleKinds };
+  if (scope) scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds };
 }
 
 /**

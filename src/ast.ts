@@ -73,6 +73,19 @@ export interface TupleIndexNode {
   index: number;
 }
 
+/** An array literal expression node: `[e, e, ...]`. */
+export interface ArrayNode {
+  kind: "Array";
+  elements: TuffExpr[];
+}
+
+/** An array-index expression node: `array[i]`. */
+export interface ArrayIndexNode {
+  kind: "ArrayIndex";
+  operand: TuffExpr;
+  index: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -85,7 +98,9 @@ export type TuffExpr =
   | RefNode
   | DerefNode
   | TupleNode
-  | TupleIndexNode;
+  | TupleIndexNode
+  | ArrayNode
+  | ArrayIndexNode;
 
 /** A `let` declaration statement node. */
 export interface LetNode {

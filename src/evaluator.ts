@@ -262,7 +262,14 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   Equal: {
     shortCircuit: () => null,
     combine: (left, right) => {
-      if (left.kind === "tuple" || right.kind === "tuple") return bool(false);
+      if (
+        left.kind === "tuple" ||
+        right.kind === "tuple" ||
+        left.kind === "array" ||
+        right.kind === "array"
+      ) {
+        return bool(false);
+      }
       if (left.kind !== right.kind) return bool(false);
       return bool(left.value === right.value);
     },
@@ -330,6 +337,21 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     assert(operand.kind === "tuple", "tuple index operand must be a tuple");
     const element = operand.elements[node.index];
     assert(element, "tuple index out of bounds");
+    return element;
+  }
+  if (node.kind === "Array") {
+    return {
+      kind: "array",
+      elements: node.elements.map((element) => evalExpr(element, env)),
+    };
+  }
+  if (node.kind === "ArrayIndex") {
+    const operand = evalExpr(node.operand, env);
+    assert(operand.kind === "array", "array index operand must be an array");
+    const indexValue = evalExpr(node.index, env);
+    assert(indexValue.kind === "number", "array index must be a number");
+    const element = operand.elements[indexValue.value];
+    assert(element, "array index out of bounds");
     return element;
   }
   const rule = BINARY_RULES[node.kind];
