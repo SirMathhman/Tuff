@@ -227,6 +227,15 @@ function resolveOrError(
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
   if (trimmed === "true") return 1;
   if (trimmed === "false") return 0;
+  const [, orLeft, orRight] = trimmed.match(/^(.+?)\s*\|\|\s*(.+)$/) ?? [];
+  if (orLeft && orRight) {
+    const left = resolveOrError(orLeft, scopes, line);
+    if (typeof left !== "number") return left;
+    if (left !== 0) return 1;
+    const right = resolveOrError(orRight, scopes, line);
+    if (typeof right !== "number") return right;
+    return right !== 0 ? 1 : 0;
+  }
   if (/^\w+$/.test(trimmed)) {
     const binding = findBinding(scopes, trimmed);
     if (binding) return binding.value;
