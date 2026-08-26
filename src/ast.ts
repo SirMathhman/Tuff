@@ -114,6 +114,11 @@ export interface WhileNode {
   body: TuffStatement;
 }
 
+/** A `break` statement node that exits the enclosing loop. */
+export interface BreakNode {
+  kind: "Break";
+}
+
 /** A parsed tuff statement. */
 export type TuffStatement =
   | LetNode
@@ -121,7 +126,8 @@ export type TuffStatement =
   | ReturnNode
   | BlockNode
   | IfNode
-  | WhileNode;
+  | WhileNode
+  | BreakNode;
 
 /** A mutable parse position over a token list. */
 export interface Pos {

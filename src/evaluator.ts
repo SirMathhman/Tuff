@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
-import type { TuffExpr, TuffStatement } from "./ast.ts";
+import type { TuffExpr, TuffStatement, WhileNode } from "./ast.ts";
 import {
   findBinding,
   type Binding,
@@ -16,6 +16,18 @@ type ExecuteList = (
   baseLine: number,
   env: Environment,
 ) => TuffResult | undefined;
+
+/** A sentinel result signaling that a `break` exited the enclosing loop. */
+const BREAK: TuffResult = { ok: true, value: 0 };
+
+/**
+ * Whether a statement result is the break sentinel.
+ * @param result {TuffResult | undefined} - The result to test.
+ * @returns {boolean} True if the result is the break sentinel.
+ */
+function isBreak(result: TuffResult | undefined): result is TuffResult {
+  return result === BREAK;
+}
 
 /**
  * Execute a list of statements in order.
@@ -82,18 +94,39 @@ function executeStatement(
     }
   }
   if (stmt.kind === "While") {
-    while (truthy(evalExpr(stmt.condition, env))) {
-      env.scopes.push(new Map());
-      try {
-        const result = executeStatement(stmt.body, line, env, executeList);
-        if (result) return result;
-      } finally {
-        env.scopes.pop();
-      }
-    }
-    return undefined;
+    return executeWhile(stmt, line, env, executeList);
+  }
+  if (stmt.kind === "Break") {
+    return BREAK;
   }
   executeAssignment(stmt.target, stmt.value, env);
+  return undefined;
+}
+
+/**
+ * Execute a `while` loop, re-evaluating the condition each iteration.
+ * @param stmt - The While statement to execute.
+ * @param line - The 1-based line number.
+ * @param env - The evaluation environment.
+ * @param executeList - The list executor, for block statements.
+ * @returns A result if a return is hit, else undefined.
+ */
+function executeWhile(
+  stmt: WhileNode,
+  line: number,
+  env: Environment,
+  executeList: ExecuteList,
+): TuffResult | undefined {
+  while (truthy(evalExpr(stmt.condition, env))) {
+    env.scopes.push(new Map());
+    try {
+      const result = executeStatement(stmt.body, line, env, executeList);
+      if (isBreak(result)) return undefined;
+      if (result) return result;
+    } finally {
+      env.scopes.pop();
+    }
+  }
   return undefined;
 }
 

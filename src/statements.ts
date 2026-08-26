@@ -318,6 +318,10 @@ export function parseStatement(
     pos.i++;
     return parseWhile(tokens, pos, line, parseStatement);
   }
+  if (token.kind === "Ident" && token.name === "break") {
+    pos.i++;
+    return { kind: "Break" };
+  }
   if (token.kind === "Ident") {
     const name = token.name;
     pos.i++;
@@ -347,6 +351,7 @@ export function isStatement(
     value.kind === "Return" ||
     value.kind === "Block" ||
     value.kind === "If" ||
-    value.kind === "While"
+    value.kind === "While" ||
+    value.kind === "Break"
   );
 }

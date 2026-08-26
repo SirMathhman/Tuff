@@ -7,6 +7,12 @@ import type {
   WhileNode,
 } from "./ast.ts";
 
+/**
+ * Whether the current check position is inside a loop body, so that `break`
+ * is valid. Threaded through the statement checkers.
+ */
+type LoopContext = boolean;
+
 /** A declared binding's type, mutability, and reference target. */
 interface DeclaredBinding {
   /** The kind of value the binding holds. */
@@ -40,7 +46,7 @@ export function typecheckProgram(
   baseLine: number,
 ): TuffError | null {
   const scopes: Record<string, DeclaredBinding>[] = [{}];
-  return checkStatements(statements, baseLine, scopes);
+  return checkStatements(statements, baseLine, scopes, false);
 }
 
 /**
@@ -48,17 +54,19 @@ export function typecheckProgram(
  * @param statements - The statements to check.
  * @param baseLine - The 1-based line of the first statement.
  * @param scopes - The stack of declared bindings.
+ * @param inLoop - Whether the statements are inside a loop body.
  * @returns A TypeMismatch error if a mismatch is found, else null.
  */
 function checkStatements(
   statements: TuffStatement[],
   baseLine: number,
   scopes: Record<string, DeclaredBinding>[],
+  inLoop: LoopContext,
 ): TuffError | null {
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
-    const error = checkStatement(stmt, baseLine + i, scopes);
+    const error = checkStatement(stmt, baseLine + i, scopes, inLoop);
     if (error) return error;
   }
   return null;
@@ -69,17 +77,19 @@ function checkStatements(
  * @param stmt - The statement to check.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
+ * @param inLoop - Whether the statement is inside a loop body.
  * @returns A TypeMismatch error if a mismatch is found, else null.
  */
 function checkStatement(
   stmt: TuffStatement,
   line: number,
   scopes: Record<string, DeclaredBinding>[],
+  inLoop: LoopContext,
 ): TuffError | null {
   if (stmt.kind === "Block") {
     scopes.push({});
     try {
-      return checkStatements(stmt.statements, line, scopes);
+      return checkStatements(stmt.statements, line, scopes, inLoop);
     } finally {
       scopes.pop();
     }
@@ -98,7 +108,7 @@ function checkStatement(
     return null;
   }
   if (stmt.kind === "If") {
-    return checkIf(stmt, line, scopes);
+    return checkIf(stmt, line, scopes, inLoop);
   }
   if (stmt.kind === "While") {
     return checkWhile(stmt, line, scopes);
@@ -109,6 +119,9 @@ function checkStatement(
   if (stmt.kind === "Return") {
     return findUndeclared(stmt.value, line, scopes);
   }
+  if (stmt.kind === "Break") {
+    return inLoop ? null : { kind: "BreakOutsideLoop", line };
+  }
   return null;
 }
 
@@ -117,16 +130,18 @@ function checkStatement(
  * @param stmt - The statement to check.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
+ * @param inLoop - Whether the statement is inside a loop body.
  * @returns A TuffError if a semantic error is found, else null.
  */
 function checkInScope(
   stmt: TuffStatement,
   line: number,
   scopes: Record<string, DeclaredBinding>[],
+  inLoop: LoopContext,
 ): TuffError | null {
   scopes.push({});
   try {
-    return checkStatement(stmt, line, scopes);
+    return checkStatement(stmt, line, scopes, inLoop);
   } finally {
     scopes.pop();
   }
@@ -137,18 +152,20 @@ function checkInScope(
  * @param stmt - The If statement to check.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
+ * @param inLoop - Whether the statement is inside a loop body.
  * @returns A TuffError if a semantic error is found, else null.
  */
 function checkIf(
   stmt: IfNode,
   line: number,
   scopes: Record<string, DeclaredBinding>[],
+  inLoop: LoopContext,
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
   if (condError) return condError;
-  const error = checkInScope(stmt.then, line, scopes);
+  const error = checkInScope(stmt.then, line, scopes, inLoop);
   if (error) return error;
-  return stmt.else ? checkInScope(stmt.else, line, scopes) : null;
+  return stmt.else ? checkInScope(stmt.else, line, scopes, inLoop) : null;
 }
 
 /**
@@ -165,7 +182,7 @@ function checkWhile(
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
   if (condError) return condError;
-  return checkInScope(stmt.body, line, scopes);
+  return checkInScope(stmt.body, line, scopes, true);
 }
 
 /**

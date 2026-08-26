@@ -56,6 +56,12 @@ export interface UnexpectedCharacterError {
   line: number;
 }
 
+/** An error for a `break` statement outside of a loop. */
+export interface BreakOutsideLoopError {
+  kind: "BreakOutsideLoop";
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -65,7 +71,8 @@ export type TuffError =
   | InvalidDerefError
   | InvalidReferenceError
   | TypeMismatchError
-  | UnexpectedCharacterError;
+  | UnexpectedCharacterError
+  | BreakOutsideLoopError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

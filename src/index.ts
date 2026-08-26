@@ -18,6 +18,7 @@ export type {
   InvalidReferenceError,
   TypeMismatchError,
   UnexpectedCharacterError,
+  BreakOutsideLoopError,
 } from "./errors.ts";
 export type {
   TuffExpr,
@@ -37,6 +38,7 @@ export type {
   BlockNode,
   IfNode,
   WhileNode,
+  BreakNode,
 } from "./parser.ts";
 export type { Binding, Environment } from "./scopes.ts";
 
