@@ -30,6 +30,12 @@ test("mut declaration then assignment", () => {
     value: 1,
   });
 });
+test("compound addition assignment", () => {
+  expect(evaluateTuff("let mut x = 1; x += 2; return x;")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
 test("block statement assigns to outer scope", () => {
   expect(evaluateTuff("let mut x = 0; { x = 1; } return x;")).toEqual({
     ok: true,

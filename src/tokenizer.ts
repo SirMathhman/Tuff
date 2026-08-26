@@ -31,7 +31,17 @@ const KEYWORDS = new Set(["let", "mut", "return", "if", "else"]);
 /**
  * Single-character punctuation tokens.
  */
-const SINGLE_CHAR_PUNCT = new Set(["=", ";", "{", "}", "(", ")", "+", "-", "*"]);
+const SINGLE_CHAR_PUNCT = new Set([
+  "=",
+  ";",
+  "{",
+  "}",
+  "(",
+  ")",
+  "+",
+  "-",
+  "*",
+]);
 
 /**
  * A successful scan result: the token and the index after it.
@@ -121,6 +131,11 @@ export function tokenize(input: string): TokenizeOk | TokenizeErr {
     }
     if (ch === "=" && input[i + 1] === "=") {
       tokens.push({ kind: "punct", value: "==", pos: i });
+      i += 2;
+      continue;
+    }
+    if (ch === "+" && input[i + 1] === "=") {
+      tokens.push({ kind: "punct", value: "+=", pos: i });
       i += 2;
       continue;
     }

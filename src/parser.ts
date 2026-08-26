@@ -353,6 +353,25 @@ function parseIf(state: ParserState): ParseStmtOk | ParseErr {
 function parseAssign(state: ParserState): ParseStmtOk | ParseErr {
   const nameTok = next(state);
   const eq = next(state);
+  if (eq?.value === "+=") {
+    const value = parseExpr(state);
+    if (!value.ok) return value;
+    return {
+      ok: true,
+      stmt: {
+        type: "Assign",
+        name: nameTok.value,
+        value: {
+          type: "Binary",
+          op: "+",
+          left: { type: "Identifier", name: nameTok.value, pos: nameTok.pos },
+          right: value.expr,
+          pos: eq.pos,
+        },
+        pos: nameTok.pos,
+      },
+    };
+  }
   if (eq?.value !== "=") {
     return {
       ok: false,
