@@ -34,13 +34,21 @@ export interface AddNode {
   right: TuffExpr;
 }
 
+/** A binary `==` expression node. */
+export interface EqualNode {
+  kind: "Equal";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
   | IdentifierNode
   | OrNode
   | AndNode
-  | AddNode;
+  | AddNode
+  | EqualNode;
 
 /** A mutable parse position over a token list. */
 interface Pos {
@@ -49,8 +57,8 @@ interface Pos {
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
-  token: "Or" | "And" | "Plus";
-  node: "Or" | "And" | "Add";
+  token: "Or" | "And" | "Plus" | "Equal";
+  node: "Or" | "And" | "Add" | "Equal";
   assoc: "left" | "right";
 }
 
@@ -61,6 +69,7 @@ interface BinaryOp {
 const BINARY_OPS: BinaryOp[] = [
   { token: "Or", node: "Or", assoc: "right" },
   { token: "And", node: "And", assoc: "right" },
+  { token: "Equal", node: "Equal", assoc: "left" },
   { token: "Plus", node: "Add", assoc: "left" },
 ];
 

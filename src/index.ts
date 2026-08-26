@@ -21,6 +21,7 @@ export type {
   OrNode,
   AndNode,
   AddNode,
+  EqualNode,
 } from "./parser.ts";
 export type { Binding } from "./evaluator.ts";
 

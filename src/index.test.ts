@@ -191,3 +191,10 @@ test('evaluateTuff("return 1 + 2;") => 3', () => {
     value: 3,
   });
 });
+
+test('evaluateTuff("let x = 1; let y = 2; return x == y;") => 0', () => {
+  expect(evaluateTuff("let x = 1; let y = 2; return x == y;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});

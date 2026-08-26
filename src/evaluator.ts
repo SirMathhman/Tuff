@@ -181,7 +181,7 @@ interface BinaryRule {
 /**
  * The binary node evaluation rules, keyed by node kind.
  */
-const BINARY_RULES: Record<"Or" | "And" | "Add", BinaryRule> = {
+const BINARY_RULES: Record<"Or" | "And" | "Add" | "Equal", BinaryRule> = {
   Or: {
     shortCircuit: (left) => (left !== 0 ? 1 : null),
     combine: (_left, right) => (right !== 0 ? 1 : 0),
@@ -193,6 +193,10 @@ const BINARY_RULES: Record<"Or" | "And" | "Add", BinaryRule> = {
   Add: {
     shortCircuit: () => null,
     combine: (left, right) => left + right,
+  },
+  Equal: {
+    shortCircuit: () => null,
+    combine: (left, right) => (left === right ? 1 : 0),
   },
 };
 

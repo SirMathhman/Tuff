@@ -31,6 +31,11 @@ export interface PlusToken {
   kind: "Plus";
 }
 
+/** A `==` operator token. */
+export interface EqualToken {
+  kind: "Equal";
+}
+
 /** An opening parenthesis token. */
 export interface LParenToken {
   kind: "LParen";
@@ -49,6 +54,7 @@ export type TuffToken =
   | OrToken
   | AndToken
   | PlusToken
+  | EqualToken
   | LParenToken
   | RParenToken;
 
@@ -75,6 +81,8 @@ function readToken(text: string, i: number): ReadToken | null {
   if (text.startsWith("||", j)) return { token: { kind: "Or" }, next: j + 2 };
   if (text.startsWith("&&", j)) return { token: { kind: "And" }, next: j + 2 };
   if (ch === "+") return { token: { kind: "Plus" }, next: j + 1 };
+  if (text.startsWith("==", j))
+    return { token: { kind: "Equal" }, next: j + 2 };
   const rest = text.slice(j);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {
