@@ -49,6 +49,12 @@ export function evaluateTuff(s: string): TuffResult {
   return result ?? { ok: true, value: 0 };
 }
 
+type ExecuteList = (
+  statements: string[],
+  env: Map<string, Binding>,
+  baseLine: number,
+) => TuffResult | undefined;
+
 function executeStatements(
   statements: string[],
   env: Map<string, Binding>,
@@ -57,7 +63,7 @@ function executeStatements(
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
-    const result = executeStatement(stmt, env, baseLine + i);
+    const result = executeStatement(stmt, env, baseLine + i, executeStatements);
     if (result) return result;
   }
   return undefined;
@@ -67,10 +73,11 @@ function executeStatement(
   stmt: string,
   env: Map<string, Binding>,
   line: number,
+  executeList: ExecuteList,
 ): TuffResult | undefined {
   const [, blockBody] = stmt.match(/^\{([\s\S]*)\}$/) ?? [];
   if (blockBody !== undefined) {
-    return executeStatements(splitStatements(blockBody), env, line);
+    return executeList(splitStatements(blockBody), env, line);
   }
   const [, letMut, letName, letValue] =
     stmt.match(/^let\s+(mut\s+)?(\w+)\s*=\s*(.+)$/) ?? [];

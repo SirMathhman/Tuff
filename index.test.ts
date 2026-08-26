@@ -106,3 +106,18 @@ test('evaluateTuff("let mut x = 0; { x = 1; } return x;") => 1', () => {
     value: 1,
   });
 });
+
+test('evaluateTuff("{ return 1; }") => 1', () => {
+  expect(evaluateTuff("{ return 1; }")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("let mut x = 0; { { x = 1; } } return x;") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; { { x = 1; } } return x;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("{ missing = 1; }") => Err', () => {
+  expectUnidentifiedIdentifier(evaluateTuff("{ missing = 1; }"), "missing", 1);
+});
