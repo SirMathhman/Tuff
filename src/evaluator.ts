@@ -1,4 +1,4 @@
-import type { Stmt } from "./parser.ts";
+import type { For, Stmt } from "./parser.ts";
 import type { BinaryExpr, Expr } from "./expr.ts";
 import { tupleElementsEqual } from "./util.ts";
 
@@ -89,7 +89,10 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
     return evalBinary(expr, vars);
   }
   if (expr.type === "Ref") {
-    assert(expr.operand.type === "Identifier", "Expected identifier in reference");
+    assert(
+      expr.operand.type === "Identifier",
+      "Expected identifier in reference",
+    );
     const name = expr.operand.name;
     const binding = vars.get(name);
     assert(binding !== undefined, `Unknown identifier: ${name}`);
@@ -208,21 +211,7 @@ export function exec(
       continue;
     }
     if (stmt.type === "For") {
-      const start = toNumber(evalExpr(stmt.start, vars));
-      const end = toNumber(evalExpr(stmt.end, vars));
-      const prev = vars.get(stmt.name);
-      for (let i = start; i < end; i++) {
-        vars.set(stmt.name, {
-          value: { kind: "number", value: i },
-          mutable: true,
-        });
-        exec(stmt.body, vars);
-      }
-      if (prev === undefined) {
-        vars.delete(stmt.name);
-      } else {
-        vars.set(stmt.name, prev);
-      }
+      execFor(stmt, vars);
       continue;
     }
     const value = evalExpr(stmt.value, vars);
@@ -237,4 +226,29 @@ export function exec(
     vars.set(stmt.name, { value, mutable: stmt.mutable });
   }
   return 0;
+}
+
+/**
+ * Execute a `for` range loop: bind the loop variable to each value in
+ * `start..end` (exclusive), then restore the outer binding afterwards.
+ *
+ * @param stmt - The for statement to execute.
+ * @param vars - The variable scope, shared with the enclosing statements.
+ */
+function execFor(stmt: For, vars: Map<string, Binding>): void {
+  const start = toNumber(evalExpr(stmt.start, vars));
+  const end = toNumber(evalExpr(stmt.end, vars));
+  const prev = vars.get(stmt.name);
+  for (let i = start; i < end; i++) {
+    vars.set(stmt.name, {
+      value: { kind: "number", value: i },
+      mutable: true,
+    });
+    exec(stmt.body, vars);
+  }
+  if (prev === undefined) {
+    vars.delete(stmt.name);
+  } else {
+    vars.set(stmt.name, prev);
+  }
 }

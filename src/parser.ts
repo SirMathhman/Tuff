@@ -1,7 +1,7 @@
 import type { TuffError } from "./errors.ts";
 import type { ParserState } from "./expr.ts";
 import { tokenize } from "./tokenizer.ts";
-import { parseStmtList } from "./stmts.ts";
+import { parseStmtList } from "./stmts-control.ts";
 import type { Stmt } from "./stmts.ts";
 export type {
   Assign,

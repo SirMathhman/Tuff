@@ -268,7 +268,10 @@ function parseTerm(state: ParserState): ParseExprResult {
  * @returns The expression, or a structured parse error.
  */
 function parseUnary(state: ParserState): ParseExprResult {
-  if (!atEnd(state) && (peek(state).value === "*" || peek(state).value === "&")) {
+  if (
+    !atEnd(state) &&
+    (peek(state).value === "*" || peek(state).value === "&")
+  ) {
     const opTok = next(state);
     const operand = parseUnary(state);
     if (!operand.ok) return operand;
