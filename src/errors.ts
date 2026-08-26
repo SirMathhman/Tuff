@@ -68,6 +68,15 @@ export interface ContinueOutsideLoopError {
   line: number;
 }
 
+/** An error for indexing a tuple with an out-of-bounds index. */
+export interface InvalidTupleIndexError {
+  kind: "InvalidTupleIndex";
+  /** The identifier named by the operand, or "" if not an identifier. */
+  name: string;
+  index: number;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -79,7 +88,8 @@ export type TuffError =
   | TypeMismatchError
   | UnexpectedCharacterError
   | BreakOutsideLoopError
-  | ContinueOutsideLoopError;
+  | ContinueOutsideLoopError
+  | InvalidTupleIndexError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

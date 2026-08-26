@@ -58,6 +58,13 @@ test('evaluateTuff("return true == 1;") => 0', () => {
   });
 });
 
+test('evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;") => 7', () => {
+  expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual({
+    ok: true,
+    value: 7,
+  });
+});
+
 test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
   expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
     ok: true,

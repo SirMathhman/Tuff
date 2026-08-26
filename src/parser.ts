@@ -14,6 +14,8 @@ export type {
   LessNode,
   RefNode,
   DerefNode,
+  TupleNode,
+  TupleIndexNode,
   TuffExpr,
   LetNode,
   AssignNode,

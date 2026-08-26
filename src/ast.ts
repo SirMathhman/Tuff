@@ -60,6 +60,19 @@ export interface DerefNode {
   operand: TuffExpr;
 }
 
+/** A tuple literal expression node: `(e, e, ...)`. */
+export interface TupleNode {
+  kind: "Tuple";
+  elements: TuffExpr[];
+}
+
+/** A tuple-index expression node: `tuple.N`. */
+export interface TupleIndexNode {
+  kind: "TupleIndex";
+  operand: TuffExpr;
+  index: number;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -70,7 +83,9 @@ export type TuffExpr =
   | EqualNode
   | LessNode
   | RefNode
-  | DerefNode;
+  | DerefNode
+  | TupleNode
+  | TupleIndexNode;
 
 /** A `let` declaration statement node. */
 export interface LetNode {

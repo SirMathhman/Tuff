@@ -61,6 +61,16 @@ export interface PlusAssignToken {
   kind: "PlusAssign";
 }
 
+/** A `,` tuple separator token. */
+export interface CommaToken {
+  kind: "Comma";
+}
+
+/** A `.` tuple-index token. */
+export interface DotToken {
+  kind: "Dot";
+}
+
 /** A `;` statement separator token. */
 export interface SemicolonToken {
   kind: "Semicolon";
@@ -100,6 +110,8 @@ export type TuffToken =
   | DerefToken
   | AssignToken
   | PlusAssignToken
+  | CommaToken
+  | DotToken
   | SemicolonToken
   | LBraceToken
   | RBraceToken
@@ -155,6 +167,10 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
     return { kind: "token", token: { kind: "Deref" }, next: j + 1 };
   if (ch === "=")
     return { kind: "token", token: { kind: "Assign" }, next: j + 1 };
+  if (ch === ",")
+    return { kind: "token", token: { kind: "Comma" }, next: j + 1 };
+  if (ch === ".")
+    return { kind: "token", token: { kind: "Dot" }, next: j + 1 };
   if (ch === ";")
     return { kind: "token", token: { kind: "Semicolon" }, next: j + 1 };
   if (ch === "{")

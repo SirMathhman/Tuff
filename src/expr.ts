@@ -35,7 +35,9 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Literal" ||
     value.kind === "Identifier" ||
     value.kind === "Ref" ||
-    value.kind === "Deref"
+    value.kind === "Deref" ||
+    value.kind === "Tuple" ||
+    value.kind === "TupleIndex"
   ) {
     return true;
   }
@@ -43,13 +45,95 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
 }
 
 /**
- * Parse a single operand: a literal, an identifier, or a parenthesized expression.
+ * Parse the tail of a tuple literal: the first element is already parsed and
+ * the first comma is the next token.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the tuple.
+ * @param line {number} - The 1-based line number.
+ * @param first {TuffExpr} - The already-parsed first element.
+ * @returns {TuffExpr | TuffError} The Tuple node, or a TuffError.
+ */
+function parseTuple(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  first: TuffExpr,
+): TuffExpr | TuffError {
+  const elements: TuffExpr[] = [first];
+  while (tokens[pos.i]?.kind === "Comma") {
+    pos.i++;
+    const element = parseLevel(tokens, pos, line, 0);
+    if (!isExpr(element)) return element;
+    elements.push(element);
+  }
+  const close = tokens[pos.i];
+  if (close?.kind !== "RParen") {
+    return { kind: "InvalidExpression", expression: "", line };
+  }
+  pos.i++;
+  return { kind: "Tuple", elements };
+}
+
+/**
+ * Parse a single operand: a literal, an identifier, a parenthesized
+ * expression, or a tuple literal, followed by any `.N` tuple-index suffixes.
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the operand.
  * @param line {number} - The 1-based line number.
  * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
  */
 export function parseOperand(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  const operand = parsePrimary(tokens, pos, line);
+  if (!isExpr(operand)) return operand;
+  let left: TuffExpr = operand;
+  while (tokens[pos.i]?.kind === "Dot") {
+    pos.i++;
+    const indexTok = tokens[pos.i];
+    if (indexTok?.kind !== "Number" || !Number.isInteger(indexTok.value)) {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    left = { kind: "TupleIndex", operand: left, index: indexTok.value };
+  }
+  return left;
+}
+
+/**
+ * Parse the tail of a `&`/`&mut` reference: the `&` is already consumed.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the reference.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The Ref node, or a TuffError.
+ */
+function parseRef(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  let mut = false;
+  const mutTok = tokens[pos.i];
+  if (mutTok?.kind === "Ident" && mutTok.name === "mut") {
+    mut = true;
+    pos.i++;
+  }
+  const operand = parseOperand(tokens, pos, line);
+  if (!isExpr(operand)) return operand;
+  return { kind: "Ref", mut, operand };
+}
+
+/**
+ * Parse a primary operand: a literal, an identifier, a parenthesized
+ * expression, or a tuple literal.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the operand.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
+ */
+function parsePrimary(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
@@ -64,15 +148,7 @@ export function parseOperand(
   }
   if (token.kind === "Ref") {
     pos.i++;
-    let mut = false;
-    const mutTok = tokens[pos.i];
-    if (mutTok?.kind === "Ident" && mutTok.name === "mut") {
-      mut = true;
-      pos.i++;
-    }
-    const operand = parseOperand(tokens, pos, line);
-    if (!isExpr(operand)) return operand;
-    return { kind: "Ref", mut, operand };
+    return parseRef(tokens, pos, line);
   }
   if (token.kind === "Deref") {
     pos.i++;
@@ -86,14 +162,17 @@ export function parseOperand(
   }
   if (token.kind === "LParen") {
     pos.i++;
-    const inner = parseLevel(tokens, pos, line, 0);
-    if (!isExpr(inner)) return inner;
+    const first = parseLevel(tokens, pos, line, 0);
+    if (!isExpr(first)) return first;
+    if (tokens[pos.i]?.kind === "Comma") {
+      return parseTuple(tokens, pos, line, first);
+    }
     const close = tokens[pos.i];
     if (close?.kind !== "RParen") {
       return { kind: "InvalidExpression", expression: "", line };
     }
     pos.i++;
-    return inner;
+    return first;
   }
   return { kind: "InvalidExpression", expression: "", line };
 }

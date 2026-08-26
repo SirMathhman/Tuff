@@ -1,7 +1,7 @@
 import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
-import type { TuffExpr, TuffStatement, WhileNode } from "./ast.ts";
+import type { RefNode, TuffExpr, TuffStatement, WhileNode } from "./ast.ts";
 import {
   findBinding,
   type Binding,
@@ -261,14 +261,44 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   },
   Equal: {
     shortCircuit: () => null,
-    combine: (left, right) =>
-      bool(left.kind === right.kind && left.value === right.value),
+    combine: (left, right) => {
+      if (left.kind === "tuple" || right.kind === "tuple") return bool(false);
+      if (left.kind !== right.kind) return bool(false);
+      return bool(left.value === right.value);
+    },
   },
   Less: {
     shortCircuit: () => null,
     combine: (left, right) => bool(toResultValue(left) < toResultValue(right)),
   },
 };
+
+/**
+ * Evaluate a `&`/`&mut` reference expression to a fresh reference id.
+ * @param node {RefNode} - The reference expression node.
+ * @param env {Environment} - The evaluation environment.
+ * @returns {TuffValue} The numeric reference id.
+ */
+function evalRef(node: RefNode, env: Environment): TuffValue {
+  assert(
+    node.operand.kind === "Identifier",
+    "reference operand must be an identifier",
+  );
+  const binding = findBinding(env.scopes, node.operand.name);
+  assert(binding, `unidentified identifier ${node.operand.name}`);
+  assert(
+    !node.mut || binding.mut,
+    `immutable reference to ${node.operand.name}`,
+  );
+  const id = env.refs.next;
+  env.refs.next++;
+  env.refs.refs.set(id, {
+    binding,
+    name: node.operand.name,
+    mut: binding.mut,
+  });
+  return num(id);
+}
 
 /**
  * Evaluate a parsed expression to a runtime value.
@@ -283,30 +313,24 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     assert(binding, `unidentified identifier ${node.name}`);
     return binding.value;
   }
-  if (node.kind === "Ref") {
-    assert(
-      node.operand.kind === "Identifier",
-      "reference operand must be an identifier",
-    );
-    const binding = findBinding(env.scopes, node.operand.name);
-    assert(binding, `unidentified identifier ${node.operand.name}`);
-    assert(
-      !node.mut || binding.mut,
-      `immutable reference to ${node.operand.name}`,
-    );
-    const id = env.refs.next;
-    env.refs.next++;
-    env.refs.refs.set(id, {
-      binding,
-      name: node.operand.name,
-      mut: binding.mut,
-    });
-    return num(id);
-  }
+  if (node.kind === "Ref") return evalRef(node, env);
   if (node.kind === "Deref") {
     const operand = evalExpr(node.operand, env);
     const entry = lookupRef(operand, env);
     return entry.binding.value;
+  }
+  if (node.kind === "Tuple") {
+    return {
+      kind: "tuple",
+      elements: node.elements.map((element) => evalExpr(element, env)),
+    };
+  }
+  if (node.kind === "TupleIndex") {
+    const operand = evalExpr(node.operand, env);
+    assert(operand.kind === "tuple", "tuple index operand must be a tuple");
+    const element = operand.elements[node.index];
+    assert(element, "tuple index out of bounds");
+    return element;
   }
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);

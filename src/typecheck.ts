@@ -2,8 +2,11 @@ import type { TuffError } from "./errors.ts";
 import type {
   AssignNode,
   IfNode,
+  LetNode,
   TuffExpr,
   TuffStatement,
+  TupleIndexNode,
+  TupleNode,
   WhileNode,
 } from "./ast.ts";
 
@@ -16,11 +19,13 @@ type LoopContext = boolean;
 /** A declared binding's type, mutability, and reference target. */
 interface DeclaredBinding {
   /** The kind of value the binding holds. */
-  kind: "number" | "bool";
+  kind: "number" | "bool" | "tuple";
   /** Whether the binding was declared with `mut`. */
   mut: boolean;
   /** The name of the binding this is a reference to, if a `&`/`&mut`. */
   refTo?: string;
+  /** The element kinds, if the binding holds a tuple literal. */
+  tupleKinds?: Array<"number" | "bool" | "tuple">;
 }
 
 /** A successfully resolved dereference target. */
@@ -94,36 +99,43 @@ function checkStatement(
       scopes.pop();
     }
   }
-  if (stmt.kind === "Let") {
-    const error = findUndeclared(stmt.value, line, scopes);
-    if (error) return error;
-    const kind = inferKind(stmt.value, scopes);
-    if (kind) {
-      const refTo =
-        stmt.value.kind === "Ref" && stmt.value.operand.kind === "Identifier"
-          ? stmt.value.operand.name
-          : undefined;
-      declareBinding(stmt.name, kind, stmt.mut, refTo, scopes);
-    }
-    return null;
-  }
-  if (stmt.kind === "If") {
-    return checkIf(stmt, line, scopes, inLoop);
-  }
-  if (stmt.kind === "While") {
-    return checkWhile(stmt, line, scopes);
-  }
-  if (stmt.kind === "Assign") {
-    return checkAssignment(stmt, line, scopes);
-  }
-  if (stmt.kind === "Return") {
-    return findUndeclared(stmt.value, line, scopes);
-  }
-  if (stmt.kind === "Break") {
+  if (stmt.kind === "Let") return checkLet(stmt, line, scopes);
+  if (stmt.kind === "If") return checkIf(stmt, line, scopes, inLoop);
+  if (stmt.kind === "While") return checkWhile(stmt, line, scopes);
+  if (stmt.kind === "Assign") return checkAssignment(stmt, line, scopes);
+  if (stmt.kind === "Return") return findUndeclared(stmt.value, line, scopes);
+  if (stmt.kind === "Break")
     return inLoop ? null : { kind: "BreakOutsideLoop", line };
-  }
-  if (stmt.kind === "Continue") {
+  if (stmt.kind === "Continue")
     return inLoop ? null : { kind: "ContinueOutsideLoop", line };
+  return null;
+}
+
+/**
+ * Check a `let` declaration: its initializer, then declare the binding.
+ * @param stmt - The Let statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkLet(
+  stmt: LetNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const error = findUndeclared(stmt.value, line, scopes);
+  if (error) return error;
+  const kind = inferKind(stmt.value, scopes);
+  if (kind) {
+    const refTo =
+      stmt.value.kind === "Ref" && stmt.value.operand.kind === "Identifier"
+        ? stmt.value.operand.name
+        : undefined;
+    const tupleKinds =
+      stmt.value.kind === "Tuple"
+        ? stmt.value.elements.map((element) => inferKind(element, scopes) ?? "number")
+        : undefined;
+    declareBinding(stmt.name, kind, stmt.mut, refTo, tupleKinds, scopes);
   }
   return null;
 }
@@ -167,8 +179,7 @@ function checkIf(
   const condError = findUndeclared(stmt.condition, line, scopes);
   if (condError) return condError;
   const error = checkInScope(stmt.then, line, scopes, inLoop);
-  if (error) return error;
-  return stmt.else ? checkInScope(stmt.else, line, scopes, inLoop) : null;
+  return error ?? (stmt.else ? checkInScope(stmt.else, line, scopes, inLoop) : null);
 }
 
 /**
@@ -184,8 +195,7 @@ function checkWhile(
   scopes: Record<string, DeclaredBinding>[],
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
-  if (condError) return condError;
-  return checkInScope(stmt.body, line, scopes, true);
+  return condError ?? checkInScope(stmt.body, line, scopes, true);
 }
 
 /**
@@ -206,9 +216,7 @@ function checkAssignment(
   if (stmt.target.kind === "Identifier") {
     name = stmt.target.name;
     const found = findDeclared(scopes, name);
-    if (!found) {
-      return { kind: "UnidentifiedIdentifier", name, line };
-    }
+    if (!found) return { kind: "UnidentifiedIdentifier", name, line };
     declared = found;
   } else if (stmt.target.kind === "Deref") {
     const resolved = resolveDeref(stmt.target.operand, line, scopes);
@@ -218,9 +226,7 @@ function checkAssignment(
   } else {
     return { kind: "InvalidDeref", name: "", line };
   }
-  if (!declared.mut) {
-    return { kind: "ImmutableAssignment", name, line };
-  }
+  if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
   const valueError = findUndeclared(stmt.value, line, scopes);
   if (valueError) return valueError;
   const kind = inferKind(stmt.value, scopes);
@@ -239,7 +245,7 @@ function checkAssignment(
 function inferKind(
   expr: TuffExpr,
   scopes: Record<string, DeclaredBinding>[],
-): "number" | "bool" | null {
+): "number" | "bool" | "tuple" | null {
   if (expr.kind === "Literal") {
     return expr.value.kind === "bool" ? "bool" : "number";
   }
@@ -252,13 +258,36 @@ function inferKind(
     expr.kind === "Less" ||
     expr.kind === "And" ||
     expr.kind === "Or"
-  ) {
+  )
     return "bool";
-  }
   if (expr.kind === "Ref") return "number";
   if (expr.kind === "Deref") {
     const resolved = resolveDeref(expr.operand, 0, scopes);
     return "kind" in resolved ? null : resolved.binding.kind;
+  }
+  if (expr.kind === "Tuple") return "tuple";
+  if (expr.kind === "TupleIndex") {
+    const kinds = tupleElementKinds(expr.operand, scopes);
+    return kinds ? (kinds[expr.index] ?? null) : null;
+  }
+  return null;
+}
+
+/**
+ * The element kinds of a tuple expression, or null if not statically a tuple.
+ * @param expr - The expression to inspect.
+ * @param scopes - The stack of declared bindings.
+ * @returns {Array<"number" | "bool" | "tuple"> | null} The element kinds, or null.
+ */
+function tupleElementKinds(
+  expr: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+): Array<"number" | "bool" | "tuple"> | null {
+  if (expr.kind === "Tuple") {
+    return expr.elements.map((element) => inferKind(element, scopes) ?? "number");
+  }
+  if (expr.kind === "Identifier") {
+    return findDeclared(scopes, expr.name)?.tupleKinds ?? null;
   }
   return null;
 }
@@ -291,8 +320,7 @@ function findUndeclared(
     expr.kind === "Less"
   ) {
     const left = findUndeclared(expr.left, line, scopes);
-    if (left) return left;
-    return findUndeclared(expr.right, line, scopes);
+    return left ?? findUndeclared(expr.right, line, scopes);
   }
   if (expr.kind === "Ref") {
     if (expr.operand.kind !== "Identifier") {
@@ -311,6 +339,39 @@ function findUndeclared(
     const resolved = resolveDeref(expr.operand, line, scopes);
     if ("kind" in resolved) return resolved;
     return null;
+  }
+  if (expr.kind === "Tuple" || expr.kind === "TupleIndex") {
+    return checkTupleExpr(expr, line, scopes);
+  }
+  return null;
+}
+
+/**
+ * Check a tuple or tuple-index expression for undeclared identifiers and
+ * out-of-bounds indices.
+ * @param expr - The tuple or tuple-index expression to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns An UnidentifiedIdentifier or InvalidTupleIndex error, else null.
+ */
+function checkTupleExpr(
+  expr: TupleNode | TupleIndexNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  if (expr.kind === "Tuple") {
+    for (const element of expr.elements) {
+      const error = findUndeclared(element, line, scopes);
+      if (error) return error;
+    }
+    return null;
+  }
+  const error = findUndeclared(expr.operand, line, scopes);
+  if (error) return error;
+  const kinds = tupleElementKinds(expr.operand, scopes);
+  if (kinds && expr.index >= kinds.length) {
+    const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
+    return { kind: "InvalidTupleIndex", name, index: expr.index, line };
   }
   return null;
 }
@@ -350,17 +411,19 @@ function resolveDeref(
  * @param kind - The value kind.
  * @param mut - Whether the binding is mutable.
  * @param refTo - The name of the binding this is a reference to, if any.
+ * @param tupleKinds - The element kinds, if the binding holds a tuple.
  * @param scopes - The stack of declared bindings.
  */
 function declareBinding(
   name: string,
-  kind: "number" | "bool",
+  kind: "number" | "bool" | "tuple",
   mut: boolean,
   refTo: string | undefined,
+  tupleKinds: Array<"number" | "bool" | "tuple"> | undefined,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind, mut, refTo };
+  if (scope) scope[name] = { kind, mut, refTo, tupleKinds };
 }
 
 /**

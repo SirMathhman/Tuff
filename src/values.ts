@@ -12,8 +12,14 @@ export interface BoolValue {
   value: boolean;
 }
 
-/** A runtime value: a number or a boolean. */
-export type TuffValue = NumberValue | BoolValue;
+/** A tuple value: an ordered list of element values. */
+export interface TupleValue {
+  kind: "tuple";
+  elements: TuffValue[];
+}
+
+/** A runtime value: a number, a boolean, or a tuple. */
+export type TuffValue = NumberValue | BoolValue | TupleValue;
 
 /**
  * Wrap a number as a value.
@@ -34,12 +40,15 @@ export function bool(value: boolean): BoolValue {
 }
 
 /**
- * Whether a value is truthy: nonzero for numbers, the flag for booleans.
+ * Whether a value is truthy: nonzero for numbers, the flag for booleans,
+ * and always true for tuples.
  * @param value {TuffValue} - The value to test.
  * @returns {boolean} True if the value is truthy.
  */
 export function truthy(value: TuffValue): boolean {
-  return value.kind === "number" ? value.value !== 0 : value.value;
+  if (value.kind === "number") return value.value !== 0;
+  if (value.kind === "bool") return value.value;
+  return true;
 }
 
 /**
@@ -48,14 +57,19 @@ export function truthy(value: TuffValue): boolean {
  * @returns {boolean} True if the value is a runtime value.
  */
 export function isValue(value: TuffValue | TuffError): value is TuffValue {
-  return value.kind === "number" || value.kind === "bool";
+  return (
+    value.kind === "number" || value.kind === "bool" || value.kind === "tuple"
+  );
 }
 
 /**
- * Render a value as the public numeric result: the number, or 1/0 for booleans.
+ * Render a value as the public numeric result: the number, 1/0 for booleans,
+ * and the element count for tuples.
  * @param value {TuffValue} - The value to render.
  * @returns {number} The numeric result.
  */
 export function toResultValue(value: TuffValue): number {
-  return value.kind === "number" ? value.value : value.value ? 1 : 0;
+  if (value.kind === "number") return value.value;
+  if (value.kind === "bool") return value.value ? 1 : 0;
+  return value.elements.length;
 }
