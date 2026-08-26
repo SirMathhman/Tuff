@@ -1,6 +1,6 @@
 // Generates callgraph.svg: a Graphviz call graph of all functions in the repo.
 // Usage: bun tools/callgraph.ts
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import * as ts from "typescript";
 import {
@@ -213,8 +213,10 @@ for (const [id, called] of calls) {
 }
 
 const { svg, sources } = renderGraph(rootBox);
-const dotPath = join(root, "docs", "callgraph.dot");
-const svgPath = join(root, "docs", "callgraph.svg");
+const docsDir = join(root, "docs");
+mkdirSync(docsDir, { recursive: true });
+const dotPath = join(docsDir, "callgraph.dot");
+const svgPath = join(docsDir, "callgraph.svg");
 writeFileSync(svgPath, svg);
 writeFileSync(dotPath, sources.join("\n\n"));
 

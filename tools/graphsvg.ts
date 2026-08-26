@@ -7,12 +7,18 @@
 // does route edges around nodes. The resulting drawings are composed by hand.
 import { spawnSync } from "node:child_process";
 
+/** A node inside a leaf box. */
+export interface LeafNode {
+  id: string;
+  label: string;
+}
+
 /** A box holding functions, drawn as one Graphviz graph of its own. */
 export interface LeafBox {
   kind: "leaf";
   id: string;
   label: string;
-  nodes: { id: string; label: string }[];
+  nodes: LeafNode[];
   edges: [string, string][];
 }
 
@@ -35,16 +41,26 @@ interface Drawing {
   body: string;
 }
 
+/** A placed object in Graphviz JSON. */
+interface DotObject {
+  _gvid: number;
+  name: string;
+  pos: string;
+}
+
+/** An edge in Graphviz JSON. */
+interface DotEdge {
+  _draw_: DrawOp[];
+  _hdraw_?: DrawOp[];
+  tail: number;
+  head: number;
+}
+
 /** Graphviz JSON, cut down to what placing children and edges needs. */
 interface DotJson {
   bb: string;
-  objects: { _gvid: number; name: string; pos: string }[];
-  edges?: {
-    _draw_: DrawOp[];
-    _hdraw_?: DrawOp[];
-    tail: number;
-    head: number;
-  }[];
+  objects: DotObject[];
+  edges?: DotEdge[];
 }
 
 interface DrawOp {
@@ -307,14 +323,17 @@ function renderBox(box: Box): Drawing {
   return decorate(box, inner);
 }
 
+/** The SVG document plus the dot sources used to lay it out. */
+export interface GraphResult {
+  svg: string;
+  sources: string[];
+}
+
 /**
  * Render a nested box graph to an SVG document. The returned dot sources are
  * every graph that was laid out along the way, outermost last.
  */
-export function renderGraph(root: GroupBox): {
-  svg: string;
-  sources: string[];
-} {
+export function renderGraph(root: GroupBox): GraphResult {
   sources.length = 0;
   const inner = renderGroupContent(root);
   const width = inner.width + 2 * MARGIN;
