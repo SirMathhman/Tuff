@@ -1,5 +1,6 @@
 import type { TuffError, TuffResult } from "./errors.ts";
-import type { BinaryNodeKind, TuffExpr, TuffStatement } from "./parser.ts";
+import type { BinaryNodeKind } from "./expr.ts";
+import type { TuffExpr, TuffStatement } from "./ast.ts";
 import { findBinding, type Binding, type Environment } from "./scopes.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */

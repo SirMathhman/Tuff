@@ -1,7 +1,8 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
-import type { BlockNode, Pos, TuffExpr, TuffStatement } from "./parser.ts";
-import { isExpr, parseLevel, parseOperand } from "./parser.ts";
+import { tokenDetail } from "./tokenizer.ts";
+import type { BlockNode, Pos, TuffExpr, TuffStatement } from "./ast.ts";
+import { isExpr, parseLevel, parseOperand } from "./expr.ts";
 
 /**
  * A function that parses one statement from a token list.
@@ -12,18 +13,6 @@ export type ParseStatement = (
   pos: Pos,
   line: number,
 ) => TuffStatement | TuffError;
-
-/**
- * Render a token as a short detail string for error messages.
- * @param token {TuffToken | undefined} - The token to render.
- * @returns {string} The identifier name, number value, or token kind.
- */
-function tokenDetail(token: TuffToken | undefined): string {
-  if (!token) return "";
-  if (token.kind === "Ident") return token.name;
-  if (token.kind === "Number") return String(token.value);
-  return token.kind;
-}
 
 /**
  * Parse the `= expr` tail of a declaration or assignment.
@@ -267,39 +256,4 @@ export function isStatement(
     value.kind === "Block" ||
     value.kind === "If"
   );
-}
-
-/**
- * Parse a token list into a list of statement ASTs.
- * @param tokens {TuffToken[]} - The program tokens.
- * @param line {number} - The 1-based line number of the first statement.
- * @returns {TuffStatement[] | TuffError} The statements, or a TuffError.
- */
-export function parseProgram(
-  tokens: TuffToken[],
-  line: number,
-): TuffStatement[] | TuffError {
-  const pos: Pos = { i: 0 };
-  const statements: TuffStatement[] = [];
-  for (;;) {
-    const next = tokens[pos.i];
-    if (!next) break;
-    const stmtLine = line + statements.length;
-    const stmt = parseAndCollect(tokens, pos, stmtLine, statements, parseStatement);
-    if (!isStatement(stmt)) return stmt;
-    const sep = tokens[pos.i];
-    if (sep?.kind === "Semicolon") {
-      pos.i++;
-      continue;
-    }
-    if (!sep) break;
-    if (stmt.kind !== "Block" && stmt.kind !== "If") {
-      return {
-        kind: "InvalidStatement",
-        token: tokenDetail(sep),
-        line: stmtLine,
-      };
-    }
-  }
-  return statements;
 }

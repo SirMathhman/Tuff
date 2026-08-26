@@ -1,246 +1,61 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
+import { tokenDetail } from "./tokenizer.ts";
+import type { Pos, TuffStatement } from "./ast.ts";
+import { isStatement, parseStatement } from "./statements.ts";
 
-/** A literal expression node (number or boolean). */
-export interface LiteralNode {
-  kind: "Literal";
-  value: number;
-}
-
-/** An identifier expression node. */
-export interface IdentifierNode {
-  kind: "Identifier";
-  name: string;
-}
-
-/** A binary `||` expression node. */
-export interface OrNode {
-  kind: "Or";
-  left: TuffExpr;
-  right: TuffExpr;
-}
-
-/** A binary `&&` expression node. */
-export interface AndNode {
-  kind: "And";
-  left: TuffExpr;
-  right: TuffExpr;
-}
-
-/** A binary `+` expression node. */
-export interface AddNode {
-  kind: "Add";
-  left: TuffExpr;
-  right: TuffExpr;
-}
-
-/** A binary `==` expression node. */
-export interface EqualNode {
-  kind: "Equal";
-  left: TuffExpr;
-  right: TuffExpr;
-}
-
-/** A binary `<` expression node. */
-export interface LessNode {
-  kind: "Less";
-  left: TuffExpr;
-  right: TuffExpr;
-}
-
-/** A prefix `&` reference expression node. */
-export interface RefNode {
-  kind: "Ref";
-  mut: boolean;
-  operand: TuffExpr;
-}
-
-/** A prefix `*` dereference expression node. */
-export interface DerefNode {
-  kind: "Deref";
-  operand: TuffExpr;
-}
-
-/** A parsed tuff expression. */
-export type TuffExpr =
-  | LiteralNode
-  | IdentifierNode
-  | OrNode
-  | AndNode
-  | AddNode
-  | EqualNode
-  | LessNode
-  | RefNode
-  | DerefNode;
-
-/** A `let` declaration statement node. */
-export interface LetNode {
-  kind: "Let";
-  mut: boolean;
-  name: string;
-  value: TuffExpr;
-}
-
-/** An assignment statement node. */
-export interface AssignNode {
-  kind: "Assign";
-  target: TuffExpr;
-  value: TuffExpr;
-}
-
-/** A `return` statement node. */
-export interface ReturnNode {
-  kind: "Return";
-  value: TuffExpr;
-}
-
-/** A braced block statement node. */
-export interface BlockNode {
-  kind: "Block";
-  statements: TuffStatement[];
-}
-
-/** An `if` statement node with an optional `else` branch. */
-export interface IfNode {
-  kind: "If";
-  condition: TuffExpr;
-  then: BlockNode;
-  else: BlockNode | null;
-}
-
-/** A parsed tuff statement. */
-export type TuffStatement =
-  | LetNode
-  | AssignNode
-  | ReturnNode
-  | BlockNode
-  | IfNode;
-
-/** A mutable parse position over a token list. */
-export interface Pos {
-  i: number;
-}
-
-/** The node kinds of the binary operators, shared with the evaluator's rule table. */
-export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less";
-
-/** A binary operator's grammar properties. */
-interface BinaryOp {
-  token: "Or" | "And" | "Plus" | "Equal" | "Less";
-  node: BinaryNodeKind;
-  assoc: "left" | "right";
-}
+export type {
+  LiteralNode,
+  IdentifierNode,
+  OrNode,
+  AndNode,
+  AddNode,
+  EqualNode,
+  LessNode,
+  RefNode,
+  DerefNode,
+  TuffExpr,
+  LetNode,
+  AssignNode,
+  ReturnNode,
+  BlockNode,
+  IfNode,
+  TuffStatement,
+  Pos,
+} from "./ast.ts";
 
 /**
- * The binary operator grammar, loosest binding first.
- * Precedence and associativity are declared here, never by function order.
+ * Parse a token list into a list of statement ASTs.
+ * @param tokens {TuffToken[]} - The program tokens.
+ * @param line {number} - The 1-based line number of the first statement.
+ * @returns {TuffStatement[] | TuffError} The statements, or a TuffError.
  */
-const BINARY_OPS: BinaryOp[] = [
-  { token: "Or", node: "Or", assoc: "right" },
-  { token: "And", node: "And", assoc: "right" },
-  { token: "Equal", node: "Equal", assoc: "left" },
-  { token: "Less", node: "Less", assoc: "left" },
-  { token: "Plus", node: "Add", assoc: "left" },
-];
-
-/**
- * Type guard distinguishing a parsed expression node from an error.
- * @param value {TuffExpr | TuffError} - The value to test.
- * @returns {boolean} True if the value is an expression node.
- */
-export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
-  if (
-    value.kind === "Literal" ||
-    value.kind === "Identifier" ||
-    value.kind === "Ref" ||
-    value.kind === "Deref"
-  ) {
-    return true;
-  }
-  return BINARY_OPS.some((op) => op.node === value.kind);
-}
-
-/**
- * Parse a single operand: a literal, an identifier, or a parenthesized expression.
- * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the operand.
- * @param line {number} - The 1-based line number.
- * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
- */
-export function parseOperand(
+export function parseProgram(
   tokens: TuffToken[],
-  pos: Pos,
   line: number,
-): TuffExpr | TuffError {
-  const token = tokens[pos.i];
-  if (!token) return { kind: "InvalidExpression", expression: "", line };
-  if (token.kind === "Number" || token.kind === "Bool") {
-    pos.i++;
-    return { kind: "Literal", value: token.value };
-  }
-  if (token.kind === "Ref") {
-    pos.i++;
-    let mut = false;
-    const mutTok = tokens[pos.i];
-    if (mutTok?.kind === "Ident" && mutTok.name === "mut") {
-      mut = true;
+): TuffStatement[] | TuffError {
+  const pos: Pos = { i: 0 };
+  const statements: TuffStatement[] = [];
+  for (;;) {
+    const next = tokens[pos.i];
+    if (!next) break;
+    const stmtLine = line + statements.length;
+    const stmt = parseStatement(tokens, pos, stmtLine);
+    if (!isStatement(stmt)) return stmt;
+    statements.push(stmt);
+    const sep = tokens[pos.i];
+    if (sep?.kind === "Semicolon") {
       pos.i++;
+      continue;
     }
-    const operand = parseOperand(tokens, pos, line);
-    if (!isExpr(operand)) return operand;
-    return { kind: "Ref", mut, operand };
-  }
-  if (token.kind === "Deref") {
-    pos.i++;
-    const operand = parseOperand(tokens, pos, line);
-    if (!isExpr(operand)) return operand;
-    return { kind: "Deref", operand };
-  }
-  if (token.kind === "Ident") {
-    pos.i++;
-    return { kind: "Identifier", name: token.name };
-  }
-  if (token.kind === "LParen") {
-    pos.i++;
-    const inner = parseLevel(tokens, pos, line, 0);
-    if (!isExpr(inner)) return inner;
-    const close = tokens[pos.i];
-    if (close?.kind !== "RParen") {
-      return { kind: "InvalidExpression", expression: "", line };
+    if (!sep) break;
+    if (stmt.kind !== "Block" && stmt.kind !== "If") {
+      return {
+        kind: "InvalidStatement",
+        token: tokenDetail(sep),
+        line: stmtLine,
+      };
     }
-    pos.i++;
-    return inner;
   }
-  return { kind: "InvalidExpression", expression: "", line };
-}
-
-/**
- * Parse an expression at one precedence level of the binary operator grammar.
- * @param tokens {TuffToken[]} - The token list.
- * @param pos {Pos} - The mutable parse position, advanced past the expression.
- * @param line {number} - The 1-based line number.
- * @param level {number} - The index into BINARY_OPS; the next level binds tighter.
- * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
- */
-export function parseLevel(
-  tokens: TuffToken[],
-  pos: Pos,
-  line: number,
-  level: number,
-): TuffExpr | TuffError {
-  const op = BINARY_OPS[level];
-  if (!op) return parseOperand(tokens, pos, line);
-  const first = parseLevel(tokens, pos, line, level + 1);
-  if (!isExpr(first)) return first;
-  let left: TuffExpr = first;
-  while (tokens[pos.i]?.kind === op.token) {
-    pos.i++;
-    const right =
-      op.assoc === "right"
-        ? parseLevel(tokens, pos, line, level)
-        : parseLevel(tokens, pos, line, level + 1);
-    if (!isExpr(right)) return right;
-    left = { kind: op.node, left, right };
-  }
-  return left;
+  return statements;
 }

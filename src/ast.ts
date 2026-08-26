@@ -1,0 +1,119 @@
+/** A literal expression node (number or boolean). */
+export interface LiteralNode {
+  kind: "Literal";
+  value: number;
+}
+
+/** An identifier expression node. */
+export interface IdentifierNode {
+  kind: "Identifier";
+  name: string;
+}
+
+/** A binary `||` expression node. */
+export interface OrNode {
+  kind: "Or";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A binary `&&` expression node. */
+export interface AndNode {
+  kind: "And";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A binary `+` expression node. */
+export interface AddNode {
+  kind: "Add";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A binary `==` expression node. */
+export interface EqualNode {
+  kind: "Equal";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A binary `<` expression node. */
+export interface LessNode {
+  kind: "Less";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
+/** A prefix `&` reference expression node. */
+export interface RefNode {
+  kind: "Ref";
+  mut: boolean;
+  operand: TuffExpr;
+}
+
+/** A prefix `*` dereference expression node. */
+export interface DerefNode {
+  kind: "Deref";
+  operand: TuffExpr;
+}
+
+/** A parsed tuff expression. */
+export type TuffExpr =
+  | LiteralNode
+  | IdentifierNode
+  | OrNode
+  | AndNode
+  | AddNode
+  | EqualNode
+  | LessNode
+  | RefNode
+  | DerefNode;
+
+/** A `let` declaration statement node. */
+export interface LetNode {
+  kind: "Let";
+  mut: boolean;
+  name: string;
+  value: TuffExpr;
+}
+
+/** An assignment statement node. */
+export interface AssignNode {
+  kind: "Assign";
+  target: TuffExpr;
+  value: TuffExpr;
+}
+
+/** A `return` statement node. */
+export interface ReturnNode {
+  kind: "Return";
+  value: TuffExpr;
+}
+
+/** A braced block statement node. */
+export interface BlockNode {
+  kind: "Block";
+  statements: TuffStatement[];
+}
+
+/** An `if` statement node with an optional `else` branch. */
+export interface IfNode {
+  kind: "If";
+  condition: TuffExpr;
+  then: BlockNode;
+  else: BlockNode | null;
+}
+
+/** A parsed tuff statement. */
+export type TuffStatement =
+  | LetNode
+  | AssignNode
+  | ReturnNode
+  | BlockNode
+  | IfNode;
+
+/** A mutable parse position over a token list. */
+export interface Pos {
+  i: number;
+}

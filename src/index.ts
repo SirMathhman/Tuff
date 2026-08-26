@@ -1,6 +1,6 @@
 import type { TuffResult } from "./errors.ts";
 import { executeStatements } from "./evaluator.ts";
-import { parseProgram } from "./statements.ts";
+import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
 import { tokenize } from "./tokenizer.ts";
 

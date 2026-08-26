@@ -182,6 +182,18 @@ function readToken(text: string, i: number): ReadToken | TokenizeError | null {
 }
 
 /**
+ * Render a token as a short detail string for error messages.
+ * @param token {TuffToken | undefined} - The token to render.
+ * @returns {string} The identifier name, number value, or token kind.
+ */
+export function tokenDetail(token: TuffToken | undefined): string {
+  if (!token) return "";
+  if (token.kind === "Ident") return token.name;
+  if (token.kind === "Number") return String(token.value);
+  return token.kind;
+}
+
+/**
  * Tokenize an expression string into a flat list of tokens.
  * @param text {string} - The expression text.
  * @returns {TokenizeResult} The tokens in source order, or a tokenization error.
