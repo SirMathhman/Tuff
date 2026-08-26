@@ -44,6 +44,7 @@ export interface EqualNode {
 /** A prefix `&` reference expression node. */
 export interface RefNode {
   kind: "Ref";
+  mut: boolean;
   operand: TuffExpr;
 }
 
@@ -75,7 +76,7 @@ export interface LetNode {
 /** An assignment statement node. */
 export interface AssignNode {
   kind: "Assign";
-  name: string;
+  target: TuffExpr;
   value: TuffExpr;
 }
 
@@ -152,12 +153,23 @@ function parseOperand(
     pos.i++;
     return { kind: "Literal", value: token.value };
   }
-  if (token.kind === "Ref" || token.kind === "Deref") {
-    const kind = token.kind;
+  if (token.kind === "Ref") {
+    pos.i++;
+    let mut = false;
+    const mutTok = tokens[pos.i];
+    if (mutTok?.kind === "Ident" && mutTok.name === "mut") {
+      mut = true;
+      pos.i++;
+    }
+    const operand = parseOperand(tokens, pos, line);
+    if (!isExpr(operand)) return operand;
+    return { kind: "Ref", mut, operand };
+  }
+  if (token.kind === "Deref") {
     pos.i++;
     const operand = parseOperand(tokens, pos, line);
     if (!isExpr(operand)) return operand;
-    return { kind, operand };
+    return { kind: "Deref", operand };
   }
   if (token.kind === "Ident") {
     pos.i++;
@@ -325,7 +337,18 @@ function parseStatement(
     pos.i++;
     const value = parseValue(tokens, pos, line);
     if (!isExpr(value)) return value;
-    return { kind: "Assign", name, value };
+    return {
+      kind: "Assign",
+      target: { kind: "Identifier", name },
+      value,
+    };
+  }
+  if (token.kind === "Deref") {
+    const target = parseOperand(tokens, pos, line);
+    if (!isExpr(target)) return target;
+    const value = parseValue(tokens, pos, line);
+    if (!isExpr(value)) return value;
+    return { kind: "Assign", target, value };
   }
   return { kind: "InvalidStatement", statement: "", line };
 }
@@ -356,10 +379,8 @@ export function parseProgram(
   text: string,
   line: number,
 ): TuffStatement[] | TuffError {
-  let tokens: TuffToken[];
-  try {
-    tokens = tokenize(text);
-  } catch {
+  const tokens = tokenize(text);
+  if (!Array.isArray(tokens)) {
     return { kind: "InvalidStatement", statement: text.trim(), line };
   }
   const pos: Pos = { i: 0 };

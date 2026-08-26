@@ -21,10 +21,17 @@ export function findBinding(
   return undefined;
 }
 
-/** A per-evaluation registry mapping reference ids to their bindings. */
+/** A registered reference: the binding it points at and its mutability. */
+export interface RefEntry {
+  binding: Binding;
+  name: string;
+  mut: boolean;
+}
+
+/** A per-evaluation registry mapping reference ids to their entries. */
 export interface RefRegistry {
   next: number;
-  refs: Map<number, Binding>;
+  refs: Map<number, RefEntry>;
 }
 
 /**

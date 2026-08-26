@@ -229,3 +229,12 @@ test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
     value: 1,
   });
 });
+
+test('evaluateTuff("let mut x = 0; let y = &mut x; *y = 1; return x;") => 1', () => {
+  expect(
+    evaluateTuff("let mut x = 0; let y = &mut x; *y = 1; return x;"),
+  ).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

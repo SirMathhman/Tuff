@@ -42,6 +42,36 @@ interface Drawing {
   body: string;
 }
 
+/** A layout or rendering failure. */
+export interface DotError {
+  kind: "error";
+  message: string;
+}
+
+/** The output of a dot layout run: the rendered text, or a failure. */
+export type DotOutput = string | DotError;
+
+/** A rendered drawing, or a failure. */
+export type DrawingResult = Drawing | DotError;
+
+/**
+ * Type guard distinguishing a dot failure from rendered output.
+ * @param value {DotOutput} - The value to test.
+ * @returns {boolean} True if the value is a failure.
+ */
+export function isDotError(value: DotOutput): value is DotError {
+  return typeof value !== "string";
+}
+
+/**
+ * Type guard distinguishing a rendering failure from a drawing.
+ * @param value {DrawingResult} - The value to test.
+ * @returns {boolean} True if the value is a failure.
+ */
+export function isDrawingError(value: DrawingResult): value is DotError {
+  return "kind" in value;
+}
+
 /** A placed object in Graphviz JSON. */
 interface DotObject {
   _gvid: number;
@@ -122,9 +152,9 @@ function escXml(s: string): string {
  * Run the dot layout engine on a source string.
  * @param source - The dot source to lay out.
  * @param format - The output format.
- * @returns The rendered output.
+ * @returns {DotOutput} The rendered output, or a failure.
  */
-function runDot(source: string, format: "svg" | "json"): string {
+function runDot(source: string, format: "svg" | "json"): DotOutput {
   sources.push(source);
   const result = spawnSync("dot", [`-T${format}`], {
     input: source,
@@ -132,7 +162,10 @@ function runDot(source: string, format: "svg" | "json"): string {
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.status !== 0 || !result.stdout) {
-    throw new Error(`dot -T${format} failed: ${result.stderr ?? result.error}`);
+    return {
+      kind: "error",
+      message: `dot -T${format} failed: ${result.stderr ?? result.error}`,
+    };
   }
   return result.stdout;
 }
@@ -143,12 +176,14 @@ function runDot(source: string, format: "svg" | "json"): string {
 /**
  * Extract the drawing from a standalone Graphviz SVG.
  * @param svg - The SVG document to extract from.
- * @returns The extracted drawing.
+ * @returns {DrawingResult} The extracted drawing, or a failure.
  */
-function svgFragment(svg: string): Drawing {
+function svgFragment(svg: string): DrawingResult {
   const viewBox = /viewBox="[\d.-]+ [\d.-]+ ([\d.]+) ([\d.]+)"/.exec(svg);
   const open = /<g id="graph0"[^>]*transform="([^"]*)"[^>]*>/.exec(svg);
-  if (!viewBox || !open) throw new Error("unrecognized SVG from dot");
+  if (!viewBox || !open) {
+    return { kind: "error", message: "unrecognized SVG from dot" };
+  }
   const inner = svg
     .slice(open.index + open[0].length, svg.lastIndexOf("</g>"))
     .replace(/<polygon fill="(?:white|#ffffff)"[^>]*\/>/, "")
@@ -206,9 +241,9 @@ function edgeKey(from: string, to: string): string {
 /**
  * Render a leaf box (a single file's functions) to a drawing.
  * @param box - The leaf box to render.
- * @returns The rendered drawing.
+ * @returns {DrawingResult} The rendered drawing, or a failure.
  */
-function renderLeaf(box: LeafBox): Drawing {
+function renderLeaf(box: LeafBox): DrawingResult {
   // Function names, not the qualified ids, keep the dot source readable and
   // free of the backslashes a Windows path drags in.
   const names = new Map(box.nodes.map((node) => [node.id, node.label]));
@@ -238,7 +273,9 @@ function renderLeaf(box: LeafBox): Drawing {
     );
   }
   lines.push("}");
-  return svgFragment(runDot(lines.join("\n"), "svg"));
+  const dot = runDot(lines.join("\n"), "svg");
+  if (isDotError(dot)) return dot;
+  return svgFragment(dot);
 }
 
 /**
@@ -337,15 +374,20 @@ function drawEdges(
 /**
  * Render a group box's content (children and edges) to a drawing.
  * @param box - The group box to render.
- * @returns The rendered drawing.
+ * @returns {DrawingResult} The rendered drawing, or a failure.
  */
-function renderGroupContent(box: GroupBox): Drawing {
-  const sizes = new Map(box.children.map((c) => [c.id, renderBox(c)] as const));
+function renderGroupContent(box: GroupBox): DrawingResult {
+  const sizes = new Map<string, Drawing>();
+  for (const child of box.children) {
+    const drawing = renderBox(child);
+    if (isDrawingError(drawing)) return drawing;
+    sizes.set(child.id, drawing);
+  }
   // Children are addressed by plain names so an id can be any shape of path.
   const names = new Map(box.children.map((c, i) => [c.id, `box${i}`] as const));
-  const json = JSON.parse(
-    runDot(groupDot(box, sizes, names), "json"),
-  ) as DotJson;
+  const dot = runDot(groupDot(box, sizes, names), "json");
+  if (isDotError(dot)) return dot;
+  const json = JSON.parse(dot) as DotJson;
   const [, , width, height] = json.bb.split(",").map(Number);
   const flipY = (y: number): number => height! - y;
 
@@ -397,10 +439,11 @@ function decorate(box: Box, inner: Drawing): Drawing {
 /**
  * Render a box (leaf or group) to a drawing.
  * @param box - The box to render.
- * @returns The rendered drawing.
+ * @returns {DrawingResult} The rendered drawing, or a failure.
  */
-function renderBox(box: Box): Drawing {
+function renderBox(box: Box): DrawingResult {
   const inner = box.kind === "leaf" ? renderLeaf(box) : renderGroupContent(box);
+  if (isDrawingError(inner)) return inner;
   return decorate(box, inner);
 }
 
@@ -414,11 +457,12 @@ export interface GraphResult {
  * Render a nested box graph to an SVG document. The returned dot sources are
  * every graph that was laid out along the way, outermost last.
  * @param root - The root group box to render.
- * @returns The SVG document and the dot sources used.
+ * @returns {GraphResult | DotError} The SVG document and the dot sources used, or a failure.
  */
-export function renderGraph(root: GroupBox): GraphResult {
+export function renderGraph(root: GroupBox): GraphResult | DotError {
   sources.length = 0;
   const inner = renderGroupContent(root);
+  if (isDrawingError(inner)) return inner;
   const width = inner.width + 2 * MARGIN;
   const height = inner.height + 2 * MARGIN;
   const svg = [

@@ -245,7 +245,12 @@ for (const [id, called] of calls) {
   }
 }
 
-const { svg, sources } = renderGraph(rootBox);
+const rendered = renderGraph(rootBox);
+if ("kind" in rendered) {
+  console.error(rendered.message);
+  process.exit(1);
+}
+const { svg, sources } = rendered;
 const docsDir = join(root, "docs");
 mkdirSync(docsDir, { recursive: true });
 const dotPath = join(docsDir, "callgraph.dot");

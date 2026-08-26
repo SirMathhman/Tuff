@@ -96,71 +96,97 @@ export type TuffToken =
 
 /** A single token plus the index just past it. */
 interface ReadToken {
+  kind: "token";
   token: TuffToken;
   next: number;
 }
+
+/** A tokenization failure: an unrecognized character. */
+export interface TokenizeError {
+  kind: "error";
+  message: string;
+}
+
+/** The result of tokenizing: the token list, or a tokenization error. */
+export type TokenizeResult = TuffToken[] | TokenizeError;
 
 /**
  * Read one token starting at an index, skipping leading whitespace.
  * @param text {string} - The expression text.
  * @param i {number} - The index to read from.
- * @returns {ReadToken | null} The token and the index just past it, or null if only whitespace remains.
- * @throws {Error} If the text contains an unrecognized character.
+ * @returns {ReadToken | TokenizeError | null} The token and the index just past it, a tokenization error, or null if only whitespace remains.
  */
-function readToken(text: string, i: number): ReadToken | null {
+function readToken(
+  text: string,
+  i: number,
+): ReadToken | TokenizeError | null {
   let j = i;
   while (j < text.length && /\s/.test(text[j] ?? "")) j++;
   if (j >= text.length) return null;
   const ch = text[j] ?? "";
-  if (ch === "(") return { token: { kind: "LParen" }, next: j + 1 };
-  if (ch === ")") return { token: { kind: "RParen" }, next: j + 1 };
-  if (text.startsWith("||", j)) return { token: { kind: "Or" }, next: j + 2 };
-  if (text.startsWith("&&", j)) return { token: { kind: "And" }, next: j + 2 };
-  if (ch === "+") return { token: { kind: "Plus" }, next: j + 1 };
+  if (ch === "(")
+    return { kind: "token", token: { kind: "LParen" }, next: j + 1 };
+  if (ch === ")")
+    return { kind: "token", token: { kind: "RParen" }, next: j + 1 };
+  if (text.startsWith("||", j))
+    return { kind: "token", token: { kind: "Or" }, next: j + 2 };
+  if (text.startsWith("&&", j))
+    return { kind: "token", token: { kind: "And" }, next: j + 2 };
+  if (ch === "+")
+    return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
-    return { token: { kind: "Equal" }, next: j + 2 };
-  if (ch === "&") return { token: { kind: "Ref" }, next: j + 1 };
-  if (ch === "*") return { token: { kind: "Deref" }, next: j + 1 };
-  if (ch === "=") return { token: { kind: "Assign" }, next: j + 1 };
-  if (ch === ";") return { token: { kind: "Semicolon" }, next: j + 1 };
-  if (ch === "{") return { token: { kind: "LBrace" }, next: j + 1 };
-  if (ch === "}") return { token: { kind: "RBrace" }, next: j + 1 };
+    return { kind: "token", token: { kind: "Equal" }, next: j + 2 };
+  if (ch === "&")
+    return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
+  if (ch === "*")
+    return { kind: "token", token: { kind: "Deref" }, next: j + 1 };
+  if (ch === "=")
+    return { kind: "token", token: { kind: "Assign" }, next: j + 1 };
+  if (ch === ";")
+    return { kind: "token", token: { kind: "Semicolon" }, next: j + 1 };
+  if (ch === "{")
+    return { kind: "token", token: { kind: "LBrace" }, next: j + 1 };
+  if (ch === "}")
+    return { kind: "token", token: { kind: "RBrace" }, next: j + 1 };
   const rest = text.slice(j);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {
     return {
+      kind: "token",
       token: { kind: "Number", value: Number(num[0]) },
       next: j + num[0].length,
     };
   }
   if (/^true\b/.test(rest))
-    return { token: { kind: "Bool", value: 1 }, next: j + 4 };
+    return { kind: "token", token: { kind: "Bool", value: 1 }, next: j + 4 };
   if (/^false\b/.test(rest))
-    return { token: { kind: "Bool", value: 0 }, next: j + 5 };
+    return { kind: "token", token: { kind: "Bool", value: 0 }, next: j + 5 };
   const ident = rest.match(/^\w+/);
   if (ident) {
     return {
+      kind: "token",
       token: { kind: "Ident", name: ident[0] },
       next: j + ident[0].length,
     };
   }
-  throw new Error(
-    `Unexpected character ${JSON.stringify(ch)} in ${JSON.stringify(text)}`,
-  );
+  return {
+    kind: "error",
+    message: `Unexpected character ${JSON.stringify(ch)} in ${JSON.stringify(text)}`,
+  };
 }
 
 /**
  * Tokenize an expression string into a flat list of tokens.
  * @param text {string} - The expression text.
- * @returns {TuffToken[]} The tokens in source order.
- * @throws {Error} If the text contains an unrecognized character.
+ * @returns {TokenizeResult} The tokens in source order, or a tokenization error.
  */
-export function tokenize(text: string): TuffToken[] {
+export function tokenize(text: string): TokenizeResult {
   const tokens: TuffToken[] = [];
   let i = 0;
   while (i < text.length) {
     const read = readToken(text, i);
     if (!read) break;
+    if (read.kind === "error") return read;
     tokens.push(read.token);
     i = read.next;
   }

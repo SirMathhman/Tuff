@@ -1,6 +1,6 @@
 import type { TuffError, TuffResult } from "./errors.ts";
 import type { TuffExpr, TuffStatement } from "./parser.ts";
-import { findBinding, type Environment } from "./scopes.ts";
+import { findBinding, type Binding, type Environment } from "./scopes.ts";
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
@@ -24,12 +24,7 @@ export function executeStatements(
   for (let i = 0; i < statements.length; i++) {
     const stmt = statements[i];
     if (!stmt) continue;
-    const result = executeStatement(
-      stmt,
-      baseLine + i,
-      env,
-      executeStatements,
-    );
+    const result = executeStatement(stmt, baseLine + i, env, executeStatements);
     if (result) return result;
   }
   return undefined;
@@ -69,39 +64,72 @@ function executeStatement(
     if (!value.ok) return value;
     return value;
   }
-  return executeAssignment(stmt.name, stmt.value, line, env);
+  return executeAssignment(stmt.target, stmt.value, line, env);
+}
+
+/** A resolved assignment target: the binding to write and its mutability. */
+interface Lvalue {
+  binding: Binding;
+  name: string;
+  mut: boolean;
+}
+
+/**
+ * Resolve an assignment target expression to the binding it writes to.
+ * @param target {TuffExpr} - The target: an identifier or a dereference.
+ * @param line {number} - The 1-based line number.
+ * @param env {Environment} - The evaluation environment.
+ * @returns {Lvalue | TuffError} The resolved target, or a TuffError.
+ */
+function resolveLvalue(
+  target: TuffExpr,
+  line: number,
+  env: Environment,
+): Lvalue | TuffError {
+  if (target.kind === "Identifier") {
+    const binding = findBinding(env.scopes, target.name);
+    if (!binding) {
+      return { kind: "UnidentifiedIdentifier", name: target.name, line };
+    }
+    return { binding, name: target.name, mut: binding.mut };
+  }
+  if (target.kind === "Deref") {
+    const operand = evalExpr(target.operand, line, env);
+    if (typeof operand !== "number") return operand;
+    const entry = env.refs.refs.get(operand);
+    if (!entry) return { kind: "InvalidDeref", line };
+    return { binding: entry.binding, name: entry.name, mut: entry.mut };
+  }
+  return { kind: "InvalidDeref", line };
 }
 
 /**
  * Execute an assignment statement.
- * @param name {string} - The variable being assigned.
+ * @param target {TuffExpr} - The target: an identifier or a dereference.
  * @param value {TuffExpr} - The expression to assign.
  * @param line {number} - The 1-based line number.
  * @param env {Environment} - The evaluation environment.
  * @returns {TuffResult | undefined} A result if the statement terminates, else undefined.
  */
 function executeAssignment(
-  name: string,
+  target: TuffExpr,
   value: TuffExpr,
   line: number,
   env: Environment,
 ): TuffResult | undefined {
-  const binding = findBinding(env.scopes, name);
-  if (!binding) {
-    return {
-      ok: false,
-      error: { kind: "UnidentifiedIdentifier", name, line },
-    };
+  const lvalue = resolveLvalue(target, line, env);
+  if ("kind" in lvalue) {
+    return { ok: false, error: lvalue };
   }
-  if (!binding.mut) {
+  if (!lvalue.mut) {
     return {
       ok: false,
-      error: { kind: "ImmutableAssignment", name, line },
+      error: { kind: "ImmutableAssignment", name: lvalue.name, line },
     };
   }
   const result = evalOrError(value, line, env);
   if (!result.ok) return result;
-  binding.value = result.value;
+  lvalue.binding.value = result.value;
   return undefined;
 }
 
@@ -180,22 +208,27 @@ function evalExpr(
     return { kind: "UnidentifiedIdentifier", name: node.name, line };
   }
   if (node.kind === "Ref") {
-    if (node.operand.kind !== "Identifier") return { kind: "InvalidDeref", line };
+    if (node.operand.kind !== "Identifier")
+      return { kind: "InvalidDeref", line };
     const binding = findBinding(env.scopes, node.operand.name);
     if (!binding) {
       return { kind: "UnidentifiedIdentifier", name: node.operand.name, line };
     }
     const id = env.refs.next;
     env.refs.next++;
-    env.refs.refs.set(id, binding);
+    env.refs.refs.set(id, {
+      binding,
+      name: node.operand.name,
+      mut: node.mut,
+    });
     return id;
   }
   if (node.kind === "Deref") {
     const operand = evalExpr(node.operand, line, env);
     if (typeof operand !== "number") return operand;
-    const binding = env.refs.refs.get(operand);
-    if (!binding) return { kind: "InvalidDeref", line };
-    return binding.value;
+    const entry = env.refs.refs.get(operand);
+    if (!entry) return { kind: "InvalidDeref", line };
+    return entry.binding.value;
   }
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, line, env);
