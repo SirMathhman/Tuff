@@ -70,14 +70,21 @@ test("for loop over a range", () => {
   ).toEqual({ ok: true, value: 6 });
 });
 test("for loop variable does not leak after the loop", () => {
-  expect(
-    evaluateTuff("let i = 10; for (i in 0..4) { } return i;"),
-  ).toEqual({ ok: true, value: 10 });
+  expect(evaluateTuff("let i = 10; for (i in 0..4) { } return i;")).toEqual({
+    ok: true,
+    value: 10,
+  });
 });
 test("tuple field access", () => {
   expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual(
     { ok: true, value: 7 },
   );
+});
+test("reference and dereference", () => {
+  expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
 });
 test("array index access", () => {
   expect(

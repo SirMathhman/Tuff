@@ -27,9 +27,17 @@ interface TupleValue {
 }
 
 /**
- * A runtime value: a number, a boolean, or a tuple of values.
+ * A reference runtime value: a pointer to a named binding in the scope.
  */
-type Value = NumberValue | BooleanValue | TupleValue;
+interface RefValue {
+  kind: "ref";
+  name: string;
+}
+
+/**
+ * A runtime value: a number, a boolean, a tuple of values, or a reference.
+ */
+type Value = NumberValue | BooleanValue | TupleValue | RefValue;
 
 /**
  * A variable binding: its value and whether it is mutable.
@@ -80,6 +88,20 @@ function evalExpr(expr: Expr, vars: Map<string, Binding>): Value {
   if (expr.type === "Binary") {
     return evalBinary(expr, vars);
   }
+  if (expr.type === "Ref") {
+    assert(expr.operand.type === "Identifier", "Expected identifier in reference");
+    const name = expr.operand.name;
+    const binding = vars.get(name);
+    assert(binding !== undefined, `Unknown identifier: ${name}`);
+    return { kind: "ref", name };
+  }
+  if (expr.type === "Deref") {
+    const ref = evalExpr(expr.operand, vars);
+    assert(ref.kind === "ref", `Expected reference, got ${ref.kind}`);
+    const binding = vars.get(ref.name);
+    assert(binding !== undefined, `Unknown identifier: ${ref.name}`);
+    return binding.value;
+  }
   const binding = vars.get(expr.name);
   assert(binding !== undefined, `Unknown identifier: ${expr.name}`);
   return binding.value;
@@ -113,7 +135,12 @@ function evalBinary(expr: BinaryExpr, vars: Map<string, Binding>): Value {
     return { kind: "boolean", value: valuesEqual(left, right) ? 1 : 0 };
   }
   if (expr.op === "<") {
-    if (left.kind === "tuple" || right.kind === "tuple") {
+    if (
+      left.kind === "tuple" ||
+      right.kind === "tuple" ||
+      left.kind === "ref" ||
+      right.kind === "ref"
+    ) {
       return { kind: "boolean", value: 0 };
     }
     const less = left.kind === right.kind && left.value < right.value ? 1 : 0;
@@ -130,6 +157,7 @@ function evalBinary(expr: BinaryExpr, vars: Map<string, Binding>): Value {
  */
 function toNumber(value: Value): number {
   assert(value.kind !== "tuple", "Cannot use a tuple as a number");
+  assert(value.kind !== "ref", "Cannot use a reference as a number");
   return value.value;
 }
 
@@ -146,7 +174,10 @@ function valuesEqual(a: Value, b: Value): boolean {
     return tupleElementsEqual(a.elements, b.elements, valuesEqual);
   }
   if (a.kind === "tuple" || b.kind === "tuple") return false;
-  return a.value === b.value;
+  if (a.kind === "ref" && b.kind === "ref") return a.name === b.name;
+  if (a.kind === "number" && b.kind === "number") return a.value === b.value;
+  if (a.kind === "boolean" && b.kind === "boolean") return a.value === b.value;
+  return false;
 }
 
 /**

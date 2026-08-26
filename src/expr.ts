@@ -60,8 +60,27 @@ export interface FieldAccessExpr {
 }
 
 /**
+ * A reference expression: takes the address of its operand variable.
+ */
+export interface RefExpr {
+  type: "Ref";
+  operand: Expr;
+  pos: number;
+}
+
+/**
+ * A dereference expression: reads the value pointed to by its operand.
+ */
+export interface DerefExpr {
+  type: "Deref";
+  operand: Expr;
+  pos: number;
+}
+
+/**
  * An expression: a number or boolean literal, an identifier reference,
- * a binary operator expression, a tuple literal, or a field access.
+ * a binary operator expression, a tuple literal, a field access, a
+ * reference, or a dereference.
  */
 export type Expr =
   | NumberExpr
@@ -69,7 +88,9 @@ export type Expr =
   | BooleanExpr
   | BinaryExpr
   | TupleExpr
-  | FieldAccessExpr;
+  | FieldAccessExpr
+  | RefExpr
+  | DerefExpr;
 
 /**
  * A successful expression parse result.
@@ -220,12 +241,12 @@ function parseAddition(state: ParserState): ParseExprResult {
  * @returns The expression, or a structured parse error.
  */
 function parseTerm(state: ParserState): ParseExprResult {
-  const first = parsePrimary(state);
+  const first = parseUnary(state);
   if (!first.ok) return first;
   let expr = first.expr;
   while (!atEnd(state) && peek(state).value === "*") {
     const opTok = next(state);
-    const right = parsePrimary(state);
+    const right = parseUnary(state);
     if (!right.ok) return right;
     expr = {
       type: "Binary",
@@ -236,6 +257,28 @@ function parseTerm(state: ParserState): ParseExprResult {
     };
   }
   return { ok: true, expr };
+}
+
+/**
+ * Parse a unary (prefix) expression: `*` dereference or `&` reference,
+ * or a primary expression. Prefix operators are right-associative and
+ * bind tighter than the `*` multiplication operator.
+ *
+ * @param state - The parser state.
+ * @returns The expression, or a structured parse error.
+ */
+function parseUnary(state: ParserState): ParseExprResult {
+  if (!atEnd(state) && (peek(state).value === "*" || peek(state).value === "&")) {
+    const opTok = next(state);
+    const operand = parseUnary(state);
+    if (!operand.ok) return operand;
+    const type = opTok.value === "*" ? "Deref" : "Ref";
+    return {
+      ok: true,
+      expr: { type, operand: operand.expr, pos: opTok.pos },
+    };
+  }
+  return parsePrimary(state);
 }
 
 /**
