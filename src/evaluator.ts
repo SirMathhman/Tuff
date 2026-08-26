@@ -179,12 +179,18 @@ export function exec(
     if (stmt.type === "For") {
       const start = toNumber(evalExpr(stmt.start, vars));
       const end = toNumber(evalExpr(stmt.end, vars));
+      const prev = vars.get(stmt.name);
       for (let i = start; i < end; i++) {
         vars.set(stmt.name, {
           value: { kind: "number", value: i },
           mutable: true,
         });
         exec(stmt.body, vars);
+      }
+      if (prev === undefined) {
+        vars.delete(stmt.name);
+      } else {
+        vars.set(stmt.name, prev);
       }
       continue;
     }

@@ -69,6 +69,11 @@ test("for loop over a range", () => {
     evaluateTuff("let mut sum = 0; for (i in 0..4) { sum += i; } return sum;"),
   ).toEqual({ ok: true, value: 6 });
 });
+test("for loop variable does not leak after the loop", () => {
+  expect(
+    evaluateTuff("let i = 10; for (i in 0..4) { } return i;"),
+  ).toEqual({ ok: true, value: 10 });
+});
 test("tuple field access", () => {
   expect(evaluateTuff("let tuple = (3, 4); return tuple.0 + tuple.1;")).toEqual(
     { ok: true, value: 7 },
