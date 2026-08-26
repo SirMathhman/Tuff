@@ -41,6 +41,18 @@ export interface EqualNode {
   right: TuffExpr;
 }
 
+/** A prefix `&` reference expression node. */
+export interface RefNode {
+  kind: "Ref";
+  operand: TuffExpr;
+}
+
+/** A prefix `*` dereference expression node. */
+export interface DerefNode {
+  kind: "Deref";
+  operand: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -48,7 +60,9 @@ export type TuffExpr =
   | OrNode
   | AndNode
   | AddNode
-  | EqualNode;
+  | EqualNode
+  | RefNode
+  | DerefNode;
 
 /** A `let` declaration statement node. */
 export interface LetNode {
@@ -109,7 +123,14 @@ const BINARY_OPS: BinaryOp[] = [
  * @returns {boolean} True if the value is an expression node.
  */
 export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
-  if (value.kind === "Literal" || value.kind === "Identifier") return true;
+  if (
+    value.kind === "Literal" ||
+    value.kind === "Identifier" ||
+    value.kind === "Ref" ||
+    value.kind === "Deref"
+  ) {
+    return true;
+  }
   return BINARY_OPS.some((op) => op.node === value.kind);
 }
 
@@ -130,6 +151,13 @@ function parseOperand(
   if (token.kind === "Number" || token.kind === "Bool") {
     pos.i++;
     return { kind: "Literal", value: token.value };
+  }
+  if (token.kind === "Ref" || token.kind === "Deref") {
+    const kind = token.kind;
+    pos.i++;
+    const operand = parseOperand(tokens, pos, line);
+    if (!isExpr(operand)) return operand;
+    return { kind, operand };
   }
   if (token.kind === "Ident") {
     pos.i++;
@@ -178,7 +206,6 @@ function parseLevel(
     left = { kind: op.node, left, right };
   }
   return left;
-  v;
 }
 
 /**

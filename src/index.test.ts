@@ -222,3 +222,10 @@ test('evaluateTuff("return 1; 2;") => Err', () => {
     });
   }
 });
+
+test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
+  expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

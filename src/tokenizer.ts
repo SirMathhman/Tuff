@@ -36,6 +36,16 @@ export interface EqualToken {
   kind: "Equal";
 }
 
+/** A `&` reference token. */
+export interface RefToken {
+  kind: "Ref";
+}
+
+/** A `*` dereference token. */
+export interface DerefToken {
+  kind: "Deref";
+}
+
 /** A `=` assignment token. */
 export interface AssignToken {
   kind: "Assign";
@@ -75,6 +85,8 @@ export type TuffToken =
   | AndToken
   | PlusToken
   | EqualToken
+  | RefToken
+  | DerefToken
   | AssignToken
   | SemicolonToken
   | LBraceToken
@@ -107,6 +119,8 @@ function readToken(text: string, i: number): ReadToken | null {
   if (ch === "+") return { token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))
     return { token: { kind: "Equal" }, next: j + 2 };
+  if (ch === "&") return { token: { kind: "Ref" }, next: j + 1 };
+  if (ch === "*") return { token: { kind: "Deref" }, next: j + 1 };
   if (ch === "=") return { token: { kind: "Assign" }, next: j + 1 };
   if (ch === ";") return { token: { kind: "Semicolon" }, next: j + 1 };
   if (ch === "{") return { token: { kind: "LBrace" }, next: j + 1 };

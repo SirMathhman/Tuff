@@ -1,5 +1,5 @@
 import type { TuffResult } from "./errors.ts";
-import { executeStatements } from "./evaluator.ts";
+import { createRefRegistry, executeStatements } from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import type { Binding } from "./scopes.ts";
 
@@ -12,6 +12,7 @@ export type {
   InvalidExpressionError,
   InvalidStatementError,
   ImmutableAssignmentError,
+  InvalidDerefError,
 } from "./errors.ts";
 export type {
   TuffExpr,
@@ -22,12 +23,15 @@ export type {
   AndNode,
   AddNode,
   EqualNode,
+  RefNode,
+  DerefNode,
   LetNode,
   AssignNode,
   ReturnNode,
   BlockNode,
 } from "./parser.ts";
 export type { Binding } from "./scopes.ts";
+export type { RefRegistry } from "./evaluator.ts";
 
 /**
  * Evaluate the tuffness of a string.
@@ -40,6 +44,7 @@ export function evaluateTuff(s: string): TuffResult {
     return { ok: false, error: program };
   }
   const scopes: Map<string, Binding>[] = [new Map()];
-  const result = executeStatements(program, scopes, 1);
+  const refs = createRefRegistry();
+  const result = executeStatements(program, scopes, 1, refs);
   return result ?? { ok: true, value: 0 };
 }

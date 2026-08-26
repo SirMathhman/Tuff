@@ -26,12 +26,19 @@ export interface ImmutableAssignmentError {
   line: number;
 }
 
+/** An error for dereferencing a value that is not a reference. */
+export interface InvalidDerefError {
+  kind: "InvalidDeref";
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
   | InvalidExpressionError
   | InvalidStatementError
-  | ImmutableAssignmentError;
+  | ImmutableAssignmentError
+  | InvalidDerefError;
 
 /** A successful evaluation result. */
 export interface TuffOk {
