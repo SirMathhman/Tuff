@@ -92,11 +92,12 @@ function checkStatement(
 }
 
 /**
- * Check an assignment statement against the target binding's declared kind.
+ * Check an assignment statement against the target binding's declaration.
  * @param stmt - The assignment statement to check.
  * @param line - The 1-based line number.
  * @param scopes - The stack of declared bindings.
- * @returns A TypeMismatch error if a mismatch is found, else null.
+ * @returns An UnidentifiedIdentifier, ImmutableAssignment, or TypeMismatch
+ * error if one is found, else null.
  */
 function checkAssignment(
   stmt: AssignNode,
@@ -105,7 +106,9 @@ function checkAssignment(
 ): TuffError | null {
   if (stmt.target.kind !== "Identifier") return null;
   const declared = findDeclared(scopes, stmt.target.name);
-  if (!declared) return null;
+  if (!declared) {
+    return { kind: "UnidentifiedIdentifier", name: stmt.target.name, line };
+  }
   if (!declared.mut) {
     return { kind: "ImmutableAssignment", name: stmt.target.name, line };
   }
