@@ -33,8 +33,8 @@ export interface FnParamDef {
 export interface FnDef {
   /** The parameter names and kinds, in source order. */
   params: FnParamDef[];
-  /** The declared return kind. */
-  returnType: ValueKind;
+  /** The declared return kind, if the declaration annotated one. */
+  returnType?: ValueKind;
 }
 
 /**

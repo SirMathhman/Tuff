@@ -521,16 +521,13 @@ function parseFn(
     };
   }
   pos.i++;
-  if (tokens[pos.i]?.kind !== "Colon") {
-    return {
-      kind: "InvalidStatement",
-      token: tokenDetail(tokens[pos.i]),
-      line,
-    };
+  let returnType: KindName | undefined;
+  if (tokens[pos.i]?.kind === "Colon") {
+    pos.i++;
+    const parsed = parseKindName(tokens, pos, line);
+    if (!isKindName(parsed)) return parsed;
+    returnType = parsed;
   }
-  pos.i++;
-  const returnType = parseKindName(tokens, pos, line);
-  if (!isKindName(returnType)) return returnType;
   if (tokens[pos.i]?.kind !== "Arrow") {
     return {
       kind: "InvalidStatement",

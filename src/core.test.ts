@@ -363,6 +363,14 @@ test('evaluateTuff("fn add(first : I32, second : I32) : I32 => { return first + 
   ).toEqual({ ok: true, value: 7 });
 });
 
+test('evaluateTuff("fn add(first :  I32, second : I32) => { return first + second; } return add(3, 4);") => 7', () => {
+  expect(
+    evaluateTuff(
+      "fn add(first :  I32, second : I32) => { return first + second; } return add(3, 4);",
+    ),
+  ).toEqual({ ok: true, value: 7 });
+});
+
 test('evaluateTuff("fn f(x : I32) : I32 => { return x; } let r = f(1); return r;") => 1', () => {
   expect(
     evaluateTuff(

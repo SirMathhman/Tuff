@@ -6,6 +6,7 @@ import {
   resolveKindName,
   type CheckContext,
   type FnDef,
+  type ValueKind,
 } from "./kinds.ts";
 import { checkKindName } from "./is-match.ts";
 import { checkReservedName } from "./reserved.ts";
@@ -22,11 +23,11 @@ export type CheckStatement = (
 ) => TuffError | null;
 
 /**
- * Check a `fn` declaration: each parameter's and the return's kind name must
- * name legal suffixes/kinds (with bare names resolved through the alias
- * stack), then register the function in the innermost scope. The body is
- * checked in a fresh scope where the parameters are declared as immutable
- * bindings of their declared kinds.
+ * Check a `fn` declaration: each parameter's kind name (and the return's,
+ * when annotated) must name legal suffixes/kinds (with bare names resolved
+ * through the alias stack), then register the function in the innermost
+ * scope. The body is checked in a fresh scope where the parameters are
+ * declared as immutable bindings of their declared kinds.
  * @param stmt - The Fn statement to check.
  * @param line - The 1-based line number.
  * @param context - The mutable check context.
@@ -50,14 +51,18 @@ export function checkFn(
     if (error) return error;
     params.push({ name: param.name, kind: kindValueKind(resolved) });
   }
-  const resolvedReturn = resolveKindName(stmt.returnType, context.aliases);
-  const returnError = checkKindName(resolvedReturn, line, context.structs);
-  if (returnError) return returnError;
+  let returnType: ValueKind | undefined;
+  if (stmt.returnType !== undefined) {
+    const resolvedReturn = resolveKindName(stmt.returnType, context.aliases);
+    const returnError = checkKindName(resolvedReturn, line, context.structs);
+    if (returnError) return returnError;
+    returnType = kindValueKind(resolvedReturn);
+  }
   const scope = context.fns[context.fns.length - 1];
   if (scope)
     scope[stmt.name] = {
       params,
-      returnType: kindValueKind(resolvedReturn),
+      returnType,
     };
   return checkFnBody(stmt, line, context, params, checkStatement);
 }

@@ -215,9 +215,10 @@ export interface FnParam {
 }
 
 /**
- * A `fn name(params) : KindName => body` function declaration statement node.
- * The body is a block statement; the function is compile-time registered and
- * executed by name at call sites.
+ * A `fn name(params) [: KindName] => body` function declaration statement
+ * node. The body is a block statement; the function is compile-time
+ * registered and executed by name at call sites. The return kind may be
+ * omitted, in which case the return type is inferred from the body.
  */
 export interface FnNode {
   kind: "Fn";
@@ -225,8 +226,8 @@ export interface FnNode {
   name: string;
   /** The declared parameters, in source order. */
   params: FnParam[];
-  /** The declared return kind. */
-  returnType: KindName;
+  /** The declared return kind, if annotated. */
+  returnType?: KindName;
   /** The function body block. */
   body: BlockNode;
 }
