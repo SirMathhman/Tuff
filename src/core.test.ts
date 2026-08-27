@@ -168,6 +168,13 @@ test('evaluateTuff("let mut x = 10U16; return &mut x is &U16;") => 1', () => {
   });
 });
 
+test('evaluateTuff("let x = 0U8; let y = &x; return &y is &&U8;") => 1', () => {
+  expect(evaluateTuff("let x = 0U8; let y = &x; return &y is &&U8;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

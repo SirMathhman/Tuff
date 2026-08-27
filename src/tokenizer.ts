@@ -162,12 +162,37 @@ export interface TokenizeError {
 export type TokenizeResult = TuffToken[] | TokenizeError;
 
 /**
+ * Whether a token can end an expression, so that a following `&&` is a
+ * logical AND rather than the start of a reference chain.
+ * @param token {TuffToken | undefined} - The previously emitted token.
+ * @returns {boolean} True if the token produces a value that can end an
+ * expression (a literal, identifier, or closing bracket).
+ */
+function endsExpression(token: TuffToken | undefined): boolean {
+  if (!token) return false;
+  return (
+    token.kind === "Number" ||
+    token.kind === "Bool" ||
+    token.kind === "Ident" ||
+    token.kind === "RParen" ||
+    token.kind === "RBracket" ||
+    token.kind === "RBrace"
+  );
+}
+
+/**
  * Read a punctuation or operator token starting at an index.
  * @param text {string} - The expression text.
  * @param j {number} - The index of the first non-whitespace character.
+ * @param prev {TuffToken | undefined} - The previously emitted token, used to
+ * disambiguate `&&` (logical AND after a value, else a reference chain).
  * @returns {ReadToken | null} The token and the index just past it, or null if no punctuation matches.
  */
-function readPunct(text: string, j: number): ReadToken | null {
+function readPunct(
+  text: string,
+  j: number,
+  prev: TuffToken | undefined,
+): ReadToken | null {
   const ch = text[j] ?? "";
   if (ch === "(")
     return { kind: "token", token: { kind: "LParen" }, next: j + 1 };
@@ -175,8 +200,11 @@ function readPunct(text: string, j: number): ReadToken | null {
     return { kind: "token", token: { kind: "RParen" }, next: j + 1 };
   if (text.startsWith("||", j))
     return { kind: "token", token: { kind: "Or" }, next: j + 2 };
-  if (text.startsWith("&&", j))
-    return { kind: "token", token: { kind: "And" }, next: j + 2 };
+  if (text.startsWith("&&", j)) {
+    if (endsExpression(prev))
+      return { kind: "token", token: { kind: "And" }, next: j + 2 };
+    return { kind: "token", token: { kind: "Ref" }, next: j + 1 };
+  }
   if (text.startsWith("+=", j))
     return { kind: "token", token: { kind: "PlusAssign" }, next: j + 2 };
   if (text.startsWith("..", j))
@@ -254,13 +282,19 @@ function readWord(text: string, j: number): ReadToken | TokenizeError {
  * Read one token starting at an index, skipping leading whitespace.
  * @param text {string} - The expression text.
  * @param i {number} - The index to read from.
+ * @param prev {TuffToken | undefined} - The previously emitted token, used to
+ * disambiguate `&&`.
  * @returns {ReadToken | TokenizeError | null} The token and the index just past it, a tokenization error, or null if only whitespace remains.
  */
-function readToken(text: string, i: number): ReadToken | TokenizeError | null {
+function readToken(
+  text: string,
+  i: number,
+  prev: TuffToken | undefined,
+): ReadToken | TokenizeError | null {
   let j = i;
   while (j < text.length && /\s/.test(text[j] ?? "")) j++;
   if (j >= text.length) return null;
-  return readPunct(text, j) ?? readWord(text, j);
+  return readPunct(text, j, prev) ?? readWord(text, j);
 }
 
 /**
@@ -283,11 +317,13 @@ export function tokenDetail(token: TuffToken | undefined): string {
 export function tokenize(text: string): TokenizeResult {
   const tokens: TuffToken[] = [];
   let i = 0;
+  let prev: TuffToken | undefined;
   while (i < text.length) {
-    const read = readToken(text, i);
+    const read = readToken(text, i, prev);
     if (!read) break;
     if (read.kind === "error") return read;
     tokens.push(read.token);
+    prev = read.token;
     i = read.next;
   }
   return tokens;

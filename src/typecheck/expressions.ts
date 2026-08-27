@@ -220,8 +220,9 @@ export function checkNumberSuffixes(
  */
 function checkIsOperand(expr: IsNode, line: number): TuffError | null {
   if (expr.right.kind === "Ref") {
-    const name =
-      expr.right.operand.kind === "Identifier" ? expr.right.operand.name : "";
+    let current: TuffExpr = expr.right;
+    while (current.kind === "Ref") current = current.operand;
+    const name = current.kind === "Identifier" ? current.name : "";
     if (!isNumberSuffix(name)) {
       return { kind: "InvalidNumberSuffix", suffix: name, line };
     }

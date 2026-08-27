@@ -51,12 +51,12 @@ function foldExpr(
 ): TuffExpr {
   if (expr.kind === "Is") {
     const left = foldExpr(expr.left, scopes, resolveDeref);
-    const refName = refSuffix(expr.right);
+    const ref = refTest(expr.right);
     const matched =
-      refName !== null
+      ref !== null
         ? isRefMatch(
             left,
-            refName,
+            ref,
             expr.right.kind === "Ref" ? expr.right.mut : false,
             scopes,
           )
@@ -158,40 +158,67 @@ function inSuffixRange(value: number, suffix: string): boolean {
 }
 
 /**
- * The suffix a reference type-test operand names, or null if the operand is
- * not a reference to a suffix. A reference type-test operand is a `&` whose
- * operand is an identifier naming a suffix (e.g. `&U16`).
- * @param expr - The type-test right operand to inspect.
- * @returns The named suffix, or null if the operand is not a reference test.
+ * A reference type-test: the depth of the `&` chain and the suffix the
+ * innermost identifier names.
  */
-function refSuffix(expr: TuffExpr): string | null {
-  if (expr.kind !== "Ref") return null;
-  if (expr.operand.kind !== "Identifier") return null;
-  return expr.operand.name;
+interface RefTest {
+  depth: number;
+  name: string;
+}
+
+/**
+ * The reference type-test a right operand names, or null if the operand is
+ * not a reference test. A reference type-test operand is one or more nested
+ * `&` whose innermost operand is an identifier naming a suffix (e.g. `&U16`,
+ * `&&U8`).
+ * @param expr - The type-test right operand to inspect.
+ * @returns The reference test (depth and named suffix), or null if the
+ * operand is not a chain of references to a suffix.
+ */
+function refTest(expr: TuffExpr): RefTest | null {
+  let depth = 0;
+  let current = expr;
+  while (current.kind === "Ref") {
+    depth++;
+    current = current.operand;
+  }
+  if (depth === 0 || current.kind !== "Identifier") return null;
+  return { depth, name: current.name };
 }
 
 /**
  * Whether a folded `is` left operand matches a reference type-test: the left
- * must be a `&` whose operand is an identifier bound to a value carrying the
- * named suffix. A `&mut` left reference also matches a `&` test, but a
- * non-`mut` left reference does not match a `&mut` test.
+ * must be a `&` whose operand is an identifier, and the binding's reference
+ * depth (the explicit `&` plus its `refTo` chain) must equal the test's depth,
+ * with the innermost binding carrying the named suffix. Only the outermost
+ * `&`'s mutability is compared: a `&mut` left reference also matches a `&`
+ * test, but a non-`mut` left reference does not match a `&mut` test.
  * @param left - The folded left operand.
- * @param name - The suffix the reference test names.
- * @param rightMut - Whether the reference test names a `&mut` reference.
+ * @param ref - The reference test (depth and named suffix).
+ * @param rightMut - Whether the outermost reference test names a `&mut`.
  * @param scopes - The stack of declared bindings.
- * @returns True if the left operand is a reference to a binding carrying the
- * named suffix, with a compatible mutability.
+ * @returns True if the left operand's reference depth and innermost suffix
+ * match the test, with a compatible outermost mutability.
  */
 function isRefMatch(
   left: TuffExpr,
-  name: string,
+  ref: RefTest,
   rightMut: boolean,
   scopes: Record<string, DeclaredBinding>[],
 ): boolean {
   if (left.kind !== "Ref") return false;
   if (left.operand.kind !== "Identifier") return false;
   if (rightMut && !left.mut) return false;
-  return findDeclared(scopes, left.operand.name)?.suffix === name;
+  let depth = 1;
+  let binding = findDeclared(scopes, left.operand.name);
+  while (binding !== null && binding.refTo !== undefined) {
+    depth++;
+    const next = findDeclared(scopes, binding.refTo);
+    if (next === null) return false;
+    binding = next;
+  }
+  if (depth !== ref.depth) return false;
+  return binding?.suffix === ref.name;
 }
 
 /**
