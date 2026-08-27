@@ -37,7 +37,12 @@ const BINARY_OPS: BinaryOp[] = [
     startsAt: (t, i) => t[i]?.kind === "DotDot",
     width: 1,
   },
-  { node: "Or", assoc: "right", startsAt: (t, i) => t[i]?.kind === "Or", width: 1 },
+  {
+    node: "Or",
+    assoc: "right",
+    startsAt: (t, i) => t[i]?.kind === "Or",
+    width: 1,
+  },
   {
     node: "And",
     assoc: "right",
@@ -50,9 +55,24 @@ const BINARY_OPS: BinaryOp[] = [
     startsAt: (t, i) => t[i]?.kind === "Equal",
     width: 1,
   },
-  { node: "Less", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Less", width: 1 },
-  { node: "Add", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Plus", width: 1 },
-  { node: "Is", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Is", width: 1 },
+  {
+    node: "Less",
+    assoc: "left",
+    startsAt: (t, i) => t[i]?.kind === "Less",
+    width: 1,
+  },
+  {
+    node: "Add",
+    assoc: "left",
+    startsAt: (t, i) => t[i]?.kind === "Plus",
+    width: 1,
+  },
+  {
+    node: "Is",
+    assoc: "left",
+    startsAt: (t, i) => t[i]?.kind === "Is",
+    width: 1,
+  },
 ];
 
 /**
