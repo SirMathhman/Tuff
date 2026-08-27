@@ -7,7 +7,7 @@ import {
   type DeclaredBinding,
   type ResolveDeref,
 } from "./kinds.ts";
-import { isNumberSuffix } from "./suffixes.ts";
+import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
 
 /**
  * Constant-fold the `is` type-tests in a single statement's own expressions,
@@ -111,9 +111,39 @@ function exprSuffix(
   if (expr.kind === "Add") {
     const left = exprSuffix(expr.left, scopes);
     const right = exprSuffix(expr.right, scopes);
-    return left !== undefined && left === right ? left : undefined;
+    if (left === undefined || left !== right) return undefined;
+    const leftValue = literalNumber(expr.left);
+    const rightValue = literalNumber(expr.right);
+    if (leftValue === null || rightValue === null) return undefined;
+    return inSuffixRange(leftValue + rightValue, left) ? left : undefined;
   }
   return undefined;
+}
+
+/**
+ * The numeric value of a number literal, or null if the expression is not a
+ * number literal.
+ * @param expr - The expression to inspect.
+ * @returns The literal's number, or null.
+ */
+function literalNumber(expr: TuffExpr): number | null {
+  if (expr.kind !== "Literal") return null;
+  if (expr.value.kind !== "number") return null;
+  return expr.value.value;
+}
+
+/**
+ * Whether a number falls within a legal suffix's inclusive value range.
+ * Unbounded suffixes (the float suffixes) accept any number.
+ * @param value - The number to test.
+ * @param suffix - The suffix whose range to test against.
+ * @returns True if the value is within the suffix's range.
+ */
+function inSuffixRange(value: number, suffix: string): boolean {
+  if (!isNumberSuffix(suffix)) return false;
+  const spec = suffixSpec(suffix);
+  if ("unbounded" in spec) return true;
+  return value >= spec.min && value <= spec.max;
 }
 
 /**
