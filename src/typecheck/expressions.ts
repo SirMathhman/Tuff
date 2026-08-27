@@ -103,7 +103,8 @@ export function findUndeclared(
     expr.kind === "And" ||
     expr.kind === "Add" ||
     expr.kind === "Equal" ||
-    expr.kind === "Less"
+    expr.kind === "Less" ||
+    expr.kind === "Range"
   ) {
     const left = findUndeclared(expr.left, line, scopes);
     return left ?? findUndeclared(expr.right, line, scopes);

@@ -2,8 +2,10 @@ import type { TuffError } from "./errors.ts";
 import type {
   ArrayIndexNode,
   AssignNode,
+  ForNode,
   IfNode,
   LetNode,
+  RangeNode,
   TuffStatement,
   WhileNode,
 } from "./ast.ts";
@@ -94,6 +96,7 @@ function checkStatement(
   if (stmt.kind === "Let") return checkLet(stmt, line, scopes);
   if (stmt.kind === "If") return checkIf(stmt, line, scopes, inLoop);
   if (stmt.kind === "While") return checkWhile(stmt, line, scopes);
+  if (stmt.kind === "For") return checkFor(stmt, line, scopes);
   if (stmt.kind === "Assign") return checkAssignment(stmt, line, scopes);
   if (stmt.kind === "Return") return findUndeclared(stmt.value, line, scopes);
   if (stmt.kind === "Break")
@@ -206,6 +209,69 @@ function checkWhile(
 ): TuffError | null {
   const condError = findUndeclared(stmt.condition, line, scopes);
   return condError ?? checkInScope(stmt.body, line, scopes, true);
+}
+
+/**
+ * Check a `for` statement: its range expression, then its body in a fresh
+ * scope where the loop variable is declared as a mutable number.
+ * @param stmt - The For statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkFor(
+  stmt: ForNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const rangeError = findUndeclared(stmt.range, line, scopes);
+  if (rangeError) return rangeError;
+  const rangeKind = inferKind(stmt.range, scopes, resolveDeref);
+  if (rangeKind !== null && rangeKind !== "range") {
+    return { kind: "TypeMismatch", name: stmt.name, line };
+  }
+  if (stmt.range.kind === "Range") {
+    const boundsError = checkRangeBounds(stmt.range, line, scopes);
+    if (boundsError) return boundsError;
+  }
+  scopes.push({});
+  try {
+    declareBinding(
+      stmt.name,
+      "number",
+      true,
+      undefined,
+      undefined,
+      undefined,
+      scopes,
+    );
+    return checkInScope(stmt.body, line, scopes, true);
+  } finally {
+    scopes.pop();
+  }
+}
+
+/**
+ * Check a range expression's bounds: a non-numeric bound is a TypeMismatch.
+ * @param range - The Range expression to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TypeMismatch error if a bound is not a number, else null.
+ */
+function checkRangeBounds(
+  range: RangeNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const startKind = inferKind(range.left, scopes, resolveDeref);
+  if (startKind !== null && startKind !== "number") {
+    return { kind: "TypeMismatch", name: "", line };
+  }
+  const endKind = inferKind(range.right, scopes, resolveDeref);
+  if (endKind !== null && endKind !== "number") {
+    return { kind: "TypeMismatch", name: "", line };
+  }
+  return null;
 }
 
 /**

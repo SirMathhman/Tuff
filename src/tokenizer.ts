@@ -61,6 +61,11 @@ export interface PlusAssignToken {
   kind: "PlusAssign";
 }
 
+/** A `..` range token. */
+export interface DotDotToken {
+  kind: "DotDot";
+}
+
 /** A `,` tuple separator token. */
 export interface CommaToken {
   kind: "Comma";
@@ -120,6 +125,7 @@ export type TuffToken =
   | DerefToken
   | AssignToken
   | PlusAssignToken
+  | DotDotToken
   | CommaToken
   | DotToken
   | SemicolonToken
@@ -165,6 +171,8 @@ function readPunct(text: string, j: number): ReadToken | null {
     return { kind: "token", token: { kind: "And" }, next: j + 2 };
   if (text.startsWith("+=", j))
     return { kind: "token", token: { kind: "PlusAssign" }, next: j + 2 };
+  if (text.startsWith("..", j))
+    return { kind: "token", token: { kind: "DotDot" }, next: j + 2 };
   if (ch === "+")
     return { kind: "token", token: { kind: "Plus" }, next: j + 1 };
   if (text.startsWith("==", j))

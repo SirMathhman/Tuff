@@ -4,11 +4,17 @@ import type { Pos, TuffExpr } from "./ast.ts";
 import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
-export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less";
+export type BinaryNodeKind =
+  | "Or"
+  | "And"
+  | "Add"
+  | "Equal"
+  | "Less"
+  | "Range";
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
-  token: "Or" | "And" | "Plus" | "Equal" | "Less";
+  token: "Or" | "And" | "Plus" | "Equal" | "Less" | "DotDot";
   node: BinaryNodeKind;
   assoc: "left" | "right";
 }
@@ -18,6 +24,7 @@ interface BinaryOp {
  * Precedence and associativity are declared here, never by function order.
  */
 const BINARY_OPS: BinaryOp[] = [
+  { token: "DotDot", node: "Range", assoc: "left" },
   { token: "Or", node: "Or", assoc: "right" },
   { token: "And", node: "And", assoc: "right" },
   { token: "Equal", node: "Equal", assoc: "left" },
@@ -98,7 +105,10 @@ export function parseOperand(
   if (!isExpr(operand)) return operand;
   let left: TuffExpr = operand;
   for (;;) {
-    if (tokens[pos.i]?.kind === "Dot") {
+    if (
+      tokens[pos.i]?.kind === "Dot" &&
+      tokens[pos.i + 1]?.kind !== "Dot"
+    ) {
       pos.i++;
       const indexTok = tokens[pos.i];
       if (indexTok?.kind !== "Number" || !Number.isInteger(indexTok.value)) {

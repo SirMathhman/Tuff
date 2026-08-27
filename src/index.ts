@@ -40,6 +40,7 @@ export type {
   TupleIndexNode,
   ArrayNode,
   ArrayIndexNode,
+  RangeNode,
   LetNode,
   AssignNode,
   ReturnNode,

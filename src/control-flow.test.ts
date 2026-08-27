@@ -55,6 +55,26 @@ test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; } return x;") => 4', 
   });
 });
 
+test('evaluateTuff("let mut sum = 0; for (i in 0..4) { sum += i; } return sum;") => 6', () => {
+  expect(
+    evaluateTuff("let mut sum = 0; for (i in 0..4) { sum += i; } return sum;"),
+  ).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+
+test('evaluateTuff("let mut sum = 0; let range = 0..4; for (i in range) { sum += i; } return sum;") => 6', () => {
+  expect(
+    evaluateTuff(
+      "let mut sum = 0; let range = 0..4; for (i in range) { sum += i; } return sum;",
+    ),
+  ).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+
 test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; break; } return x;") => 1', () => {
   expect(
     evaluateTuff("let mut x = 0; while (x < 4) { x += 1; break; } return x;"),

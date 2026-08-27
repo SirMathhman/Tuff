@@ -18,6 +18,7 @@ export type {
   TupleIndexNode,
   ArrayNode,
   ArrayIndexNode,
+  RangeNode,
   TuffExpr,
   LetNode,
   AssignNode,
@@ -25,6 +26,7 @@ export type {
   BlockNode,
   IfNode,
   WhileNode,
+  ForNode,
   BreakNode,
   ContinueNode,
   TuffStatement,
@@ -56,7 +58,12 @@ export function parseProgram(
       continue;
     }
     if (!sep) break;
-    if (stmt.kind !== "Block" && stmt.kind !== "If" && stmt.kind !== "While") {
+    if (
+      stmt.kind !== "Block" &&
+      stmt.kind !== "If" &&
+      stmt.kind !== "While" &&
+      stmt.kind !== "For"
+    ) {
       return {
         kind: "InvalidStatement",
         token: tokenDetail(sep),

@@ -2,7 +2,7 @@ import type { TuffError } from "../errors.ts";
 import type { TuffExpr } from "../ast.ts";
 
 /** The statically known kinds a binding or element can hold. */
-export type ValueKind = "number" | "bool" | "tuple" | "array";
+export type ValueKind = "number" | "bool" | "tuple" | "array" | "range";
 
 /** A declared binding's type, mutability, and reference target. */
 export interface DeclaredBinding {
@@ -73,6 +73,7 @@ export function inferKind(
     return kinds ? (kinds[expr.index] ?? null) : null;
   }
   if (expr.kind === "Array") return "array";
+  if (expr.kind === "Range") return "range";
   if (expr.kind === "ArrayIndex") {
     const kinds = arrayElementKinds(expr.operand, scopes, resolveDeref);
     if (!kinds) return null;

@@ -1,7 +1,13 @@
 import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
-import type { RefNode, TuffExpr, TuffStatement, WhileNode } from "./ast.ts";
+import type {
+  ForNode,
+  RefNode,
+  TuffExpr,
+  TuffStatement,
+  WhileNode,
+} from "./ast.ts";
 import {
   findBinding,
   type Binding,
@@ -126,6 +132,9 @@ function executeStatement(
   if (stmt.kind === "While") {
     return executeWhile(stmt, line, env, executeList);
   }
+  if (stmt.kind === "For") {
+    return executeFor(stmt, line, env, executeList);
+  }
   if (stmt.kind === "Break") {
     return BREAK;
   }
@@ -151,15 +160,75 @@ function executeWhile(
   executeList: ExecuteList,
 ): TuffStep | undefined {
   while (truthy(evalExpr(stmt.condition, env))) {
-    env.scopes.push(new Map());
-    try {
-      const result = executeStatement(stmt.body, line, env, executeList);
-      if (isBreak(result)) return undefined;
-      if (isContinue(result)) continue;
-      if (result) return result;
-    } finally {
-      env.scopes.pop();
-    }
+    const result = runLoopIteration(
+      stmt.body,
+      line,
+      env,
+      executeList,
+      () => {},
+    );
+    if (isBreak(result)) return undefined;
+    if (isContinue(result)) continue;
+    if (result) return result;
+  }
+  return undefined;
+}
+
+/**
+ * Run one loop iteration in a fresh scope: run the setup (e.g. bind the loop
+ * variable), execute the body, and pop the scope on exit.
+ * @param body - The loop body statement.
+ * @param line - The 1-based line number.
+ * @param env - The evaluation environment.
+ * @param executeList - The list executor, for block statements.
+ * @param setup - Runs in the fresh scope before the body (e.g. bind a loop variable).
+ * @returns The body's step result, or undefined if the body did not terminate.
+ */
+function runLoopIteration(
+  body: TuffStatement,
+  line: number,
+  env: Environment,
+  executeList: ExecuteList,
+  setup: () => void,
+): TuffStep | undefined {
+  env.scopes.push(new Map());
+  try {
+    setup();
+    return executeStatement(body, line, env, executeList);
+  } finally {
+    env.scopes.pop();
+  }
+}
+
+/**
+ * Execute a `for` loop, binding the loop variable to each value of the
+ * half-open range in a fresh scope per iteration.
+ * @param stmt - The For statement to execute.
+ * @param line - The 1-based line number.
+ * @param env - The evaluation environment.
+ * @param executeList - The list executor, for block statements.
+ * @returns A result if a return is hit, else undefined.
+ */
+function executeFor(
+  stmt: ForNode,
+  line: number,
+  env: Environment,
+  executeList: ExecuteList,
+): TuffStep | undefined {
+  const rangeValue = evalExpr(stmt.range, env);
+  assert(rangeValue.kind === "range", "for range must be a range");
+  const startValue = rangeValue.elements[0];
+  const endValue = rangeValue.elements[1];
+  assert(startValue?.kind === "number", "for start must be a number");
+  assert(endValue?.kind === "number", "for end must be a number");
+  for (let i = startValue.value; i < endValue.value; i++) {
+    const result = runLoopIteration(stmt.body, line, env, executeList, () => {
+      const scope = env.scopes[env.scopes.length - 1];
+      if (scope) scope.set(stmt.name, { value: num(i), mut: true });
+    });
+    if (isBreak(result)) return undefined;
+    if (isContinue(result)) continue;
+    if (result) return result;
   }
   return undefined;
 }
@@ -297,7 +366,9 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
         left.kind === "tuple" ||
         right.kind === "tuple" ||
         left.kind === "array" ||
-        right.kind === "array"
+        right.kind === "array" ||
+        left.kind === "range" ||
+        right.kind === "range"
       ) {
         return bool(false);
       }
@@ -308,6 +379,10 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   Less: {
     shortCircuit: () => null,
     combine: (left, right) => bool(toResultValue(left) < toResultValue(right)),
+  },
+  Range: {
+    shortCircuit: () => null,
+    combine: (left, right) => ({ kind: "range", elements: [left, right] }),
   },
 };
 

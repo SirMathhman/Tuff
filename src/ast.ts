@@ -86,6 +86,13 @@ export interface ArrayIndexNode {
   index: TuffExpr;
 }
 
+/** A range expression node: `start..end`, a half-open integer range. */
+export interface RangeNode {
+  kind: "Range";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -100,7 +107,8 @@ export type TuffExpr =
   | TupleNode
   | TupleIndexNode
   | ArrayNode
-  | ArrayIndexNode;
+  | ArrayIndexNode
+  | RangeNode;
 
 /** A `let` declaration statement node. */
 export interface LetNode {
@@ -144,6 +152,14 @@ export interface WhileNode {
   body: TuffStatement;
 }
 
+/** A `for (name in range)` loop statement node. */
+export interface ForNode {
+  kind: "For";
+  name: string;
+  range: TuffExpr;
+  body: TuffStatement;
+}
+
 /** A `break` statement node that exits the enclosing loop. */
 export interface BreakNode {
   kind: "Break";
@@ -162,6 +178,7 @@ export type TuffStatement =
   | BlockNode
   | IfNode
   | WhileNode
+  | ForNode
   | BreakNode
   | ContinueNode;
 

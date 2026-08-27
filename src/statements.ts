@@ -228,6 +228,26 @@ function parseWhile(
 ): TuffStatement | TuffError {
   const condition = parseCondition(tokens, pos, line);
   if (!isExpr(condition)) return condition;
+  const body = parseLoopBody(tokens, pos, line, parseStatement);
+  if (!isStatement(body)) return body;
+  return { kind: "While", condition, body };
+}
+
+/**
+ * Parse the body of a loop statement: the body statement, then an optional
+ * trailing semicolon.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the body.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, breaking mutual recursion.
+ * @returns {TuffStatement | TuffError} The body statement, or a TuffError.
+ */
+function parseLoopBody(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
   const body = parseStatement(tokens, pos, line);
   if (!isStatement(body)) {
     return {
@@ -237,7 +257,54 @@ function parseWhile(
     };
   }
   if (tokens[pos.i]?.kind === "Semicolon") pos.i++;
-  return { kind: "While", condition, body };
+  return body;
+}
+
+/**
+ * Parse a `for` statement: `for (name in range) stmt`.
+ * @param tokens {TuffToken[]} - The token list; `for` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, breaking mutual recursion.
+ * @returns {TuffStatement | TuffError} The For node, or a TuffError.
+ */
+function parseFor(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
+  if (tokens[pos.i]?.kind !== "LParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const nameTok = tokens[pos.i];
+  if (nameTok?.kind !== "Ident") {
+    return { kind: "InvalidStatement", token: tokenDetail(nameTok), line };
+  }
+  pos.i++;
+  const inTok = tokens[pos.i];
+  if (inTok?.kind !== "Ident" || inTok.name !== "in") {
+    return { kind: "InvalidStatement", token: tokenDetail(inTok), line };
+  }
+  pos.i++;
+  const range = parseLevel(tokens, pos, line, 0);
+  if (!isExpr(range)) return range;
+  if (tokens[pos.i]?.kind !== "RParen") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const body = parseLoopBody(tokens, pos, line, parseStatement);
+  if (!isStatement(body)) return body;
+  return { kind: "For", name: nameTok.name, range, body };
 }
 
 /**
@@ -306,6 +373,7 @@ function parseIdentStatement(
   }
   if (name === "if") return parseIf(tokens, pos, line, parseStatement);
   if (name === "while") return parseWhile(tokens, pos, line, parseStatement);
+  if (name === "for") return parseFor(tokens, pos, line, parseStatement);
   if (name === "break") return { kind: "Break" };
   if (name === "continue") return { kind: "Continue" };
   let target: TuffExpr = { kind: "Identifier", name };
@@ -367,6 +435,7 @@ export function isStatement(
     value.kind === "Block" ||
     value.kind === "If" ||
     value.kind === "While" ||
+    value.kind === "For" ||
     value.kind === "Break" ||
     value.kind === "Continue"
   );

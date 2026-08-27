@@ -24,8 +24,19 @@ export interface ArrayValue {
   elements: TuffValue[];
 }
 
-/** A runtime value: a number, a boolean, a tuple, or an array. */
-export type TuffValue = NumberValue | BoolValue | TupleValue | ArrayValue;
+/** A range value: the half-open integer range `start..end`. */
+export interface RangeValue {
+  kind: "range";
+  elements: TuffValue[];
+}
+
+/** A runtime value: a number, a boolean, a tuple, an array, or a range. */
+export type TuffValue =
+  | NumberValue
+  | BoolValue
+  | TupleValue
+  | ArrayValue
+  | RangeValue;
 
 /**
  * Wrap a number as a value.
@@ -67,13 +78,14 @@ export function isValue(value: TuffValue | TuffError): value is TuffValue {
     value.kind === "number" ||
     value.kind === "bool" ||
     value.kind === "tuple" ||
-    value.kind === "array"
+    value.kind === "array" ||
+    value.kind === "range"
   );
 }
 
 /**
  * Render a value as the public numeric result: the number, 1/0 for booleans,
- * and the element count for tuples.
+ * and the element count for tuples, arrays, and ranges.
  * @param value {TuffValue} - The value to render.
  * @returns {number} The numeric result.
  */
