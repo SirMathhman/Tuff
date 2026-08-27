@@ -24,6 +24,7 @@ import {
   resolveDeref,
   resolveIndex,
 } from "./typecheck/expressions.ts";
+import { foldProgram } from "./typecheck/fold.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
@@ -36,17 +37,21 @@ type LoopContext = boolean;
  * Walks every statement, including unreachable branches, tracking the kind,
  * mutability, and reference target each binding is declared with. Catches
  * undeclared identifiers, invalid references and dereferences, assignments to
- * non-`mut` bindings, and kind mismatches on assignment.
+ * non-`mut` bindings, and kind mismatches on assignment. On success, folds
+ * every `is` type-test into a boolean literal so the evaluator never sees
+ * an `Is` node.
  * @param statements - The parsed program statements.
- * @param baseLine - The 1-based line of the first statement.
- * @returns A TuffError if a semantic error is found, else null.
+ * @param baseLine - The 1-based line number.
+ * @returns The folded program if no semantic error is found, else a TuffError.
  */
 export function typecheckProgram(
   statements: TuffStatement[],
   baseLine: number,
-): TuffError | null {
+): TuffStatement[] | TuffError {
   const scopes: Record<string, DeclaredBinding>[] = [{}];
-  return checkStatements(statements, baseLine, scopes, false);
+  const error = checkStatements(statements, baseLine, scopes, false);
+  if (error) return error;
+  return foldProgram(statements);
 }
 
 /**

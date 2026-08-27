@@ -30,8 +30,8 @@ const BINARY_OPS: BinaryOp[] = [
   { token: "And", node: "And", assoc: "right" },
   { token: "Equal", node: "Equal", assoc: "left" },
   { token: "Less", node: "Less", assoc: "left" },
-  { token: "Is", node: "Is", assoc: "left" },
   { token: "Plus", node: "Add", assoc: "left" },
+  { token: "Is", node: "Is", assoc: "left" },
 ];
 
 /**

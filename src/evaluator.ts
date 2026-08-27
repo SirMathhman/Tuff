@@ -343,13 +343,10 @@ interface BinaryRule {
   combine: (left: TuffValue, right: TuffValue) => TuffValue;
 }
 
-/** The binary node kinds evaluated by the shared rule table. */
-type RuleBinaryKind = Exclude<BinaryNodeKind, "Is">;
-
 /**
  * The binary node evaluation rules, keyed by node kind.
  */
-const BINARY_RULES: Record<RuleBinaryKind, BinaryRule> = {
+const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
   Or: {
     shortCircuit: (left) => (truthy(left) ? bool(true) : null),
     combine: (left, right) => bool(truthy(left) || truthy(right)),
@@ -386,6 +383,16 @@ const BINARY_RULES: Record<RuleBinaryKind, BinaryRule> = {
   Range: {
     shortCircuit: () => null,
     combine: (left, right) => ({ kind: "range", elements: [left, right] }),
+  },
+  Is: {
+    shortCircuit: () => {
+      assert(false, "is nodes are folded by the typechecker");
+      return null;
+    },
+    combine: () => {
+      assert(false, "is nodes are folded by the typechecker");
+      return bool(false);
+    },
   },
 };
 
@@ -462,16 +469,6 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     const element = operand.elements[indexValue.value];
     assert(element, "array index out of bounds");
     return element;
-  }
-  if (node.kind === "Is") {
-    evalExpr(node.left, env);
-    assert(
-      node.right.kind === "Identifier",
-      "is right operand must be an identifier",
-    );
-    return bool(
-      node.left.kind === "Literal" && node.left.suffix === node.right.name,
-    );
   }
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);

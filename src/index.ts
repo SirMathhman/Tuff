@@ -75,12 +75,12 @@ export function evaluateTuff(s: string): TuffResult {
   if (!Array.isArray(program)) {
     return { ok: false, error: program };
   }
-  const typeError = typecheckProgram(program, 1);
-  if (typeError) {
-    return { ok: false, error: typeError };
+  const checked = typecheckProgram(program, 1);
+  if (!Array.isArray(checked)) {
+    return { ok: false, error: checked };
   }
   const env = createEnvironment();
-  const result = executeStatements(program, 1, env);
+  const result = executeStatements(checked, 1, env);
   assert(
     !isBreak(result) && !isContinue(result),
     "control-flow signal must be consumed by an enclosing loop",
