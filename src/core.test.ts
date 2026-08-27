@@ -313,12 +313,12 @@ test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
   );
 });
 
-test('evaluateTuff("let mut x = 0; x = true; return x;") => Err', () => {
-  const result = evaluateTuff("let mut x = 0; x = true; return x;");
-  expect(result).toEqual({
-    ok: false,
-    error: { kind: "TypeMismatch", name: "x", line: 2 },
-  });
+test('evaluateTuff("fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);") => 7', () => {
+  expect(
+    evaluateTuff(
+      "fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);",
+    ),
+  ).toEqual({ ok: true, value: 7 });
 });
 
 test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {

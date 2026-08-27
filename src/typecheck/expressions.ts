@@ -2,6 +2,7 @@ import type { TuffError } from "../errors.ts";
 import type {
   ArrayIndexNode,
   ArrayNode,
+  CallNode,
   FieldAccessNode,
   StructLiteralNode,
   TuffExpr,
@@ -11,6 +12,7 @@ import type {
 import {
   arrayElementKinds,
   findDeclared,
+  findFn,
   findStruct,
   inferKind,
   literalIndex,
@@ -153,6 +155,45 @@ export function findUndeclared(
   }
   if (expr.kind === "FieldAccess") {
     return checkFieldAccess(expr, line, context);
+  }
+  if (expr.kind === "Call") {
+    return checkCall(expr, line, context);
+  }
+  return null;
+}
+
+/**
+ * Check a function call: the function must be declared, the argument count
+ * must match, each argument must name only declared identifiers, and each
+ * argument's kind must match the corresponding parameter's kind.
+ * @param expr - The Call expression to check.
+ * @param line - The 1-based line number.
+ * @param context - The expression check context.
+ * @returns An UnidentifiedIdentifier or TypeMismatch error if one is found,
+ * else null.
+ */
+function checkCall(
+  expr: CallNode,
+  line: number,
+  context: ExprCheckContext,
+): TuffError | null {
+  const fn = findFn(context.fns, expr.name);
+  if (!fn) {
+    return { kind: "UnidentifiedIdentifier", name: expr.name, line };
+  }
+  if (expr.args.length !== fn.params.length) {
+    return { kind: "TypeMismatch", name: expr.name, line };
+  }
+  for (let i = 0; i < expr.args.length; i++) {
+    const arg = expr.args[i];
+    const param = fn.params[i];
+    if (arg === undefined || param === undefined) continue;
+    const error = findUndeclared(arg, line, context);
+    if (error) return error;
+    const kind = inferKind(arg, context.scopes, context.resolveDeref);
+    if (kind && kind !== param.kind) {
+      return { kind: "TypeMismatch", name: expr.name, line };
+    }
   }
   return null;
 }

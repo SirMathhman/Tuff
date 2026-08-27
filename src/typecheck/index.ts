@@ -17,9 +17,11 @@ import {
   declareBinding,
   findDeclared,
   inferKind,
-  kindName,
+  kindValueKind,
   literalIndex,
+  resolveKindName,
   structFieldKinds,
+  type CheckContext,
   type DeclaredBinding,
   type ExprCheckContext,
   type StructDef,
@@ -33,36 +35,23 @@ import {
   resolveIndex,
 } from "./expressions.ts";
 import { foldStatement } from "./fold.ts";
+import { checkFn } from "./fn.ts";
 import { annotationMatch, checkKindName } from "./is-match.ts";
-import { isNumberSuffix } from "./suffixes.ts";
-
-/**
- * Whether the current check position is inside a loop body, so that `break`
- * is valid. Threaded through the statement checkers.
- */
-type LoopContext = boolean;
-
-/**
- * The mutable context threaded through the statement checkers: the stacks of
- * declared bindings, type aliases, and structs, plus whether the current
- * position is inside a loop body.
- */
-interface CheckContext {
-  scopes: Record<string, DeclaredBinding>[];
-  aliases: Record<string, KindName>[];
-  structs: Record<string, StructDef>[];
-  inLoop: LoopContext;
-}
 
 /**
  * Build the expression-level check context from a statement-level check
- * context, exposing the binding and struct stacks plus the dereference
- * resolver to the expression walkers.
+ * context, exposing the binding, struct, and function stacks plus the
+ * dereference resolver to the expression walkers.
  * @param context - The mutable statement-level check context.
  * @returns The expression-level check context.
  */
 function exprContext(context: CheckContext): ExprCheckContext {
-  return { scopes: context.scopes, structs: context.structs, resolveDeref };
+  return {
+    scopes: context.scopes,
+    structs: context.structs,
+    fns: context.fns,
+    resolveDeref,
+  };
 }
 
 /**
@@ -86,6 +75,7 @@ export function typecheckProgram(
     scopes: [{}],
     aliases: [{}],
     structs: [{}],
+    fns: [{}],
     inLoop: false,
   };
   const error = checkStatements(statements, baseLine, context);
@@ -151,23 +141,25 @@ function checkStatementBody(
     context.scopes.push({});
     context.aliases.push({});
     context.structs.push({});
+    context.fns.push({});
     try {
       return checkStatements(stmt.statements, line, context);
     } finally {
       context.scopes.pop();
       context.aliases.pop();
       context.structs.pop();
+      context.fns.pop();
     }
   }
   if (stmt.kind === "Let") return checkLet(stmt, line, context);
   if (stmt.kind === "Type") return checkType(stmt, line, context.aliases);
   if (stmt.kind === "Struct")
     return checkStruct(stmt, line, context.aliases, context.structs);
+  if (stmt.kind === "Fn") return checkFn(stmt, line, context, checkStatement);
   if (stmt.kind === "If") return checkIf(stmt, line, context);
   if (stmt.kind === "While") return checkWhile(stmt, line, context);
   if (stmt.kind === "For") return checkFor(stmt, line, context);
-  if (stmt.kind === "Assign")
-    return checkAssignment(stmt, line, context.scopes, context.structs);
+  if (stmt.kind === "Assign") return checkAssignment(stmt, line, context);
   if (stmt.kind === "Return") {
     const error = findUndeclared(stmt.value, line, exprContext(context));
     return error ?? checkNumberSuffixes(stmt.value, line);
@@ -273,7 +265,14 @@ function checkAnnotation(
   const resolved = resolveKindName(annotation, aliases);
   const nameError = checkKindName(resolved, line, structs);
   if (nameError) return nameError;
-  if (!annotationMatch(value, resolved, { scopes, structs, resolveDeref })) {
+  if (
+    !annotationMatch(value, resolved, {
+      scopes,
+      structs,
+      fns: [],
+      resolveDeref,
+    })
+  ) {
     return { kind: "TypeMismatch", name, line };
   }
   return null;
@@ -330,58 +329,6 @@ function checkStruct(
 }
 
 /**
- * The value kind a resolved kind name denotes: a number suffix or a kind
- * name maps to its value kind; a tuple or array kind name maps to its
- * container kind.
- * @param name - The resolved kind name.
- * @returns The value kind the kind name denotes.
- */
-function kindValueKind(name: KindName): ValueKind {
-  if (name.kind === "KindNameTuple") return "tuple";
-  if (name.kind === "KindNameArray") return "array";
-  if (name.kind === "KindNameRef") return "number";
-  if (isNumberSuffix(name.name)) return "number";
-  return kindName(name.name) ?? "number";
-}
-
-/**
- * Resolve the bare names in a kind name through the alias stack, innermost
- * scope first; tuple and array elements are resolved recursively.
- * @param name - The kind name to resolve.
- * @param aliases - The stack of declared type aliases.
- * @returns The kind name with every alias name replaced by its definition.
- */
-function resolveKindName(
-  name: KindName,
-  aliases: Record<string, KindName>[],
-): KindName {
-  if (name.kind === "KindNameBare") {
-    for (let i = aliases.length - 1; i >= 0; i--) {
-      const scope = aliases[i];
-      const alias = scope?.[name.name];
-      if (alias !== undefined) return alias;
-    }
-    return name;
-  }
-  if (name.kind === "KindNameTuple") {
-    return {
-      kind: "KindNameTuple",
-      elements: name.elements.map((element) =>
-        resolveKindName(element, aliases),
-      ),
-    };
-  }
-  if (name.kind === "KindNameArray") {
-    return {
-      kind: "KindNameArray",
-      element: resolveKindName(name.element, aliases),
-      length: name.length,
-    };
-  }
-  return name;
-}
-
-/**
  * Check a statement in a fresh scope, always popping it afterwards.
  * @param stmt - The statement to check.
  * @param line - The 1-based line number.
@@ -396,12 +343,14 @@ function checkInScope(
   context.scopes.push({});
   context.aliases.push({});
   context.structs.push({});
+  context.fns.push({});
   try {
     return checkStatement(stmt, line, context);
   } finally {
     context.scopes.pop();
     context.aliases.pop();
     context.structs.pop();
+    context.fns.pop();
   }
 }
 
@@ -500,16 +449,15 @@ function checkFor(
  * Handles both identifier targets and dereference targets.
  * @param stmt - The assignment statement to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The mutable check context.
  * @returns A TuffError if a semantic error is found, else null.
  */
 function checkAssignment(
   stmt: AssignNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: CheckContext,
 ): TuffError | null {
+  const scopes = context.scopes;
   let name: string;
   let declared: DeclaredBinding;
   if (stmt.target.kind === "Identifier") {
@@ -523,11 +471,7 @@ function checkAssignment(
     name = resolved.name;
     declared = resolved.binding;
   } else if (stmt.target.kind === "ArrayIndex") {
-    const resolved = resolveIndex(stmt.target, line, {
-      scopes,
-      structs,
-      resolveDeref,
-    });
+    const resolved = resolveIndex(stmt.target, line, exprContext(context));
     if ("kind" in resolved) return resolved;
     name = resolved.name;
     declared = resolved.binding;
@@ -535,11 +479,7 @@ function checkAssignment(
     return { kind: "InvalidDeref", name: "", line };
   }
   if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
-  const valueError = findUndeclared(stmt.value, line, {
-    scopes,
-    structs,
-    resolveDeref,
-  });
+  const valueError = findUndeclared(stmt.value, line, exprContext(context));
   if (valueError) return valueError;
   const rangeError = checkRangeLiterals(stmt.value, line, scopes);
   if (rangeError) return rangeError;

@@ -2,6 +2,7 @@ import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
 import type {
+  FnParam,
   KindName,
   Pos,
   StructField,
@@ -415,6 +416,42 @@ function parseDeclName(
   return nameTok.name;
 }
 
+/** A parsed `name : KindName` pair. */
+interface TypedName {
+  /** The identifier name. */
+  name: string;
+  /** The declared kind. */
+  type: KindName;
+}
+
+/**
+ * Parse a `name : KindName` pair.
+ * @param tokens {TuffToken[]} - The token list; the name token not yet consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the pair.
+ * @param line {number} - The 1-based line number.
+ * @returns {TypedName | TuffError} The name and kind, or a TuffError.
+ */
+function parseTypedName(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TypedName | TuffError {
+  const name = parseDeclName(tokens, pos, line, "Colon");
+  if (typeof name !== "string") return name;
+  const type = parseKindName(tokens, pos, line);
+  if (!isKindName(type)) return type;
+  return { name, type };
+}
+
+/**
+ * Type guard distinguishing a parsed typed name from a structured error.
+ * @param value {TypedName | TuffError} - The value to test.
+ * @returns {boolean} True if the value is a typed name.
+ */
+function isTypedName(value: TypedName | TuffError): value is TypedName {
+  return !("kind" in value);
+}
+
 /**
  * Parse a `struct` declaration: `struct Name { field : KindName, ... }`.
  * @param tokens {TuffToken[]} - The token list; `struct` already consumed.
@@ -431,23 +468,10 @@ function parseStruct(
   if (typeof name !== "string") return name;
   const fields: StructField[] = [];
   for (;;) {
-    const fieldTok = tokens[pos.i];
-    if (fieldTok?.kind === "RBrace") break;
-    if (fieldTok?.kind !== "Ident") {
-      return { kind: "InvalidStatement", token: tokenDetail(fieldTok), line };
-    }
-    pos.i++;
-    if (tokens[pos.i]?.kind !== "Colon") {
-      return {
-        kind: "InvalidStatement",
-        token: tokenDetail(tokens[pos.i]),
-        line,
-      };
-    }
-    pos.i++;
-    const type = parseKindName(tokens, pos, line);
-    if (!isKindName(type)) return type;
-    fields.push({ name: fieldTok.name, type });
+    if (tokens[pos.i]?.kind === "RBrace") break;
+    const field = parseTypedName(tokens, pos, line);
+    if (!isTypedName(field)) return field;
+    fields.push(field);
     if (tokens[pos.i]?.kind === "Comma") {
       pos.i++;
       continue;
@@ -464,9 +488,80 @@ function parseStruct(
 }
 
 /**
+ * Parse a `fn` declaration: `fn name(param : KindName, ...) : KindName =>
+ * { ... }`.
+ * @param tokens {TuffToken[]} - The token list; `fn` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the
+ * declaration.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffStatement | TuffError} The Fn node, or a TuffError.
+ */
+function parseFn(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffStatement | TuffError {
+  const name = parseDeclName(tokens, pos, line, "LParen");
+  if (typeof name !== "string") return name;
+  const params: FnParam[] = [];
+  for (;;) {
+    if (tokens[pos.i]?.kind === "RParen") break;
+    const param = parseTypedName(tokens, pos, line);
+    if (!isTypedName(param)) return param;
+    params.push(param);
+    if (tokens[pos.i]?.kind === "Comma") {
+      pos.i++;
+      continue;
+    }
+    if (tokens[pos.i]?.kind === "RParen") break;
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  if (tokens[pos.i]?.kind !== "Colon") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const returnType = parseKindName(tokens, pos, line);
+  if (!isKindName(returnType)) return returnType;
+  if (tokens[pos.i]?.kind !== "Arrow") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  if (tokens[pos.i]?.kind !== "LBrace") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const body = parseBlock(tokens, pos, line, parseStatement);
+  if (!isStatement(body) || body.kind !== "Block") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  return { kind: "Fn", name, params, returnType, body };
+}
+
+/**
  * Parse a statement that begins with an identifier: a keyword (`let`,
- * `type`, `struct`, `return`, `if`, `while`, `break`, `continue`) or an
- * assignment whose target is an identifier or an array index.
+ * `type`, `struct`, `fn`, `return`, `if`, `while`, `break`, `continue`) or
+ * an assignment whose target is an identifier or an array index.
  * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
  * @param line {number} - The 1-based line number.
@@ -482,6 +577,7 @@ function parseIdentStatement(
   if (name === "let") return parseLet(tokens, pos, line);
   if (name === "type") return parseType(tokens, pos, line);
   if (name === "struct") return parseStruct(tokens, pos, line);
+  if (name === "fn") return parseFn(tokens, pos, line);
   if (name === "return") {
     const value = parseLevel(tokens, pos, line, 0);
     if (!isExpr(value)) return value;
@@ -548,6 +644,7 @@ export function isStatement(
     value.kind === "Let" ||
     value.kind === "Type" ||
     value.kind === "Struct" ||
+    value.kind === "Fn" ||
     value.kind === "Assign" ||
     value.kind === "Return" ||
     value.kind === "Block" ||

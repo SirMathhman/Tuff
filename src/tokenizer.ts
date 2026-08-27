@@ -63,6 +63,11 @@ export interface DotDotToken {
   kind: "DotDot";
 }
 
+/** A `=>` function-body arrow token. */
+export interface ArrowToken {
+  kind: "Arrow";
+}
+
 /** An `is` type-test token. */
 export interface IsToken {
   kind: "Is";
@@ -132,6 +137,7 @@ export type TuffToken =
   | AssignToken
   | PlusAssignToken
   | DotDotToken
+  | ArrowToken
   | IsToken
   | CommaToken
   | DotToken
@@ -177,6 +183,8 @@ function readPunct(text: string, j: number): ReadToken | null {
     return { kind: "token", token: { kind: "Or" }, next: j + 2 };
   if (text.startsWith("+=", j))
     return { kind: "token", token: { kind: "PlusAssign" }, next: j + 2 };
+  if (text.startsWith("=>", j))
+    return { kind: "token", token: { kind: "Arrow" }, next: j + 2 };
   if (text.startsWith("..", j))
     return { kind: "token", token: { kind: "DotDot" }, next: j + 2 };
   if (text.startsWith("is", j) && !/[A-Za-z0-9_]/.test(text[j + 2] ?? ""))

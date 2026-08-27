@@ -135,6 +135,15 @@ export interface FieldAccessNode {
   field: string;
 }
 
+/** A function call expression node: `name(args...)`. */
+export interface CallNode {
+  kind: "Call";
+  /** The function name being called. */
+  name: string;
+  /** The argument expressions, in source order. */
+  args: TuffExpr[];
+}
+
 /** A bare kind name in an `is` type-test right operand (e.g. `U8`, `Bool`). */
 export interface KindNameBareNode {
   kind: "KindNameBare";
@@ -194,7 +203,33 @@ export type TuffExpr =
   | RangeNode
   | IsNode
   | StructLiteralNode
-  | FieldAccessNode;
+  | FieldAccessNode
+  | CallNode;
+
+/** A named, typed parameter of a function declaration. */
+export interface FnParam {
+  /** The parameter's name. */
+  name: string;
+  /** The parameter's declared kind. */
+  type: KindName;
+}
+
+/**
+ * A `fn name(params) : KindName => body` function declaration statement node.
+ * The body is a block statement; the function is compile-time registered and
+ * executed by name at call sites.
+ */
+export interface FnNode {
+  kind: "Fn";
+  /** The function name being declared. */
+  name: string;
+  /** The declared parameters, in source order. */
+  params: FnParam[];
+  /** The declared return kind. */
+  returnType: KindName;
+  /** The function body block. */
+  body: BlockNode;
+}
 
 /** A `struct Name { field : KindName, ... }` declaration statement node. */
 export interface StructNode {
@@ -280,6 +315,7 @@ export type TuffStatement =
   | LetNode
   | TypeNode
   | StructNode
+  | FnNode
   | AssignNode
   | ReturnNode
   | BlockNode

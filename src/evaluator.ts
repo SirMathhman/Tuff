@@ -2,6 +2,7 @@ import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
 import type {
+  CallNode,
   ForNode,
   RefNode,
   TuffExpr,
@@ -26,11 +27,18 @@ interface ContinueSignal {
   kind: "Continue";
 }
 
+/** A control-flow signal: a `return` exited the enclosing function. */
+interface ReturnSignal {
+  kind: "Return";
+  /** The raw value being returned, before public rendering. */
+  value: TuffValue;
+}
+
 /** A control-flow signal: a `break` or a `continue`. */
 type ControlSignal = BreakSignal | ContinueSignal;
 
-/** A step result: a final value, or a control-flow signal. */
-type TuffStep = TuffResult | ControlSignal;
+/** A step result: a final value, a control-flow signal, or a return. */
+type TuffStep = TuffResult | ControlSignal | ReturnSignal;
 
 /** Executes a list of statements; passed to statement execution for blocks. */
 type ExecuteList = (
@@ -63,6 +71,15 @@ export function isContinue(
   result: TuffStep | undefined,
 ): result is ContinueSignal {
   return result !== undefined && "kind" in result && result.kind === "Continue";
+}
+
+/**
+ * Whether a step result is a return signal.
+ * @param result {TuffStep | undefined} - The result to test.
+ * @returns {boolean} True if the result is a return signal.
+ */
+export function isReturn(result: TuffStep | undefined): result is ReturnSignal {
+  return result !== undefined && "kind" in result && result.kind === "Return";
 }
 
 /**
@@ -123,8 +140,14 @@ function executeStatement(
     return undefined;
   }
   if (stmt.kind === "Return") {
-    const value = evalExpr(stmt.value, env);
-    return { ok: true, value: toResultValue(value) };
+    return { kind: "Return", value: evalExpr(stmt.value, env) };
+  }
+  if (stmt.kind === "Fn") {
+    env.fns.set(stmt.name, {
+      params: stmt.params.map((param) => param.name),
+      body: stmt.body.statements,
+    });
+    return undefined;
   }
   if (stmt.kind === "If") {
     const condition = evalExpr(stmt.condition, env);
@@ -424,6 +447,37 @@ function evalRef(node: RefNode, env: Environment): TuffValue {
 }
 
 /**
+ * Execute a function call: evaluate the arguments, bind them to the
+ * parameters in a fresh scope, run the body, and return its value.
+ * @param node {CallNode} - The call expression node.
+ * @param env {Environment} - The evaluation environment.
+ * @returns {TuffValue} The value the function returned.
+ */
+function executeCall(node: CallNode, env: Environment): TuffValue {
+  const entry = env.fns.get(node.name);
+  assert(entry, `unidentified function ${node.name}`);
+  const args = node.args.map((arg) => evalExpr(arg, env));
+  env.scopes.push(new Map());
+  try {
+    const scope = env.scopes[env.scopes.length - 1];
+    if (scope) {
+      for (let i = 0; i < entry.params.length; i++) {
+        const param = entry.params[i];
+        const arg = args[i];
+        if (param && arg) scope.set(param, { value: arg, mut: false });
+      }
+    }
+    const result = executeStatements(entry.body, 1, env);
+    if (!isReturn(result)) {
+      assert(false, "function body must return a value");
+    }
+    return result.value;
+  } finally {
+    env.scopes.pop();
+  }
+}
+
+/**
  * Evaluate a parsed expression to a runtime value.
  * @param node {TuffExpr} - The expression node.
  * @param env {Environment} - The evaluation environment.
@@ -484,6 +538,7 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     assert(field !== undefined, "field access out of bounds");
     return field;
   }
+  if (node.kind === "Call") return executeCall(node, env);
   assert(node.kind !== "Is", "is type-test must be folded before execution");
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);

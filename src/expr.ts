@@ -103,7 +103,8 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Array" ||
     value.kind === "ArrayIndex" ||
     value.kind === "StructLiteral" ||
-    value.kind === "FieldAccess"
+    value.kind === "FieldAccess" ||
+    value.kind === "Call"
   ) {
     return true;
   }
@@ -276,6 +277,43 @@ function parseStructLiteral(
 }
 
 /**
+ * Parse a function call: `name(args...)`. The name and the opening
+ * parenthesis are already consumed.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the call.
+ * @param line {number} - The 1-based line number.
+ * @param name {string} - The function name being called.
+ * @returns {TuffExpr | TuffError} The Call node, or a TuffError.
+ */
+function parseCall(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  name: string,
+): TuffExpr | TuffError {
+  pos.i++;
+  const args: TuffExpr[] = [];
+  if (tokens[pos.i]?.kind === "RParen") {
+    pos.i++;
+    return { kind: "Call", name, args };
+  }
+  for (;;) {
+    const arg = parseLevel(tokens, pos, line, 0);
+    if (!isExpr(arg)) return arg;
+    args.push(arg);
+    if (tokens[pos.i]?.kind === "Comma") {
+      pos.i++;
+      continue;
+    }
+    if (tokens[pos.i]?.kind === "RParen") {
+      pos.i++;
+      return { kind: "Call", name, args };
+    }
+    return { kind: "InvalidExpression", expression: "", line };
+  }
+}
+
+/**
  * Parse a primary operand: a literal, an identifier, a parenthesized
  * expression, or a tuple literal.
  * @param tokens {TuffToken[]} - The token list.
@@ -315,6 +353,9 @@ function parsePrimary(
     if (tokens[pos.i]?.kind === "LBrace") {
       pos.i++;
       return parseStructLiteral(tokens, pos, line, token.name);
+    }
+    if (tokens[pos.i]?.kind === "LParen") {
+      return parseCall(tokens, pos, line, token.name);
     }
     return { kind: "Identifier", name: token.name };
   }

@@ -1,10 +1,16 @@
 import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
-import { executeStatements, isBreak, isContinue } from "./evaluator.ts";
+import {
+  executeStatements,
+  isBreak,
+  isContinue,
+  isReturn,
+} from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
 import { tokenize } from "./tokenizer.ts";
 import { typecheckProgram } from "./typecheck/index.ts";
+import { toResultValue } from "./values.ts";
 
 export type {
   TuffError,
@@ -85,5 +91,6 @@ export function evaluateTuff(s: string): TuffResult {
     !isBreak(result) && !isContinue(result),
     "control-flow signal must be consumed by an enclosing loop",
   );
+  if (isReturn(result)) return { ok: true, value: toResultValue(result.value) };
   return result ?? { ok: true, value: 0 };
 }

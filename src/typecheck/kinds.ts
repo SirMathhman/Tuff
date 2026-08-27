@@ -1,5 +1,6 @@
 import type { TuffError } from "../errors.ts";
-import type { TuffExpr } from "../ast.ts";
+import type { KindName, TuffExpr } from "../ast.ts";
+import { isNumberSuffix } from "./suffixes.ts";
 
 /** The statically known kinds a binding or element can hold. */
 export type ValueKind =
@@ -18,6 +19,22 @@ export type ValueKind =
 export interface StructDef {
   /** The field kinds, keyed by field name. */
   fields: Record<string, ValueKind>;
+}
+
+/** A declared function's parameter: its name and kind. */
+export interface FnParamDef {
+  /** The parameter's name. */
+  name: string;
+  /** The parameter's kind. */
+  kind: ValueKind;
+}
+
+/** A declared function's parameter kinds, in source order. */
+export interface FnDef {
+  /** The parameter names and kinds, in source order. */
+  params: FnParamDef[];
+  /** The declared return kind. */
+  returnType: ValueKind;
 }
 
 /**
@@ -77,17 +94,38 @@ export type ResolveDeref = (
 
 /**
  * The context threaded through the expression-level checkers: the stacks of
- * declared bindings and structs, plus the dereference resolver. Bundling these
- * into one value keeps the walker signatures short as new per-statement scope
- * state is added.
+ * declared bindings, structs, and functions, plus the dereference resolver.
+ * Bundling these into one value keeps the walker signatures short as new
+ * per-statement scope state is added.
  */
 export interface ExprCheckContext {
   /** The stack of declared bindings. */
   scopes: Record<string, DeclaredBinding>[];
   /** The stack of declared structs. */
   structs: Record<string, StructDef>[];
+  /** The stack of declared functions. */
+  fns: Record<string, FnDef>[];
   /** The dereference resolver, for `*` operands. */
   resolveDeref: ResolveDeref;
+}
+
+/**
+ * Whether the current check position is inside a loop body, so that `break`
+ * is valid. Threaded through the statement checkers.
+ */
+export type LoopContext = boolean;
+
+/**
+ * The mutable context threaded through the statement checkers: the stacks of
+ * declared bindings, type aliases, structs, and functions, plus whether the
+ * current position is inside a loop body.
+ */
+export interface CheckContext {
+  scopes: Record<string, DeclaredBinding>[];
+  aliases: Record<string, KindName>[];
+  structs: Record<string, StructDef>[];
+  fns: Record<string, FnDef>[];
+  inLoop: LoopContext;
 }
 
 /**
@@ -299,4 +337,73 @@ export function findStruct(
     if (scope && scope[name]) return scope[name];
   }
   return null;
+}
+
+/**
+ * Find a declared function, innermost scope first.
+ * @param fns - The stack of declared functions.
+ * @param name - The function name.
+ * @returns The function definition, or null if not found.
+ */
+export function findFn(
+  fns: Record<string, FnDef>[],
+  name: string,
+): FnDef | null {
+  for (let i = fns.length - 1; i >= 0; i--) {
+    const scope = fns[i];
+    if (scope && scope[name]) return scope[name];
+  }
+  return null;
+}
+
+/**
+ * The value kind a resolved kind name denotes: a number suffix or a kind
+ * name maps to its value kind; a tuple or array kind name maps to its
+ * container kind.
+ * @param name - The resolved kind name.
+ * @returns The value kind the kind name denotes.
+ */
+export function kindValueKind(name: KindName): ValueKind {
+  if (name.kind === "KindNameTuple") return "tuple";
+  if (name.kind === "KindNameArray") return "array";
+  if (name.kind === "KindNameRef") return "number";
+  if (isNumberSuffix(name.name)) return "number";
+  return kindName(name.name) ?? "number";
+}
+
+/**
+ * Resolve the bare names in a kind name through the alias stack, innermost
+ * scope first; tuple and array elements are resolved recursively.
+ * @param name - The kind name to resolve.
+ * @param aliases - The stack of declared type aliases.
+ * @returns The kind name with every alias name replaced by its definition.
+ */
+export function resolveKindName(
+  name: KindName,
+  aliases: Record<string, KindName>[],
+): KindName {
+  if (name.kind === "KindNameBare") {
+    for (let i = aliases.length - 1; i >= 0; i--) {
+      const scope = aliases[i];
+      const alias = scope?.[name.name];
+      if (alias !== undefined) return alias;
+    }
+    return name;
+  }
+  if (name.kind === "KindNameTuple") {
+    return {
+      kind: "KindNameTuple",
+      elements: name.elements.map((element) =>
+        resolveKindName(element, aliases),
+      ),
+    };
+  }
+  if (name.kind === "KindNameArray") {
+    return {
+      kind: "KindNameArray",
+      element: resolveKindName(name.element, aliases),
+      length: name.length,
+    };
+  }
+  return name;
 }

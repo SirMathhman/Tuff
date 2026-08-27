@@ -19,8 +19,11 @@ export type {
   ArrayNode,
   ArrayIndexNode,
   RangeNode,
+  CallNode,
   TuffExpr,
   LetNode,
+  FnNode,
+  FnParam,
   AssignNode,
   ReturnNode,
   BlockNode,
@@ -63,7 +66,8 @@ export function parseProgram(
       stmt.kind !== "If" &&
       stmt.kind !== "While" &&
       stmt.kind !== "For" &&
-      stmt.kind !== "Struct"
+      stmt.kind !== "Struct" &&
+      stmt.kind !== "Fn"
     ) {
       return {
         kind: "InvalidStatement",

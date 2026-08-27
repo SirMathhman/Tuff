@@ -1,9 +1,18 @@
+import type { TuffStatement } from "./ast.ts";
 import type { TuffValue } from "./values.ts";
 
 /** A variable binding in a scope. */
 export interface Binding {
   value: TuffValue;
   mut: boolean;
+}
+
+/** A registered function: its parameter names and body statements. */
+export interface FnEntry {
+  /** The parameter names, in source order. */
+  params: string[];
+  /** The function body statements. */
+  body: TuffStatement[];
 }
 
 /**
@@ -44,16 +53,19 @@ export function createRefRegistry(): RefRegistry {
   return { next: 1, refs: new Map() };
 }
 
-/** Per-evaluation state: the scope chain and the reference registry. */
+/** Per-evaluation state: the scope chain, reference registry, and functions. */
 export interface Environment {
   scopes: Map<string, Binding>[];
   refs: RefRegistry;
+  /** The registered functions, keyed by name. */
+  fns: Map<string, FnEntry>;
 }
 
 /**
  * Create a fresh evaluation environment.
- * @returns {Environment} An environment with one empty scope and no references.
+ * @returns {Environment} An environment with one empty scope, no references,
+ * and no functions.
  */
 export function createEnvironment(): Environment {
-  return { scopes: [new Map()], refs: createRefRegistry() };
+  return { scopes: [new Map()], refs: createRefRegistry(), fns: new Map() };
 }
