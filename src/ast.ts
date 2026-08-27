@@ -166,6 +166,8 @@ export interface LetNode {
   kind: "Let";
   mut: boolean;
   name: string;
+  /** The declared type, if the declaration carried a `: KindName` annotation. */
+  annotation?: KindName;
   value: TuffExpr;
 }
 

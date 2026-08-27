@@ -339,7 +339,7 @@ export function parseLevel(
  * @param value {KindName | TuffError} - The value to test.
  * @returns {boolean} True if the value is a kind name.
  */
-function isKindName(value: KindName | TuffError): value is KindName {
+export function isKindName(value: KindName | TuffError): value is KindName {
   return (
     value.kind === "KindNameBare" ||
     value.kind === "KindNameRef" ||
@@ -358,7 +358,7 @@ function isKindName(value: KindName | TuffError): value is KindName {
  * @param line {number} - The 1-based line number.
  * @returns {KindName | TuffError} The kind name, or a TuffError.
  */
-function parseKindName(
+export function parseKindName(
   tokens: TuffToken[],
   pos: Pos,
   line: number,

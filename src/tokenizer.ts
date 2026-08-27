@@ -78,6 +78,11 @@ export interface DotToken {
   kind: "Dot";
 }
 
+/** A `:` type-annotation token. */
+export interface ColonToken {
+  kind: "Colon";
+}
+
 /** A `;` statement separator token. */
 export interface SemicolonToken {
   kind: "Semicolon";
@@ -130,6 +135,7 @@ export type TuffToken =
   | IsToken
   | CommaToken
   | DotToken
+  | ColonToken
   | SemicolonToken
   | LBraceToken
   | RBraceToken
@@ -189,6 +195,8 @@ function readPunct(text: string, j: number): ReadToken | null {
   if (ch === ",")
     return { kind: "token", token: { kind: "Comma" }, next: j + 1 };
   if (ch === ".") return { kind: "token", token: { kind: "Dot" }, next: j + 1 };
+  if (ch === ":")
+    return { kind: "token", token: { kind: "Colon" }, next: j + 1 };
   if (ch === ";")
     return { kind: "token", token: { kind: "Semicolon" }, next: j + 1 };
   if (ch === "{")

@@ -1,10 +1,12 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
-import type { Pos, TuffExpr, TuffStatement } from "./ast.ts";
+import type { KindName, Pos, TuffExpr, TuffStatement } from "./ast.ts";
 import {
   isExpr,
+  isKindName,
   parseIndexSuffix,
+  parseKindName,
   parseLevel,
   parseOperand,
   type BinaryNodeKind,
@@ -88,7 +90,7 @@ function parseAssign(
 }
 
 /**
- * Parse a `let` declaration: `let [mut] name = expr`.
+ * Parse a `let` declaration: `let [mut] name [: KindName] = expr`.
  * @param tokens {TuffToken[]} - The token list; `let` already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the declaration.
  * @param line {number} - The 1-based line number.
@@ -110,9 +112,16 @@ function parseLet(
     return { kind: "InvalidStatement", token: tokenDetail(nameTok), line };
   }
   pos.i++;
+  let annotation: KindName | undefined;
+  if (tokens[pos.i]?.kind === "Colon") {
+    pos.i++;
+    const parsed = parseKindName(tokens, pos, line);
+    if (!isKindName(parsed)) return parsed;
+    annotation = parsed;
+  }
   const value = parseValue(tokens, pos, line);
   if (!isExpr(value)) return value;
-  return { kind: "Let", mut, name: nameTok.name, value };
+  return { kind: "Let", mut, name: nameTok.name, annotation, value };
 }
 
 /**

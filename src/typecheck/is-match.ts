@@ -58,6 +58,84 @@ export function isRightMatch(
 }
 
 /**
+ * Whether a `let` initializer matches its `: KindName` annotation: like an
+ * `is` type-test, except an unsuffixed number literal is coerced to a named
+ * number suffix instead of failing to match it.
+ * @param value - The initializer expression.
+ * @param annotation - The declared kind name.
+ * @param scopes - The stack of declared bindings.
+ * @param resolveDeref - The dereference resolver, for kind inference.
+ * @returns True if the initializer matches the annotation.
+ */
+export function annotationMatch(
+  value: TuffExpr,
+  annotation: KindName,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+): boolean {
+  if (annotation.kind === "KindNameRef") {
+    return isRefMatch(
+      value,
+      annotation.depth,
+      annotation.mut,
+      annotation.name,
+      scopes,
+    );
+  }
+  if (annotation.kind === "KindNameTuple") {
+    if (value.kind !== "Tuple") return false;
+    if (value.elements.length !== annotation.elements.length) return false;
+    for (let i = 0; i < value.elements.length; i++) {
+      const element = value.elements[i];
+      const elementName = annotation.elements[i];
+      if (element === undefined || elementName === undefined) return false;
+      if (!annotationMatch(element, elementName, scopes, resolveDeref)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (annotation.kind === "KindNameArray") {
+    if (value.kind !== "Array") return false;
+    if (value.elements.length !== annotation.length) return false;
+    for (const element of value.elements) {
+      if (!annotationMatch(element, annotation.element, scopes, resolveDeref)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return annotationBareMatch(value, annotation.name, scopes, resolveDeref);
+}
+
+/**
+ * Whether an initializer matches a bare annotation name: a number suffix
+ * accepts an unsuffixed number literal (coercing it) or an expression
+ * carrying that suffix; a kind name requires the inferred kind to match.
+ * @param value - The initializer expression.
+ * @param name - The suffix or kind name the annotation names.
+ * @param scopes - The stack of declared bindings.
+ * @param resolveDeref - The dereference resolver, for kind inference.
+ * @returns True if the initializer matches the named suffix or kind.
+ */
+function annotationBareMatch(
+  value: TuffExpr,
+  name: string,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+): boolean {
+  if (isNumberSuffix(name)) {
+    if (value.kind === "Literal" && value.value.kind === "number") {
+      return value.suffix === undefined || value.suffix === name;
+    }
+    return exprSuffix(value, scopes) === name;
+  }
+  const kind = kindName(name);
+  if (kind === null) return false;
+  return inferKind(value, scopes, resolveDeref) === kind;
+}
+
+/**
  * Check the right operand of an `is` type-test: a bare name must name a
  * legal number suffix or a legal kind name; a reference chain must name a
  * legal number suffix; a tuple or array of element tests must name legal
@@ -81,7 +159,7 @@ export function checkIsOperand(expr: IsNode, line: number): TuffError | null {
  * @returns An InvalidNumberSuffix error if a name is neither a legal suffix
  * nor a legal kind, else null.
  */
-function checkKindName(name: KindName, line: number): TuffError | null {
+export function checkKindName(name: KindName, line: number): TuffError | null {
   if (name.kind === "KindNameRef") {
     if (!isNumberSuffix(name.name)) {
       return { kind: "InvalidNumberSuffix", suffix: name.name, line };

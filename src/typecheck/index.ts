@@ -4,7 +4,9 @@ import type {
   AssignNode,
   ForNode,
   IfNode,
+  KindName,
   LetNode,
+  TuffExpr,
   TuffStatement,
   WhileNode,
 } from "../ast.ts";
@@ -25,6 +27,7 @@ import {
   resolveIndex,
 } from "./expressions.ts";
 import { foldStatement } from "./fold.ts";
+import { annotationMatch, checkKindName } from "./is-match.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
@@ -154,6 +157,16 @@ function checkLet(
   if (rangeError) return rangeError;
   const suffixError = checkNumberSuffixes(stmt.value, line);
   if (suffixError) return suffixError;
+  if (stmt.annotation !== undefined) {
+    const annotationError = checkAnnotation(
+      stmt.annotation,
+      stmt.value,
+      stmt.name,
+      line,
+      scopes,
+    );
+    if (annotationError) return annotationError;
+  }
   const kind = inferKind(stmt.value, scopes, resolveDeref);
   if (kind) {
     const refTo =
@@ -184,6 +197,31 @@ function checkLet(
       suffix,
       scopes,
     );
+  }
+  return null;
+}
+
+/**
+ * Check a `let` declaration's `: KindName` annotation: the kind name must
+ * name legal suffixes/kinds, and the initializer must match it.
+ * @param annotation - The declared kind name.
+ * @param value - The initializer expression.
+ * @param name - The binding name, for error reporting.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns An InvalidNumberSuffix or TypeMismatch error, else null.
+ */
+function checkAnnotation(
+  annotation: KindName,
+  value: TuffExpr,
+  name: string,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  const nameError = checkKindName(annotation, line);
+  if (nameError) return nameError;
+  if (!annotationMatch(value, annotation, scopes, resolveDeref)) {
+    return { kind: "TypeMismatch", name, line };
   }
   return null;
 }
