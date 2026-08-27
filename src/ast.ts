@@ -4,6 +4,8 @@ import type { TuffValue } from "./values.ts";
 export interface LiteralNode {
   kind: "Literal";
   value: TuffValue;
+  /** The type suffix (e.g. `U8`), if a number literal carried one. */
+  suffix?: string;
 }
 
 /** An identifier expression node. */

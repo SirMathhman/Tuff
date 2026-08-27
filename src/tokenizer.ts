@@ -2,6 +2,8 @@
 export interface NumberToken {
   kind: "Number";
   value: number;
+  /** The type suffix (e.g. `U8`), if the literal carried one. */
+  suffix?: string;
 }
 
 /** A boolean literal token. */
@@ -213,7 +215,11 @@ function readWord(text: string, j: number): ReadToken | TokenizeError {
     const suffix = rest.slice(num[0].length).match(/^[A-Za-z_]\w*/);
     return {
       kind: "token",
-      token: { kind: "Number", value: Number(num[0]) },
+      token: {
+        kind: "Number",
+        value: Number(num[0]),
+        suffix: suffix ? suffix[0] : undefined,
+      },
       next: j + num[0].length + (suffix ? suffix[0].length : 0),
     };
   }

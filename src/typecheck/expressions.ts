@@ -137,6 +137,70 @@ export function findUndeclared(
 }
 
 /**
+ * The legal type suffixes a number literal may carry. The single source of
+ * truth for which suffixes are valid.
+ */
+const NUMBER_SUFFIXES = new Set([
+  "U8",
+  "I8",
+  "U16",
+  "I16",
+  "U32",
+  "I32",
+  "U64",
+  "I64",
+  "F32",
+  "F64",
+]);
+
+/**
+ * Check the type suffix of every number literal in an expression: a suffix
+ * outside the legal set is an InvalidNumberSuffix.
+ * @param expr - The expression to inspect.
+ * @param line - The 1-based line number.
+ * @returns An InvalidNumberSuffix error if a literal carries an illegal
+ * suffix, else null.
+ */
+export function checkNumberSuffixes(
+  expr: TuffExpr,
+  line: number,
+): TuffError | null {
+  if (expr.kind === "Literal" && expr.suffix !== undefined) {
+    if (!NUMBER_SUFFIXES.has(expr.suffix)) {
+      return { kind: "InvalidNumberSuffix", suffix: expr.suffix, line };
+    }
+  }
+  if (
+    expr.kind === "Or" ||
+    expr.kind === "And" ||
+    expr.kind === "Add" ||
+    expr.kind === "Equal" ||
+    expr.kind === "Less" ||
+    expr.kind === "Range"
+  ) {
+    const left = checkNumberSuffixes(expr.left, line);
+    return left ?? checkNumberSuffixes(expr.right, line);
+  }
+  if (expr.kind === "Ref" || expr.kind === "Deref") {
+    return checkNumberSuffixes(expr.operand, line);
+  }
+  if (expr.kind === "TupleIndex") {
+    return checkNumberSuffixes(expr.operand, line);
+  }
+  if (expr.kind === "ArrayIndex") {
+    const operand = checkNumberSuffixes(expr.operand, line);
+    return operand ?? checkNumberSuffixes(expr.index, line);
+  }
+  if (expr.kind === "Tuple" || expr.kind === "Array") {
+    for (const element of expr.elements) {
+      const error = checkNumberSuffixes(element, line);
+      if (error) return error;
+    }
+  }
+  return null;
+}
+
+/**
  * Check the bounds of every range literal in an expression: a non-numeric
  * bound is a TypeMismatch.
  * @param expr - The expression to inspect.

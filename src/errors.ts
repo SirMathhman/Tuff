@@ -94,6 +94,14 @@ export interface InvalidArrayIndexAssignError {
   line: number;
 }
 
+/** An error for a number literal carrying a type suffix outside the legal set. */
+export interface InvalidNumberSuffixError {
+  kind: "InvalidNumberSuffix";
+  /** The offending suffix. */
+  suffix: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -108,7 +116,8 @@ export type TuffError =
   | ContinueOutsideLoopError
   | InvalidTupleIndexError
   | InvalidArrayIndexError
-  | InvalidArrayIndexAssignError;
+  | InvalidArrayIndexAssignError
+  | InvalidNumberSuffixError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

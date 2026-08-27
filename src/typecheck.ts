@@ -18,6 +18,7 @@ import {
   type ValueKind,
 } from "./typecheck/kinds.ts";
 import {
+  checkNumberSuffixes,
   checkRangeLiterals,
   findUndeclared,
   resolveDeref,
@@ -98,7 +99,10 @@ function checkStatement(
   if (stmt.kind === "While") return checkWhile(stmt, line, scopes);
   if (stmt.kind === "For") return checkFor(stmt, line, scopes);
   if (stmt.kind === "Assign") return checkAssignment(stmt, line, scopes);
-  if (stmt.kind === "Return") return findUndeclared(stmt.value, line, scopes);
+  if (stmt.kind === "Return") {
+    const error = findUndeclared(stmt.value, line, scopes);
+    return error ?? checkNumberSuffixes(stmt.value, line);
+  }
   if (stmt.kind === "Break")
     return inLoop ? null : { kind: "BreakOutsideLoop", line };
   if (stmt.kind === "Continue")
@@ -122,6 +126,8 @@ function checkLet(
   if (error) return error;
   const rangeError = checkRangeLiterals(stmt.value, line, scopes);
   if (rangeError) return rangeError;
+  const suffixError = checkNumberSuffixes(stmt.value, line);
+  if (suffixError) return suffixError;
   const kind = inferKind(stmt.value, scopes, resolveDeref);
   if (kind) {
     const refTo =
@@ -234,6 +240,8 @@ function checkFor(
   }
   const boundsError = checkRangeLiterals(stmt.range, line, scopes);
   if (boundsError) return boundsError;
+  const suffixError = checkNumberSuffixes(stmt.range, line);
+  if (suffixError) return suffixError;
   scopes.push({});
   try {
     declareBinding(
@@ -289,6 +297,8 @@ function checkAssignment(
   if (valueError) return valueError;
   const rangeError = checkRangeLiterals(stmt.value, line, scopes);
   if (rangeError) return rangeError;
+  const suffixError = checkNumberSuffixes(stmt.value, line);
+  if (suffixError) return suffixError;
   const expected =
     stmt.target.kind === "ArrayIndex"
       ? elementKind(stmt.target, scopes)

@@ -185,7 +185,11 @@ function parsePrimary(
     pos.i++;
     const value =
       token.kind === "Number" ? num(token.value) : bool(token.value !== 0);
-    return { kind: "Literal", value };
+    return {
+      kind: "Literal",
+      value,
+      suffix: token.kind === "Number" ? token.suffix : undefined,
+    };
   }
   if (token.kind === "Ref") {
     pos.i++;

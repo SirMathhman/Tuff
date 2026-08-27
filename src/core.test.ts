@@ -17,6 +17,20 @@ test('evaluateTuff("return 100U8;") => 100', () => {
   expect(evaluateTuff("return 100U8;")).toEqual({ ok: true, value: 100 });
 });
 
+test('evaluateTuff("return 100FOO;") => Err', () => {
+  expect(evaluateTuff("return 100FOO;")).toEqual({
+    ok: false,
+    error: { kind: "InvalidNumberSuffix", suffix: "FOO", line: 1 },
+  });
+});
+
+test('evaluateTuff("return 100u8;") => Err', () => {
+  expect(evaluateTuff("return 100u8;")).toEqual({
+    ok: false,
+    error: { kind: "InvalidNumberSuffix", suffix: "u8", line: 1 },
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

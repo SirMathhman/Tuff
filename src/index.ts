@@ -23,6 +23,7 @@ export type {
   ContinueOutsideLoopError,
   InvalidTupleIndexError,
   InvalidArrayIndexError,
+  InvalidNumberSuffixError,
 } from "./errors.ts";
 export type {
   TuffExpr,
