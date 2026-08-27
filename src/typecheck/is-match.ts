@@ -10,6 +10,18 @@ import {
 import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
 
 /**
+ * Matches a bare kind name (a number suffix or a kind name) against an
+ * expression. Passed to the kind-name matcher to break the mutual recursion
+ * between the `is` type-test and the let-annotation matchers.
+ */
+type BareMatch = (
+  value: TuffExpr,
+  name: string,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+) => boolean;
+
+/**
  * Whether a folded `is` left operand matches its right operand's kind name:
  * a bare suffix/kind name, a reference chain to a suffix, a tuple of element
  * tests (matched element-wise against a tuple left), or an array element test
@@ -26,35 +38,7 @@ export function isRightMatch(
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
 ): boolean {
-  if (right.kind === "KindNameRef") {
-    return isRefMatch(left, right.depth, right.mut, right.name, scopes);
-  }
-  if (right.kind === "KindNameTuple") {
-    if (left.kind !== "Tuple") return false;
-    if (left.elements.length !== right.elements.length) return false;
-    for (let i = 0; i < left.elements.length; i++) {
-      const leftElement = left.elements[i];
-      const rightElement = right.elements[i];
-      if (leftElement === undefined || rightElement === undefined) {
-        return false;
-      }
-      if (!isRightMatch(leftElement, rightElement, scopes, resolveDeref)) {
-        return false;
-      }
-    }
-    return true;
-  }
-  if (right.kind === "KindNameArray") {
-    if (left.kind !== "Array") return false;
-    if (left.elements.length !== right.length) return false;
-    for (const element of left.elements) {
-      if (!isRightMatch(element, right.element, scopes, resolveDeref)) {
-        return false;
-      }
-    }
-    return true;
-  }
-  return isMatch(left, right.name, scopes, resolveDeref);
+  return matchKindName(left, right, scopes, resolveDeref, isMatch);
 }
 
 /**
@@ -73,39 +57,55 @@ export function annotationMatch(
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
 ): boolean {
-  if (annotation.kind === "KindNameRef") {
-    return isRefMatch(
-      value,
-      annotation.depth,
-      annotation.mut,
-      annotation.name,
-      scopes,
-    );
+  return matchKindName(value, annotation, scopes, resolveDeref, annotationBareMatch);
+}
+
+/**
+ * Match an expression against a kind name: a reference chain to a suffix,
+ * a tuple of element tests (matched element-wise against a tuple), or an
+ * array element test and length (matched against an array of the same
+ * length); a bare name is delegated to the given bare matcher.
+ * @param value - The expression to match.
+ * @param name - The kind name to match against.
+ * @param scopes - The stack of declared bindings.
+ * @param resolveDeref - The dereference resolver, for kind inference.
+ * @param bareMatch - The bare-name matcher, for the leaf case.
+ * @returns True if the expression matches the kind name.
+ */
+function matchKindName(
+  value: TuffExpr,
+  name: KindName,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+  bareMatch: BareMatch,
+): boolean {
+  if (name.kind === "KindNameRef") {
+    return isRefMatch(value, name.depth, name.mut, name.name, scopes);
   }
-  if (annotation.kind === "KindNameTuple") {
+  if (name.kind === "KindNameTuple") {
     if (value.kind !== "Tuple") return false;
-    if (value.elements.length !== annotation.elements.length) return false;
+    if (value.elements.length !== name.elements.length) return false;
     for (let i = 0; i < value.elements.length; i++) {
       const element = value.elements[i];
-      const elementName = annotation.elements[i];
+      const elementName = name.elements[i];
       if (element === undefined || elementName === undefined) return false;
-      if (!annotationMatch(element, elementName, scopes, resolveDeref)) {
+      if (!matchKindName(element, elementName, scopes, resolveDeref, bareMatch)) {
         return false;
       }
     }
     return true;
   }
-  if (annotation.kind === "KindNameArray") {
+  if (name.kind === "KindNameArray") {
     if (value.kind !== "Array") return false;
-    if (value.elements.length !== annotation.length) return false;
+    if (value.elements.length !== name.length) return false;
     for (const element of value.elements) {
-      if (!annotationMatch(element, annotation.element, scopes, resolveDeref)) {
+      if (!matchKindName(element, name.element, scopes, resolveDeref, bareMatch)) {
         return false;
       }
     }
     return true;
   }
-  return annotationBareMatch(value, annotation.name, scopes, resolveDeref);
+  return bareMatch(value, name.name, scopes, resolveDeref);
 }
 
 /**
