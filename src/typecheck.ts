@@ -24,7 +24,7 @@ import {
   resolveDeref,
   resolveIndex,
 } from "./typecheck/expressions.ts";
-import { foldProgram } from "./typecheck/fold.ts";
+import { foldStatement } from "./typecheck/fold.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
@@ -51,7 +51,7 @@ export function typecheckProgram(
   const scopes: Record<string, DeclaredBinding>[] = [{}];
   const error = checkStatements(statements, baseLine, scopes, false);
   if (error) return error;
-  return foldProgram(statements);
+  return statements;
 }
 
 /**
@@ -86,6 +86,27 @@ function checkStatements(
  * @returns A TuffError if a semantic error is found, else null.
  */
 function checkStatement(
+  stmt: TuffStatement,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+  inLoop: LoopContext,
+): TuffError | null {
+  const error = checkStatementBody(stmt, line, scopes, inLoop);
+  if (error) return error;
+  foldStatement(stmt, scopes, resolveDeref);
+  return null;
+}
+
+/**
+ * Check a single statement's kind, without folding. The caller folds the
+ * statement's own expressions once this returns null.
+ * @param stmt - The statement to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @param inLoop - Whether the statements are inside a loop body.
+ * @returns A TuffError if a semantic error is found, else null.
+ */
+function checkStatementBody(
   stmt: TuffStatement,
   line: number,
   scopes: Record<string, DeclaredBinding>[],

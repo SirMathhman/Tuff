@@ -2,6 +2,7 @@ import type { TuffError } from "../errors.ts";
 import type {
   ArrayIndexNode,
   ArrayNode,
+  IsNode,
   TuffExpr,
   TupleIndexNode,
   TupleNode,
@@ -10,6 +11,7 @@ import {
   arrayElementKinds,
   findDeclared,
   inferKind,
+  kindName,
   literalIndex,
   tupleElementKinds,
   type DeclaredBinding,
@@ -173,10 +175,8 @@ export function checkNumberSuffixes(
     }
   }
   if (expr.kind === "Is") {
-    const name = expr.right.kind === "Identifier" ? expr.right.name : "";
-    if (name !== "Bool" && !isNumberSuffix(name)) {
-      return { kind: "InvalidNumberSuffix", suffix: name, line };
-    }
+    const error = checkIsOperand(expr, line);
+    if (error) return error;
     return checkNumberSuffixes(expr.left, line);
   }
   if (
@@ -205,6 +205,22 @@ export function checkNumberSuffixes(
       const error = checkNumberSuffixes(element, line);
       if (error) return error;
     }
+  }
+  return null;
+}
+
+/**
+ * Check the right operand of an `is` type-test: it must name a legal number
+ * suffix or a legal kind name.
+ * @param expr - The Is expression to inspect.
+ * @param line - The 1-based line number.
+ * @returns An InvalidNumberSuffix error if the right operand names neither a
+ * legal suffix nor a legal kind, else null.
+ */
+function checkIsOperand(expr: IsNode, line: number): TuffError | null {
+  const name = expr.right.kind === "Identifier" ? expr.right.name : "";
+  if (kindName(name) === null && !isNumberSuffix(name)) {
+    return { kind: "InvalidNumberSuffix", suffix: name, line };
   }
   return null;
 }

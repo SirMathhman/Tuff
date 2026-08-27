@@ -4,6 +4,25 @@ import type { TuffExpr } from "../ast.ts";
 /** The statically known kinds a binding or element can hold. */
 export type ValueKind = "number" | "bool" | "tuple" | "array" | "range";
 
+/**
+ * The legal kind names a type-test (`is`) may name, mapped to the value kind
+ * they test for. Suffix names (U8, I8, ...) are not kind names; they match a
+ * literal's suffix and live in `suffixes.ts`.
+ */
+const KIND_NAMES: Record<string, ValueKind> = {
+  Bool: "bool",
+};
+
+/**
+ * Resolve a type-test kind name to the value kind it tests for.
+ * @param name - The kind name to resolve.
+ * @returns The value kind, or null if the name is not a legal kind name.
+ */
+export function kindName(name: string): ValueKind | null {
+  const kind = KIND_NAMES[name];
+  return kind === undefined ? null : kind;
+}
+
 /** A declared binding's type, mutability, and reference target. */
 export interface DeclaredBinding {
   /** The kind of value the binding holds. */
