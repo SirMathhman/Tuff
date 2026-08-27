@@ -1,7 +1,7 @@
 // Generates callgraph.svg: a Graphviz call graph of all functions in the repo.
 // Usage: bun tools/callgraph.ts
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import * as ts from "typescript";
 import {
   renderGraph,
@@ -33,8 +33,16 @@ function collectTsFiles(dir: string): string[] {
 
 const files = collectTsFiles(root);
 
-// name -> file(s) defining a function with that name
-const defs = new Map<string, Set<string>>();
+/** A function name as seen from a file, and the file that defines it. */
+interface ImportedName {
+  file: string;
+  name: string;
+}
+
+// file -> the names of the functions defined in that file
+const fileDefs = new Map<string, Set<string>>();
+// file -> local name -> where an import brought that name in from
+const imports = new Map<string, Map<string, ImportedName>>();
 // file::name -> set of called names
 const calls = new Map<string, Set<string>>();
 
@@ -80,11 +88,38 @@ for (const file of files) {
   }
   visit(sf);
 
+  // Record what each file's module scope brings in, so a called name can be
+  // resolved the way TypeScript would rather than by matching it against
+  // every function in the repo.
+  const fileImports = new Map<string, ImportedName>();
+  for (const statement of sf.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.moduleSpecifier.text.startsWith(".")
+    ) {
+      continue;
+    }
+    const from = relative(
+      root,
+      join(dirname(file), statement.moduleSpecifier.text),
+    );
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      fileImports.set(element.name.text, {
+        file: from,
+        name: (element.propertyName ?? element.name).text,
+      });
+    }
+  }
+  imports.set(relative(root, file), fileImports);
+
   for (const { name, node } of functions) {
     const relFile = relative(root, file);
-    const set = defs.get(name) ?? new Set();
-    set.add(relFile);
-    defs.set(name, set);
+    const names = fileDefs.get(relFile) ?? new Set<string>();
+    names.add(name);
+    fileDefs.set(relFile, names);
     const id = defId(file, name);
     const called = calls.get(id) ?? new Set<string>();
     calls.set(id, called);
@@ -222,26 +257,47 @@ function addEdge(edges: [string, string][], from: string, to: string): void {
   edges.push([from, to]);
 }
 
+/**
+ * Resolve a called name to the function it refers to from a given file.
+ * A name the file neither defines nor imports -- a parameter holding a
+ * callback, say -- is not a reference to the repo function that happens to
+ * share its name, so it resolves to nothing.
+ * @param fromFile - The file the call is made from.
+ * @param callee - The called name.
+ * @returns The resolved definition, or undefined if it is not one.
+ */
+function resolveCallee(
+  fromFile: string,
+  callee: string,
+): ImportedName | undefined {
+  if (fileDefs.get(fromFile)?.has(callee)) {
+    return { file: fromFile, name: callee };
+  }
+  const imported = imports.get(fromFile)?.get(callee);
+  if (imported && fileDefs.get(imported.file)?.has(imported.name)) {
+    return imported;
+  }
+  return undefined;
+}
+
 for (const [id, called] of calls) {
   const fromFile = id.split("::")[0]!;
   for (const callee of called) {
-    const targets = defs.get(callee);
-    if (!targets) continue; // not a function in this repo
-    for (const targetFile of targets) {
-      if (targetFile === fromFile) {
-        addEdge(leaves.get(fromFile)!.edges, id, defId(targetFile, callee));
-        continue;
-      }
-      // Attach the edge to the outermost box holding one file but not the
-      // other, so a call leaving a directory is drawn as the directory's
-      // arrow rather than one escaping from a file nested inside it.
-      const fromChain = chains.get(fromFile)!;
-      const targetChain = chains.get(targetFile)!;
-      let depth = 0;
-      while (fromChain[depth] === targetChain[depth]) depth++;
-      const owner = groups.get(fromChain[depth - 1]!)!;
-      addEdge(owner.edges, fromChain[depth]!, targetChain[depth]!);
+    const target = resolveCallee(fromFile, callee);
+    if (!target) continue; // not a function this file can see
+    if (target.file === fromFile) {
+      addEdge(leaves.get(fromFile)!.edges, id, defId(target.file, target.name));
+      continue;
     }
+    // Attach the edge to the outermost box holding one file but not the
+    // other, so a call leaving a directory is drawn as the directory's
+    // arrow rather than one escaping from a file nested inside it.
+    const fromChain = chains.get(fromFile)!;
+    const targetChain = chains.get(target.file)!;
+    let depth = 0;
+    while (fromChain[depth] === targetChain[depth]) depth++;
+    const owner = groups.get(fromChain[depth - 1]!)!;
+    addEdge(owner.edges, fromChain[depth]!, targetChain[depth]!);
   }
 }
 
