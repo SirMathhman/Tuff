@@ -17,8 +17,8 @@ import {
   structFieldKinds,
   tupleElementKinds,
   type DeclaredBinding,
+  type ExprCheckContext,
   type ResolvedDeref,
-  type StructDef,
 } from "./kinds.ts";
 import { checkIsOperand } from "./is-match.ts";
 import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
@@ -56,31 +56,33 @@ export function resolveDeref(
  * Resolve an array-index assignment target to the binding it writes to.
  * @param expr - The ArrayIndex target expression.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns The array binding and its name, or a TuffError.
  */
 export function resolveIndex(
   expr: ArrayIndexNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): ResolvedDeref | TuffError {
   if (expr.operand.kind !== "Identifier") {
     return { kind: "InvalidArrayIndexAssign", name: "", line };
   }
-  const error = findUndeclared(expr.operand, line, scopes, structs);
+  const error = findUndeclared(expr.operand, line, context);
   if (error) return error;
-  const indexError = findUndeclared(expr.index, line, scopes, structs);
+  const indexError = findUndeclared(expr.index, line, context);
   if (indexError) return indexError;
-  const operandKind = inferKind(expr.operand, scopes, resolveDeref);
+  const operandKind = inferKind(
+    expr.operand,
+    context.scopes,
+    context.resolveDeref,
+  );
   if (operandKind !== null && operandKind !== "array") {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "InvalidArrayIndexAssign", name, line };
   }
-  const indexCheck = checkArrayIndex(expr, line, scopes);
+  const indexCheck = checkArrayIndex(expr, line, context.scopes);
   if (indexCheck) return indexCheck;
-  const declared = findDeclared(scopes, expr.operand.name);
+  const declared = findDeclared(context.scopes, expr.operand.name);
   if (!declared) {
     return { kind: "UnidentifiedIdentifier", name: expr.operand.name, line };
   }
@@ -92,26 +94,24 @@ export function resolveIndex(
  * in an expression.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier, InvalidReference, InvalidDeref, or
  * ImmutableAssignment error if one is found, else null.
  */
 export function findUndeclared(
   expr: TuffExpr,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
   if (expr.kind === "Identifier") {
-    if (!findDeclared(scopes, expr.name)) {
+    if (!findDeclared(context.scopes, expr.name)) {
       return { kind: "UnidentifiedIdentifier", name: expr.name, line };
     }
     return null;
   }
   if (expr.kind === "Is") {
     // The right operand is a kind name, not an expression; check only the left.
-    return findUndeclared(expr.left, line, scopes, structs);
+    return findUndeclared(expr.left, line, context);
   }
   if (
     expr.kind === "Or" ||
@@ -121,14 +121,14 @@ export function findUndeclared(
     expr.kind === "Less" ||
     expr.kind === "Range"
   ) {
-    const left = findUndeclared(expr.left, line, scopes, structs);
-    return left ?? findUndeclared(expr.right, line, scopes, structs);
+    const left = findUndeclared(expr.left, line, context);
+    return left ?? findUndeclared(expr.right, line, context);
   }
   if (expr.kind === "Ref") {
     if (expr.operand.kind !== "Identifier") {
       return { kind: "InvalidReference", name: "", line };
     }
-    const declared = findDeclared(scopes, expr.operand.name);
+    const declared = findDeclared(context.scopes, expr.operand.name);
     if (!declared) {
       return { kind: "UnidentifiedIdentifier", name: expr.operand.name, line };
     }
@@ -138,21 +138,21 @@ export function findUndeclared(
     return null;
   }
   if (expr.kind === "Deref") {
-    const resolved = resolveDeref(expr.operand, line, scopes);
+    const resolved = resolveDeref(expr.operand, line, context.scopes);
     if ("kind" in resolved) return resolved;
     return null;
   }
   if (expr.kind === "Tuple" || expr.kind === "TupleIndex") {
-    return checkTupleExpr(expr, line, scopes, structs);
+    return checkTupleExpr(expr, line, context);
   }
   if (expr.kind === "Array" || expr.kind === "ArrayIndex") {
-    return checkArrayExpr(expr, line, scopes, structs);
+    return checkArrayExpr(expr, line, context);
   }
   if (expr.kind === "StructLiteral") {
-    return checkStructLiteral(expr, line, scopes, structs);
+    return checkStructLiteral(expr, line, context);
   }
   if (expr.kind === "FieldAccess") {
-    return checkFieldAccess(expr, line, scopes, structs);
+    return checkFieldAccess(expr, line, context);
   }
   return null;
 }
@@ -303,18 +303,16 @@ export function checkRangeLiterals(
  * Check each element of a tuple or array literal for undeclared identifiers.
  * @param elements - The element expressions to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier error if one is found, else null.
  */
 function checkElements(
   elements: TuffExpr[],
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
   for (const element of elements) {
-    const error = findUndeclared(element, line, scopes, structs);
+    const error = findUndeclared(element, line, context);
     if (error) return error;
   }
   return null;
@@ -325,22 +323,24 @@ function checkElements(
  * out-of-bounds indices.
  * @param expr - The tuple or tuple-index expression to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier or InvalidTupleIndex error, else null.
  */
 function checkTupleExpr(
   expr: TupleNode | TupleIndexNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
   if (expr.kind === "Tuple") {
-    return checkElements(expr.elements, line, scopes, structs);
+    return checkElements(expr.elements, line, context);
   }
-  const error = findUndeclared(expr.operand, line, scopes, structs);
+  const error = findUndeclared(expr.operand, line, context);
   if (error) return error;
-  const kinds = tupleElementKinds(expr.operand, scopes, resolveDeref);
+  const kinds = tupleElementKinds(
+    expr.operand,
+    context.scopes,
+    context.resolveDeref,
+  );
   if (kinds && expr.index >= kinds.length) {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "InvalidTupleIndex", name, index: expr.index, line };
@@ -353,25 +353,23 @@ function checkTupleExpr(
  * non-numeric index, and out-of-bounds literal indices.
  * @param expr - The array or array-index expression to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier, TypeMismatch, or InvalidArrayIndex
  * error, else null.
  */
 function checkArrayExpr(
   expr: ArrayNode | ArrayIndexNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
   if (expr.kind === "Array") {
-    return checkElements(expr.elements, line, scopes, structs);
+    return checkElements(expr.elements, line, context);
   }
-  const error = findUndeclared(expr.operand, line, scopes, structs);
+  const error = findUndeclared(expr.operand, line, context);
   if (error) return error;
-  const indexError = findUndeclared(expr.index, line, scopes, structs);
+  const indexError = findUndeclared(expr.index, line, context);
   if (indexError) return indexError;
-  return checkArrayIndex(expr, line, scopes);
+  return checkArrayIndex(expr, line, context.scopes);
 }
 
 /**
@@ -406,17 +404,15 @@ function checkArrayIndex(
  * must name a declared field whose kind matches the initializer's kind.
  * @param expr - The struct literal to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier or TypeMismatch error, else null.
  */
 function checkStructLiteral(
   expr: StructLiteralNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
-  const def = findStruct(structs, expr.name);
+  const def = findStruct(context.structs, expr.name);
   if (!def) {
     return { kind: "UnidentifiedIdentifier", name: expr.name, line };
   }
@@ -425,9 +421,9 @@ function checkStructLiteral(
     if (expected === undefined) {
       return { kind: "UnidentifiedIdentifier", name: field.name, line };
     }
-    const error = findUndeclared(field.value, line, scopes, structs);
+    const error = findUndeclared(field.value, line, context);
     if (error) return error;
-    const kind = inferKind(field.value, scopes, resolveDeref);
+    const kind = inferKind(field.value, context.scopes, context.resolveDeref);
     if (kind !== null && kind !== expected) {
       return { kind: "TypeMismatch", name: field.name, line };
     }
@@ -440,19 +436,21 @@ function checkStructLiteral(
  * name a declared field of that struct.
  * @param expr - The field access to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns An UnidentifiedIdentifier or TypeMismatch error, else null.
  */
 function checkFieldAccess(
   expr: FieldAccessNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): TuffError | null {
-  const operandError = findUndeclared(expr.operand, line, scopes, structs);
+  const operandError = findUndeclared(expr.operand, line, context);
   if (operandError) return operandError;
-  const kinds = structFieldKinds(expr.operand, scopes, resolveDeref);
+  const kinds = structFieldKinds(
+    expr.operand,
+    context.scopes,
+    context.resolveDeref,
+  );
   if (kinds && kinds[expr.field] === undefined) {
     const name =
       expr.operand.kind === "Identifier" ? expr.operand.name : expr.field;

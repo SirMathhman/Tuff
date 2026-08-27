@@ -1,6 +1,6 @@
 import type { TuffExpr, TuffStatement } from "../ast.ts";
 import { bool } from "../values.ts";
-import type { DeclaredBinding, ResolveDeref, StructDef } from "./kinds.ts";
+import type { ExprCheckContext } from "./kinds.ts";
 import { isRightMatch } from "./is-match.ts";
 
 /**
@@ -10,24 +10,20 @@ import { isRightMatch } from "./is-match.ts";
  * matches the left literal's suffix; a kind test (e.g. `Bool`) matches the
  * left's statically inferred kind. The result is always a boolean literal.
  * @param stmt - The statement to fold.
- * @param scopes - The stack of declared bindings for this statement.
- * @param resolveDeref - The dereference resolver, for kind inference.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  */
 export function foldStatement(
   stmt: TuffStatement,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
-  structs: Record<string, StructDef>[],
+  context: ExprCheckContext,
 ): void {
   if (stmt.kind === "Let" || stmt.kind === "Return") {
-    stmt.value = foldExpr(stmt.value, scopes, resolveDeref, structs);
+    stmt.value = foldExpr(stmt.value, context);
   } else if (stmt.kind === "Assign") {
-    stmt.value = foldExpr(stmt.value, scopes, resolveDeref, structs);
+    stmt.value = foldExpr(stmt.value, context);
   } else if (stmt.kind === "If" || stmt.kind === "While") {
-    stmt.condition = foldExpr(stmt.condition, scopes, resolveDeref, structs);
+    stmt.condition = foldExpr(stmt.condition, context);
   } else if (stmt.kind === "For") {
-    stmt.range = foldExpr(stmt.range, scopes, resolveDeref, structs);
+    stmt.range = foldExpr(stmt.range, context);
   }
 }
 
@@ -35,25 +31,16 @@ export function foldStatement(
  * Fold the `is` type-tests in an expression, returning the (possibly
  * replaced) expression.
  * @param expr - The expression to fold.
- * @param scopes - The stack of declared bindings.
- * @param resolveDeref - The dereference resolver, for kind inference.
- * @param structs - The stack of declared structs.
+ * @param context - The expression check context.
  * @returns The folded expression: a boolean literal where an `Is` node was,
  * the same node otherwise.
  */
-function foldExpr(
-  expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
-  structs: Record<string, StructDef>[],
-): TuffExpr {
+function foldExpr(expr: TuffExpr, context: ExprCheckContext): TuffExpr {
   if (expr.kind === "Is") {
-    const left = foldExpr(expr.left, scopes, resolveDeref, structs);
+    const left = foldExpr(expr.left, context);
     return {
       kind: "Literal",
-      value: bool(
-        isRightMatch(left, expr.right, scopes, resolveDeref, structs),
-      ),
+      value: bool(isRightMatch(left, expr.right, context)),
     };
   }
   if (
@@ -64,8 +51,8 @@ function foldExpr(
     expr.kind === "Less" ||
     expr.kind === "Range"
   ) {
-    expr.left = foldExpr(expr.left, scopes, resolveDeref, structs);
-    expr.right = foldExpr(expr.right, scopes, resolveDeref, structs);
+    expr.left = foldExpr(expr.left, context);
+    expr.right = foldExpr(expr.right, context);
     return expr;
   }
   if (
@@ -74,24 +61,22 @@ function foldExpr(
     expr.kind === "TupleIndex" ||
     expr.kind === "FieldAccess"
   ) {
-    expr.operand = foldExpr(expr.operand, scopes, resolveDeref, structs);
+    expr.operand = foldExpr(expr.operand, context);
     return expr;
   }
   if (expr.kind === "ArrayIndex") {
-    expr.operand = foldExpr(expr.operand, scopes, resolveDeref, structs);
-    expr.index = foldExpr(expr.index, scopes, resolveDeref, structs);
+    expr.operand = foldExpr(expr.operand, context);
+    expr.index = foldExpr(expr.index, context);
     return expr;
   }
   if (expr.kind === "Tuple" || expr.kind === "Array") {
-    expr.elements = expr.elements.map((element) =>
-      foldExpr(element, scopes, resolveDeref, structs),
-    );
+    expr.elements = expr.elements.map((element) => foldExpr(element, context));
     return expr;
   }
   if (expr.kind === "StructLiteral") {
     expr.fields = expr.fields.map((field) => ({
       ...field,
-      value: foldExpr(field.value, scopes, resolveDeref, structs),
+      value: foldExpr(field.value, context),
     }));
     return expr;
   }

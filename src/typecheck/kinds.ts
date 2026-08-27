@@ -76,6 +76,21 @@ export type ResolveDeref = (
 ) => ResolvedDeref | TuffError;
 
 /**
+ * The context threaded through the expression-level checkers: the stacks of
+ * declared bindings and structs, plus the dereference resolver. Bundling these
+ * into one value keeps the walker signatures short as new per-statement scope
+ * state is added.
+ */
+export interface ExprCheckContext {
+  /** The stack of declared bindings. */
+  scopes: Record<string, DeclaredBinding>[];
+  /** The stack of declared structs. */
+  structs: Record<string, StructDef>[];
+  /** The dereference resolver, for `*` operands. */
+  resolveDeref: ResolveDeref;
+}
+
+/**
  * Infer the value kind of an expression, or null if not statically inferable.
  * @param expr - The expression to inspect.
  * @param scopes - The stack of declared bindings.

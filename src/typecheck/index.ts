@@ -21,6 +21,7 @@ import {
   literalIndex,
   structFieldKinds,
   type DeclaredBinding,
+  type ExprCheckContext,
   type StructDef,
   type ValueKind,
 } from "./kinds.ts";
@@ -51,6 +52,17 @@ interface CheckContext {
   aliases: Record<string, KindName>[];
   structs: Record<string, StructDef>[];
   inLoop: LoopContext;
+}
+
+/**
+ * Build the expression-level check context from a statement-level check
+ * context, exposing the binding and struct stacks plus the dereference
+ * resolver to the expression walkers.
+ * @param context - The mutable statement-level check context.
+ * @returns The expression-level check context.
+ */
+function exprContext(context: CheckContext): ExprCheckContext {
+  return { scopes: context.scopes, structs: context.structs, resolveDeref };
 }
 
 /**
@@ -118,7 +130,7 @@ function checkStatement(
 ): TuffError | null {
   const error = checkStatementBody(stmt, line, context);
   if (error) return error;
-  foldStatement(stmt, context.scopes, resolveDeref, context.structs);
+  foldStatement(stmt, exprContext(context));
   return null;
 }
 
@@ -157,12 +169,7 @@ function checkStatementBody(
   if (stmt.kind === "Assign")
     return checkAssignment(stmt, line, context.scopes, context.structs);
   if (stmt.kind === "Return") {
-    const error = findUndeclared(
-      stmt.value,
-      line,
-      context.scopes,
-      context.structs,
-    );
+    const error = findUndeclared(stmt.value, line, exprContext(context));
     return error ?? checkNumberSuffixes(stmt.value, line);
   }
   if (stmt.kind === "Break")
@@ -185,7 +192,7 @@ function checkLet(
   context: CheckContext,
 ): TuffError | null {
   const scopes = context.scopes;
-  const error = findUndeclared(stmt.value, line, scopes, context.structs);
+  const error = findUndeclared(stmt.value, line, exprContext(context));
   if (error) return error;
   const rangeError = checkRangeLiterals(stmt.value, line, scopes);
   if (rangeError) return rangeError;
@@ -266,7 +273,7 @@ function checkAnnotation(
   const resolved = resolveKindName(annotation, aliases);
   const nameError = checkKindName(resolved, line, structs);
   if (nameError) return nameError;
-  if (!annotationMatch(value, resolved, scopes, resolveDeref, structs)) {
+  if (!annotationMatch(value, resolved, { scopes, structs, resolveDeref })) {
     return { kind: "TypeMismatch", name, line };
   }
   return null;
@@ -410,12 +417,7 @@ function checkIf(
   line: number,
   context: CheckContext,
 ): TuffError | null {
-  const condError = findUndeclared(
-    stmt.condition,
-    line,
-    context.scopes,
-    context.structs,
-  );
+  const condError = findUndeclared(stmt.condition, line, exprContext(context));
   if (condError) return condError;
   const error = checkInScope(stmt.then, line, context);
   return error ?? (stmt.else ? checkInScope(stmt.else, line, context) : null);
@@ -433,12 +435,7 @@ function checkWhile(
   line: number,
   context: CheckContext,
 ): TuffError | null {
-  const condError = findUndeclared(
-    stmt.condition,
-    line,
-    context.scopes,
-    context.structs,
-  );
+  const condError = findUndeclared(stmt.condition, line, exprContext(context));
   if (condError) return condError;
   const prev = context.inLoop;
   context.inLoop = true;
@@ -463,7 +460,7 @@ function checkFor(
   context: CheckContext,
 ): TuffError | null {
   const scopes = context.scopes;
-  const rangeError = findUndeclared(stmt.range, line, scopes, context.structs);
+  const rangeError = findUndeclared(stmt.range, line, exprContext(context));
   if (rangeError) return rangeError;
   const rangeKind = inferKind(stmt.range, scopes, resolveDeref);
   if (rangeKind !== null && rangeKind !== "range") {
@@ -526,7 +523,11 @@ function checkAssignment(
     name = resolved.name;
     declared = resolved.binding;
   } else if (stmt.target.kind === "ArrayIndex") {
-    const resolved = resolveIndex(stmt.target, line, scopes, structs);
+    const resolved = resolveIndex(stmt.target, line, {
+      scopes,
+      structs,
+      resolveDeref,
+    });
     if ("kind" in resolved) return resolved;
     name = resolved.name;
     declared = resolved.binding;
@@ -534,7 +535,11 @@ function checkAssignment(
     return { kind: "InvalidDeref", name: "", line };
   }
   if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
-  const valueError = findUndeclared(stmt.value, line, scopes, structs);
+  const valueError = findUndeclared(stmt.value, line, {
+    scopes,
+    structs,
+    resolveDeref,
+  });
   if (valueError) return valueError;
   const rangeError = checkRangeLiterals(stmt.value, line, scopes);
   if (rangeError) return rangeError;
