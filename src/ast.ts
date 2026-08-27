@@ -95,6 +95,13 @@ export interface RangeNode {
   right: TuffExpr;
 }
 
+/** An `is` type-test expression node: `literal is Suffix`. */
+export interface IsNode {
+  kind: "Is";
+  left: TuffExpr;
+  right: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -110,7 +117,8 @@ export type TuffExpr =
   | TupleIndexNode
   | ArrayNode
   | ArrayIndexNode
-  | RangeNode;
+  | RangeNode
+  | IsNode;
 
 /** A `let` declaration statement node. */
 export interface LetNode {

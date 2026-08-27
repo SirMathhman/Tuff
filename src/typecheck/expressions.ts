@@ -99,6 +99,10 @@ export function findUndeclared(
     }
     return null;
   }
+  if (expr.kind === "Is") {
+    // The right operand is a suffix name, not an identifier; check only the left.
+    return findUndeclared(expr.left, line, scopes);
+  }
   if (
     expr.kind === "Or" ||
     expr.kind === "And" ||
@@ -138,13 +142,15 @@ export function findUndeclared(
 }
 
 /**
- * Check the type suffix of every number literal in an expression: a suffix
- * outside the legal set is an InvalidNumberSuffix, and a value outside the
- * suffix's range is a NumberOutOfRange.
+ * Check the type suffixes in an expression: a literal suffix outside the
+ * legal set is an InvalidNumberSuffix, a value outside the suffix's range is
+ * a NumberOutOfRange, and an `is` right operand that is not a legal suffix
+ * name is an InvalidNumberSuffix.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
  * @returns An InvalidNumberSuffix or NumberOutOfRange error if a literal
- * carries an illegal suffix or an out-of-range value, else null.
+ * carries an illegal suffix or an out-of-range value, or an `is` test names
+ * an illegal suffix, else null.
  */
 export function checkNumberSuffixes(
   expr: TuffExpr,
@@ -165,6 +171,13 @@ export function checkNumberSuffixes(
         };
       }
     }
+  }
+  if (expr.kind === "Is") {
+    if (expr.right.kind !== "Identifier" || !isNumberSuffix(expr.right.name)) {
+      const suffix = expr.right.kind === "Identifier" ? expr.right.name : "";
+      return { kind: "InvalidNumberSuffix", suffix, line };
+    }
+    return checkNumberSuffixes(expr.left, line);
   }
   if (
     expr.kind === "Or" ||
@@ -226,7 +239,8 @@ export function checkRangeLiterals(
     expr.kind === "Add" ||
     expr.kind === "Equal" ||
     expr.kind === "Less" ||
-    expr.kind === "Range"
+    expr.kind === "Range" ||
+    expr.kind === "Is"
   ) {
     const left = checkRangeLiterals(expr.left, line, scopes);
     return left ?? checkRangeLiterals(expr.right, line, scopes);

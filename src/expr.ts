@@ -4,11 +4,18 @@ import type { Pos, TuffExpr } from "./ast.ts";
 import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
-export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less" | "Range";
+export type BinaryNodeKind =
+  | "Or"
+  | "And"
+  | "Add"
+  | "Equal"
+  | "Less"
+  | "Range"
+  | "Is";
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
-  token: "Or" | "And" | "Plus" | "Equal" | "Less" | "DotDot";
+  token: "Or" | "And" | "Plus" | "Equal" | "Less" | "DotDot" | "Is";
   node: BinaryNodeKind;
   assoc: "left" | "right";
 }
@@ -23,6 +30,7 @@ const BINARY_OPS: BinaryOp[] = [
   { token: "And", node: "And", assoc: "right" },
   { token: "Equal", node: "Equal", assoc: "left" },
   { token: "Less", node: "Less", assoc: "left" },
+  { token: "Is", node: "Is", assoc: "left" },
   { token: "Plus", node: "Add", assoc: "left" },
 ];
 

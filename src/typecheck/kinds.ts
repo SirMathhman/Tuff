@@ -59,7 +59,8 @@ export function inferKind(
     expr.kind === "Equal" ||
     expr.kind === "Less" ||
     expr.kind === "And" ||
-    expr.kind === "Or"
+    expr.kind === "Or" ||
+    expr.kind === "Is"
   )
     return "bool";
   if (expr.kind === "Ref") return "number";
