@@ -38,6 +38,13 @@ test('evaluateTuff("return 256U8;") => Err', () => {
   });
 });
 
+test('evaluateTuff("return 100U9;") => Err', () => {
+  expect(evaluateTuff("return 100U9;")).toEqual({
+    ok: false,
+    error: { kind: "InvalidNumberSuffix", suffix: "U9", line: 1 },
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

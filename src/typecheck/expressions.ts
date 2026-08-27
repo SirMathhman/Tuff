@@ -15,6 +15,7 @@ import {
   type DeclaredBinding,
   type ResolvedDeref,
 } from "./kinds.ts";
+import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
 
 /**
  * Resolve a dereference operand to the binding it references.
@@ -136,31 +137,6 @@ export function findUndeclared(
   return null;
 }
 
-/** The inclusive value range a suffixed number literal must fall in. */
-interface SuffixRange {
-  min: number;
-  max: number;
-}
-
-/**
- * The legal type suffixes a number literal may carry, with each integer
- * suffix's inclusive value range. `null` means the suffix is legal but has
- * no checkable range. The single source of truth for suffix validity and
- * range.
- */
-const NUMBER_SUFFIXES: Record<string, SuffixRange | null> = {
-  U8: { min: 0, max: 255 },
-  I8: { min: -128, max: 127 },
-  U16: { min: 0, max: 65535 },
-  I16: { min: -32768, max: 32767 },
-  U32: { min: 0, max: 4294967295 },
-  I32: { min: -2147483648, max: 2147483647 },
-  U64: { min: 0, max: 2 ** 64 - 1 },
-  I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
-  F32: null,
-  F64: null,
-};
-
 /**
  * Check the type suffix of every number literal in an expression: a suffix
  * outside the legal set is an InvalidNumberSuffix, and a value outside the
@@ -175,12 +151,12 @@ export function checkNumberSuffixes(
   line: number,
 ): TuffError | null {
   if (expr.kind === "Literal" && expr.suffix !== undefined) {
-    const range = NUMBER_SUFFIXES[expr.suffix];
-    if (range === undefined) {
+    if (!isNumberSuffix(expr.suffix)) {
       return { kind: "InvalidNumberSuffix", suffix: expr.suffix, line };
     }
-    if (range && expr.value.kind === "number") {
-      if (expr.value.value < range.min || expr.value.value > range.max) {
+    const spec = suffixSpec(expr.suffix);
+    if ("min" in spec && expr.value.kind === "number") {
+      if (expr.value.value < spec.min || expr.value.value > spec.max) {
         return {
           kind: "NumberOutOfRange",
           value: expr.value.value,
