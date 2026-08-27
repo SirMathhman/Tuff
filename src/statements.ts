@@ -4,6 +4,7 @@ import { tokenDetail } from "./tokenizer.ts";
 import type { Pos, TuffExpr, TuffStatement } from "./ast.ts";
 import {
   isExpr,
+  parseIndexSuffix,
   parseLevel,
   parseOperand,
   type BinaryNodeKind,
@@ -57,20 +58,19 @@ interface CompoundOp {
 const COMPOUND_OPS: CompoundOp[] = [{ token: "PlusAssign", node: "Add" }];
 
 /**
- * Parse an assignment: `name = expr` or a compound form like `name += expr`.
- * @param tokens {TuffToken[]} - The token list; the name already consumed.
+ * Parse an assignment: `target = expr` or a compound form like `target += expr`.
+ * @param tokens {TuffToken[]} - The token list; the target already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the assignment.
  * @param line {number} - The 1-based line number.
- * @param name {string} - The target identifier name.
+ * @param target {TuffExpr} - The target expression: an identifier or an array index.
  * @returns {TuffStatement | TuffError} The Assign node, or a TuffError.
  */
 function parseAssign(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
-  name: string,
+  target: TuffExpr,
 ): TuffStatement | TuffError {
-  const target: TuffExpr = { kind: "Identifier", name };
   for (const op of COMPOUND_OPS) {
     if (tokens[pos.i]?.kind !== op.token) continue;
     pos.i++;
@@ -284,7 +284,8 @@ function parseBlock(
 
 /**
  * Parse a statement that begins with an identifier: a keyword (`let`,
- * `return`, `if`, `while`, `break`, `continue`) or an assignment.
+ * `return`, `if`, `while`, `break`, `continue`) or an assignment whose
+ * target is an identifier or an array index.
  * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
  * @param line {number} - The 1-based line number.
@@ -307,7 +308,15 @@ function parseIdentStatement(
   if (name === "while") return parseWhile(tokens, pos, line, parseStatement);
   if (name === "break") return { kind: "Break" };
   if (name === "continue") return { kind: "Continue" };
-  return parseAssign(tokens, pos, line, name);
+  let target: TuffExpr = { kind: "Identifier", name };
+  for (;;) {
+    if (tokens[pos.i]?.kind !== "LBracket") break;
+    pos.i++;
+    const index = parseIndexSuffix(tokens, pos, line);
+    if (!isExpr(index)) return index;
+    target = { kind: "ArrayIndex", operand: target, index };
+  }
+  return parseAssign(tokens, pos, line, target);
 }
 
 /**

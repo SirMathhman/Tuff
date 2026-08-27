@@ -110,19 +110,36 @@ export function parseOperand(
     }
     if (tokens[pos.i]?.kind === "LBracket") {
       pos.i++;
-      const index = parseLevel(tokens, pos, line, 0);
+      const index = parseIndexSuffix(tokens, pos, line);
       if (!isExpr(index)) return index;
-      const close = tokens[pos.i];
-      if (close?.kind !== "RBracket") {
-        return { kind: "InvalidExpression", expression: "", line };
-      }
-      pos.i++;
       left = { kind: "ArrayIndex", operand: left, index };
       continue;
     }
     break;
   }
   return left;
+}
+
+/**
+ * Parse the tail of an `[e]` array-index suffix: the `[` is already consumed.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the suffix.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffExpr | TuffError} The index expression, or a TuffError.
+ */
+export function parseIndexSuffix(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffExpr | TuffError {
+  const index = parseLevel(tokens, pos, line, 0);
+  if (!isExpr(index)) return index;
+  const close = tokens[pos.i];
+  if (close?.kind !== "RBracket") {
+    return { kind: "InvalidExpression", expression: "", line };
+  }
+  pos.i++;
+  return index;
 }
 
 /**

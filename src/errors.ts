@@ -86,6 +86,14 @@ export interface InvalidArrayIndexError {
   line: number;
 }
 
+/** An error for assigning through an array index that is not an array. */
+export interface InvalidArrayIndexAssignError {
+  kind: "InvalidArrayIndexAssign";
+  /** The identifier named by the operand, or "" if not an identifier. */
+  name: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -99,7 +107,8 @@ export type TuffError =
   | BreakOutsideLoopError
   | ContinueOutsideLoopError
   | InvalidTupleIndexError
-  | InvalidArrayIndexError;
+  | InvalidArrayIndexError
+  | InvalidArrayIndexAssignError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

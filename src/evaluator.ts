@@ -169,6 +169,8 @@ interface Lvalue {
   binding: Binding;
   name: string;
   mut: boolean;
+  /** The element index, when the target is an array index. */
+  index?: number;
 }
 
 /**
@@ -196,13 +198,30 @@ function resolveLvalue(target: TuffExpr, env: Environment): Lvalue {
     assert(binding, `unidentified identifier ${target.name}`);
     return { binding, name: target.name, mut: binding.mut };
   }
+  if (target.kind === "Deref") {
+    const operand = evalExpr(target.operand, env);
+    const entry = lookupRef(operand, env);
+    return { binding: entry.binding, name: entry.name, mut: entry.mut };
+  }
+  assert(target.kind === "ArrayIndex", "assignment target must be an lvalue");
   assert(
-    target.kind === "Deref",
-    "assignment target must be an identifier or dereference",
+    target.operand.kind === "Identifier",
+    "array index operand must be an identifier",
   );
   const operand = evalExpr(target.operand, env);
-  const entry = lookupRef(operand, env);
-  return { binding: entry.binding, name: entry.name, mut: entry.mut };
+  assert(operand.kind === "array", "array index operand must be an array");
+  const indexValue = evalExpr(target.index, env);
+  assert(indexValue.kind === "number", "array index must be a number");
+  const element = operand.elements[indexValue.value];
+  assert(element, "array index out of bounds");
+  const binding = findBinding(env.scopes, target.operand.name);
+  assert(binding, `unidentified identifier ${target.operand.name}`);
+  return {
+    binding,
+    name: target.operand.name,
+    mut: binding.mut,
+    index: indexValue.value,
+  };
 }
 
 /**
@@ -219,6 +238,18 @@ function executeAssignment(
   const lvalue = resolveLvalue(target, env);
   assert(lvalue.mut, `immutable assignment to ${lvalue.name}`);
   const result = evalExpr(value, env);
+  if (lvalue.index !== undefined) {
+    const container = lvalue.binding.value;
+    assert(container.kind === "array", "array index target must be an array");
+    const element = container.elements[lvalue.index];
+    assert(element, "array index out of bounds");
+    assert(
+      result.kind === element.kind,
+      `type mismatch assigning to ${lvalue.name}`,
+    );
+    container.elements[lvalue.index] = result;
+    return;
+  }
   assert(
     result.kind === lvalue.binding.value.kind,
     `type mismatch assigning to ${lvalue.name}`,

@@ -1,5 +1,6 @@
 import type { TuffError } from "./errors.ts";
 import type {
+  ArrayIndexNode,
   AssignNode,
   IfNode,
   LetNode,
@@ -7,12 +8,19 @@ import type {
   WhileNode,
 } from "./ast.ts";
 import {
+  arrayElementKinds,
   declareBinding,
   findDeclared,
   inferKind,
+  literalIndex,
   type DeclaredBinding,
+  type ValueKind,
 } from "./typecheck/kinds.ts";
-import { findUndeclared, resolveDeref } from "./typecheck/expressions.ts";
+import {
+  findUndeclared,
+  resolveDeref,
+  resolveIndex,
+} from "./typecheck/expressions.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
@@ -225,15 +233,41 @@ function checkAssignment(
     if ("kind" in resolved) return resolved;
     name = resolved.name;
     declared = resolved.binding;
+  } else if (stmt.target.kind === "ArrayIndex") {
+    const resolved = resolveIndex(stmt.target, line, scopes);
+    if ("kind" in resolved) return resolved;
+    name = resolved.name;
+    declared = resolved.binding;
   } else {
     return { kind: "InvalidDeref", name: "", line };
   }
   if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
   const valueError = findUndeclared(stmt.value, line, scopes);
   if (valueError) return valueError;
+  const expected =
+    stmt.target.kind === "ArrayIndex"
+      ? elementKind(stmt.target, scopes)
+      : declared.kind;
   const kind = inferKind(stmt.value, scopes, resolveDeref);
-  if (kind && kind !== declared.kind) {
+  if (expected && kind && kind !== expected) {
     return { kind: "TypeMismatch", name, line };
   }
   return null;
+}
+
+/**
+ * The element kind an array-index assignment must match, or null if the
+ * element kind is not statically known.
+ * @param target - The ArrayIndex assignment target.
+ * @param scopes - The stack of declared bindings.
+ * @returns The expected element kind, or null if not statically inferable.
+ */
+function elementKind(
+  target: ArrayIndexNode,
+  scopes: Record<string, DeclaredBinding>[],
+): ValueKind | null {
+  const kinds = arrayElementKinds(target.operand, scopes, resolveDeref);
+  if (!kinds) return null;
+  const index = literalIndex(target.index);
+  return index !== null && index < kinds.length ? (kinds[index] ?? null) : null;
 }

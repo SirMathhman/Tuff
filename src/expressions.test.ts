@@ -125,6 +125,15 @@ test('evaluateTuff("let array = [1, 2]; return array[true];") => Err', () => {
   });
 });
 
+test('evaluateTuff("let mut array = [0]; array[0] = 1; return array[0];") => 1', () => {
+  expect(
+    evaluateTuff("let mut array = [0]; array[0] = 1; return array[0];"),
+  ).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; let y = &x; return *y;") => 1', () => {
   expect(evaluateTuff("let x = 1; let y = &x; return *y;")).toEqual({
     ok: true,

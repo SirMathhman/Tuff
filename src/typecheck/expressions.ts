@@ -46,6 +46,39 @@ export function resolveDeref(
 }
 
 /**
+ * Resolve an array-index assignment target to the binding it writes to.
+ * @param expr - The ArrayIndex target expression.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns The array binding and its name, or a TuffError.
+ */
+export function resolveIndex(
+  expr: ArrayIndexNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): ResolvedDeref | TuffError {
+  if (expr.operand.kind !== "Identifier") {
+    return { kind: "InvalidArrayIndexAssign", name: "", line };
+  }
+  const error = findUndeclared(expr.operand, line, scopes);
+  if (error) return error;
+  const indexError = findUndeclared(expr.index, line, scopes);
+  if (indexError) return indexError;
+  const operandKind = inferKind(expr.operand, scopes, resolveDeref);
+  if (operandKind !== null && operandKind !== "array") {
+    const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
+    return { kind: "InvalidArrayIndexAssign", name, line };
+  }
+  const indexCheck = checkArrayIndex(expr, line, scopes);
+  if (indexCheck) return indexCheck;
+  const declared = findDeclared(scopes, expr.operand.name);
+  if (!declared) {
+    return { kind: "UnidentifiedIdentifier", name: expr.operand.name, line };
+  }
+  return { binding: declared, name: expr.operand.name };
+}
+
+/**
  * Find an undeclared identifier, an invalid reference, or an invalid `&mut`
  * in an expression.
  * @param expr - The expression to inspect.
@@ -168,6 +201,22 @@ function checkArrayExpr(
   if (error) return error;
   const indexError = findUndeclared(expr.index, line, scopes);
   if (indexError) return indexError;
+  return checkArrayIndex(expr, line, scopes);
+}
+
+/**
+ * Check an array-index expression's index: a non-numeric index is a
+ * TypeMismatch, and an out-of-bounds literal index is an InvalidArrayIndex.
+ * @param expr - The array-index expression to check.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TypeMismatch or InvalidArrayIndex error, else null.
+ */
+function checkArrayIndex(
+  expr: ArrayIndexNode,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
   const indexKind = inferKind(expr.index, scopes, resolveDeref);
   if (indexKind !== null && indexKind !== "number") {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
