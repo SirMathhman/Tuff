@@ -24,6 +24,7 @@ export type {
   InvalidTupleIndexError,
   InvalidArrayIndexError,
   InvalidNumberSuffixError,
+  NumberOutOfRangeError,
 } from "./errors.ts";
 export type {
   TuffExpr,

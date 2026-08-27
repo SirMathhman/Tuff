@@ -31,6 +31,13 @@ test('evaluateTuff("return 100u8;") => Err', () => {
   });
 });
 
+test('evaluateTuff("return 256U8;") => Err', () => {
+  expect(evaluateTuff("return 256U8;")).toEqual({
+    ok: false,
+    error: { kind: "NumberOutOfRange", value: 256, suffix: "U8", line: 1 },
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

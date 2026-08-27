@@ -102,6 +102,16 @@ export interface InvalidNumberSuffixError {
   line: number;
 }
 
+/** An error for a number literal whose value is outside its suffix's range. */
+export interface NumberOutOfRangeError {
+  kind: "NumberOutOfRange";
+  /** The literal's value. */
+  value: number;
+  /** The suffix whose range the value is outside. */
+  suffix: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -117,7 +127,8 @@ export type TuffError =
   | InvalidTupleIndexError
   | InvalidArrayIndexError
   | InvalidArrayIndexAssignError
-  | InvalidNumberSuffixError;
+  | InvalidNumberSuffixError
+  | NumberOutOfRangeError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

@@ -136,38 +136,58 @@ export function findUndeclared(
   return null;
 }
 
+/** The inclusive value range a suffixed number literal must fall in. */
+interface SuffixRange {
+  min: number;
+  max: number;
+}
+
 /**
- * The legal type suffixes a number literal may carry. The single source of
- * truth for which suffixes are valid.
+ * The legal type suffixes a number literal may carry, with each integer
+ * suffix's inclusive value range. `null` means the suffix is legal but has
+ * no checkable range. The single source of truth for suffix validity and
+ * range.
  */
-const NUMBER_SUFFIXES = new Set([
-  "U8",
-  "I8",
-  "U16",
-  "I16",
-  "U32",
-  "I32",
-  "U64",
-  "I64",
-  "F32",
-  "F64",
-]);
+const NUMBER_SUFFIXES: Record<string, SuffixRange | null> = {
+  U8: { min: 0, max: 255 },
+  I8: { min: -128, max: 127 },
+  U16: { min: 0, max: 65535 },
+  I16: { min: -32768, max: 32767 },
+  U32: { min: 0, max: 4294967295 },
+  I32: { min: -2147483648, max: 2147483647 },
+  U64: { min: 0, max: 2 ** 64 - 1 },
+  I64: { min: -(2 ** 63), max: 2 ** 63 - 1 },
+  F32: null,
+  F64: null,
+};
 
 /**
  * Check the type suffix of every number literal in an expression: a suffix
- * outside the legal set is an InvalidNumberSuffix.
+ * outside the legal set is an InvalidNumberSuffix, and a value outside the
+ * suffix's range is a NumberOutOfRange.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
- * @returns An InvalidNumberSuffix error if a literal carries an illegal
- * suffix, else null.
+ * @returns An InvalidNumberSuffix or NumberOutOfRange error if a literal
+ * carries an illegal suffix or an out-of-range value, else null.
  */
 export function checkNumberSuffixes(
   expr: TuffExpr,
   line: number,
 ): TuffError | null {
   if (expr.kind === "Literal" && expr.suffix !== undefined) {
-    if (!NUMBER_SUFFIXES.has(expr.suffix)) {
+    const range = NUMBER_SUFFIXES[expr.suffix];
+    if (range === undefined) {
       return { kind: "InvalidNumberSuffix", suffix: expr.suffix, line };
+    }
+    if (range && expr.value.kind === "number") {
+      if (expr.value.value < range.min || expr.value.value > range.max) {
+        return {
+          kind: "NumberOutOfRange",
+          value: expr.value.value,
+          suffix: expr.suffix,
+          line,
+        };
+      }
     }
   }
   if (
