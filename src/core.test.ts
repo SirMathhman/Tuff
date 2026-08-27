@@ -110,6 +110,13 @@ test('evaluateTuff("let x = 100U8; return x is U8;") => 1', () => {
   });
 });
 
+test('evaluateTuff("let x = 0U8; let y = &x; return *y is U8;") => 1', () => {
+  expect(evaluateTuff("let x = 0U8; let y = &x; return *y is U8;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("return (1U8 + 2U8) is U8;") => 1', () => {
   expect(evaluateTuff("return (1U8 + 2U8) is U8;")).toEqual({
     ok: true,

@@ -105,7 +105,8 @@ function foldExpr(
 /**
  * The number-suffix an expression statically carries, or undefined if it
  * carries none. A literal carries its own suffix; an identifier carries the
- * suffix of the binding it names; an `Add` carries a suffix only when both
+ * suffix of the binding it names; a dereference carries the suffix of the
+ * binding its operand references; an `Add` carries a suffix only when both
  * operands carry the same one.
  * @param expr - The expression to inspect.
  * @param scopes - The stack of declared bindings.
@@ -118,6 +119,12 @@ function exprSuffix(
   if (expr.kind === "Literal") return expr.suffix;
   if (expr.kind === "Identifier") {
     return findDeclared(scopes, expr.name)?.suffix;
+  }
+  if (expr.kind === "Deref") {
+    if (expr.operand.kind !== "Identifier") return undefined;
+    const binding = findDeclared(scopes, expr.operand.name);
+    if (binding?.refTo === undefined) return undefined;
+    return findDeclared(scopes, binding.refTo)?.suffix;
   }
   if (expr.kind === "Add") {
     const left = exprSuffix(expr.left, scopes);
