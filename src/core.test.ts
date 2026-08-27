@@ -175,6 +175,36 @@ test('evaluateTuff("let x = 0U8; let y = &x; return &y is &&U8;") => 1', () => {
   });
 });
 
+test('evaluateTuff("let x = 0U8; let y = &x; return &y is && U8;") => 1', () => {
+  expect(evaluateTuff("let x = 0U8; let y = &x; return &y is && U8;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let x = 0U8; let y = &x; let z = &y; return &z is &&&U8;") => 1', () => {
+  expect(
+    evaluateTuff("let x = 0U8; let y = &x; let z = &y; return &z is &&&U8;"),
+  ).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluateTuff("let a = true; let b = false; return a&&b;") => 0', () => {
+  expect(evaluateTuff("let a = true; let b = false; return a&&b;")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test('evaluateTuff("let x = 1; let y = true; return (&x) && y;") => 1', () => {
+  expect(evaluateTuff("let x = 1; let y = true; return (&x) && y;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

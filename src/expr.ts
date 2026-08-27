@@ -15,23 +15,44 @@ export type BinaryNodeKind =
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
-  token: "Or" | "And" | "Plus" | "Equal" | "Less" | "DotDot" | "Is";
   node: BinaryNodeKind;
   assoc: "left" | "right";
+  /** Whether the operator begins at the given token index. */
+  startsAt: (tokens: TuffToken[], i: number) => boolean;
+  /** How many tokens the operator consumes. */
+  width: number;
 }
 
 /**
  * The binary operator grammar, loosest binding first.
  * Precedence and associativity are declared here, never by function order.
+ * `&&` lexes as two `Ref` tokens; in operator position (after a complete left
+ * expression) a `Ref Ref` pair is the logical AND, while in operand position
+ * the same pair nests into a reference chain.
  */
 const BINARY_OPS: BinaryOp[] = [
-  { token: "DotDot", node: "Range", assoc: "left" },
-  { token: "Or", node: "Or", assoc: "right" },
-  { token: "And", node: "And", assoc: "right" },
-  { token: "Equal", node: "Equal", assoc: "left" },
-  { token: "Less", node: "Less", assoc: "left" },
-  { token: "Plus", node: "Add", assoc: "left" },
-  { token: "Is", node: "Is", assoc: "left" },
+  {
+    node: "Range",
+    assoc: "left",
+    startsAt: (t, i) => t[i]?.kind === "DotDot",
+    width: 1,
+  },
+  { node: "Or", assoc: "right", startsAt: (t, i) => t[i]?.kind === "Or", width: 1 },
+  {
+    node: "And",
+    assoc: "right",
+    startsAt: (t, i) => t[i]?.kind === "Ref" && t[i + 1]?.kind === "Ref",
+    width: 2,
+  },
+  {
+    node: "Equal",
+    assoc: "left",
+    startsAt: (t, i) => t[i]?.kind === "Equal",
+    width: 1,
+  },
+  { node: "Less", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Less", width: 1 },
+  { node: "Add", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Plus", width: 1 },
+  { node: "Is", assoc: "left", startsAt: (t, i) => t[i]?.kind === "Is", width: 1 },
 ];
 
 /**
@@ -263,8 +284,8 @@ export function parseLevel(
   const first = parseLevel(tokens, pos, line, level + 1);
   if (!isExpr(first)) return first;
   let left: TuffExpr = first;
-  while (tokens[pos.i]?.kind === op.token) {
-    pos.i++;
+  while (op.startsAt(tokens, pos.i)) {
+    pos.i += op.width;
     const right =
       op.assoc === "right"
         ? parseLevel(tokens, pos, line, level)
