@@ -62,7 +62,8 @@ export function parseProgram(
       stmt.kind !== "Block" &&
       stmt.kind !== "If" &&
       stmt.kind !== "While" &&
-      stmt.kind !== "For"
+      stmt.kind !== "For" &&
+      stmt.kind !== "Struct"
     ) {
       return {
         kind: "InvalidStatement",

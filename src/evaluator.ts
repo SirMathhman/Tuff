@@ -118,6 +118,10 @@ function executeStatement(
     // Type aliases are compile-time only; a no-op at runtime.
     return undefined;
   }
+  if (stmt.kind === "Struct") {
+    // Struct declarations are compile-time only; a no-op at runtime.
+    return undefined;
+  }
   if (stmt.kind === "Return") {
     const value = evalExpr(stmt.value, env);
     return { ok: true, value: toResultValue(value) };
@@ -372,7 +376,9 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
         left.kind === "array" ||
         right.kind === "array" ||
         left.kind === "range" ||
-        right.kind === "range"
+        right.kind === "range" ||
+        left.kind === "struct" ||
+        right.kind === "struct"
       ) {
         return bool(false);
       }
@@ -463,6 +469,20 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     const element = operand.elements[indexValue.value];
     assert(element, "array index out of bounds");
     return element;
+  }
+  if (node.kind === "StructLiteral") {
+    const fields: Record<string, TuffValue> = {};
+    for (const field of node.fields) {
+      fields[field.name] = evalExpr(field.value, env);
+    }
+    return { kind: "struct", fields };
+  }
+  if (node.kind === "FieldAccess") {
+    const operand = evalExpr(node.operand, env);
+    assert(operand.kind === "struct", "field access operand must be a struct");
+    const field = operand.fields[node.field];
+    assert(field !== undefined, "field access out of bounds");
+    return field;
   }
   assert(node.kind !== "Is", "is type-test must be folded before execution");
   const rule = BINARY_RULES[node.kind];

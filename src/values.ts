@@ -30,13 +30,24 @@ export interface RangeValue {
   elements: TuffValue[];
 }
 
-/** A runtime value: a number, a boolean, a tuple, an array, or a range. */
+/** A struct value: a named mapping of field names to field values. */
+export interface StructValue {
+  kind: "struct";
+  /** The field values, keyed by field name. */
+  fields: Record<string, TuffValue>;
+}
+
+/**
+ * A runtime value: a number, a boolean, a tuple, an array, a range, or a
+ * struct.
+ */
 export type TuffValue =
   | NumberValue
   | BoolValue
   | TupleValue
   | ArrayValue
-  | RangeValue;
+  | RangeValue
+  | StructValue;
 
 /**
  * Wrap a number as a value.
@@ -79,18 +90,21 @@ export function isValue(value: TuffValue | TuffError): value is TuffValue {
     value.kind === "bool" ||
     value.kind === "tuple" ||
     value.kind === "array" ||
-    value.kind === "range"
+    value.kind === "range" ||
+    value.kind === "struct"
   );
 }
 
 /**
  * Render a value as the public numeric result: the number, 1/0 for booleans,
- * and the element count for tuples, arrays, and ranges.
+ * the element count for tuples, arrays, and ranges, and the field count for
+ * structs.
  * @param value {TuffValue} - The value to render.
  * @returns {number} The numeric result.
  */
 export function toResultValue(value: TuffValue): number {
   if (value.kind === "number") return value.value;
   if (value.kind === "bool") return value.value ? 1 : 0;
+  if (value.kind === "struct") return Object.keys(value.fields).length;
   return value.elements.length;
 }

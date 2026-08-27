@@ -2,7 +2,23 @@ import type { TuffError } from "../errors.ts";
 import type { TuffExpr } from "../ast.ts";
 
 /** The statically known kinds a binding or element can hold. */
-export type ValueKind = "number" | "bool" | "tuple" | "array" | "range";
+export type ValueKind =
+  | "number"
+  | "bool"
+  | "tuple"
+  | "array"
+  | "range"
+  | "struct";
+
+/**
+ * A declared struct's field kinds, keyed by field name. Registered by a
+ * `struct` declaration and consulted when checking struct literals and
+ * field accesses.
+ */
+export interface StructDef {
+  /** The field kinds, keyed by field name. */
+  fields: Record<string, ValueKind>;
+}
 
 /**
  * The legal kind names a type-test (`is`) may name, mapped to the value kind
@@ -35,6 +51,8 @@ export interface DeclaredBinding {
   tupleKinds?: ValueKind[];
   /** The element kinds, if the binding holds an array literal. */
   arrayKinds?: ValueKind[];
+  /** The field kinds, if the binding holds a struct literal. */
+  structKinds?: Record<string, ValueKind>;
   /** The number-suffix, if the binding holds a suffixed number literal. */
   suffix?: string;
 }
@@ -96,6 +114,7 @@ export function inferKind(
   }
   if (expr.kind === "Array") return "array";
   if (expr.kind === "Range") return "range";
+  if (expr.kind === "StructLiteral") return "struct";
   if (expr.kind === "ArrayIndex") {
     const kinds = arrayElementKinds(expr.operand, scopes, resolveDeref);
     if (!kinds) return null;
@@ -103,6 +122,10 @@ export function inferKind(
     return index !== null && index < kinds.length
       ? (kinds[index] ?? null)
       : null;
+  }
+  if (expr.kind === "FieldAccess") {
+    const kinds = structFieldKinds(expr.operand, scopes, resolveDeref);
+    return kinds ? (kinds[expr.field] ?? null) : null;
   }
   return null;
 }
@@ -168,6 +191,32 @@ export function arrayElementKinds(
 }
 
 /**
+ * The field kinds of a struct expression, or null if not statically a struct.
+ * @param expr - The expression to inspect.
+ * @param scopes - The stack of declared bindings.
+ * @param resolveDeref - The dereference resolver, for `*` operands.
+ * @returns {Record<string, ValueKind> | null} The field kinds, or null.
+ */
+export function structFieldKinds(
+  expr: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+): Record<string, ValueKind> | null {
+  if (expr.kind === "StructLiteral") {
+    const fields: Record<string, ValueKind> = {};
+    for (const field of expr.fields) {
+      fields[field.name] =
+        inferKind(field.value, scopes, resolveDeref) ?? "number";
+    }
+    return fields;
+  }
+  if (expr.kind === "Identifier") {
+    return findDeclared(scopes, expr.name)?.structKinds ?? null;
+  }
+  return null;
+}
+
+/**
  * Declare a binding in the innermost scope.
  * @param name - The binding name.
  * @param kind - The value kind.
@@ -175,6 +224,7 @@ export function arrayElementKinds(
  * @param refTo - The name of the binding this is a reference to, if any.
  * @param tupleKinds - The element kinds, if the binding holds a tuple.
  * @param arrayKinds - The element kinds, if the binding holds an array.
+ * @param structKinds - The field kinds, if the binding holds a struct.
  * @param suffix - The number-suffix, if the binding holds a suffixed literal.
  * @param scopes - The stack of declared bindings.
  */
@@ -185,11 +235,21 @@ export function declareBinding(
   refTo: string | undefined,
   tupleKinds: ValueKind[] | undefined,
   arrayKinds: ValueKind[] | undefined,
+  structKinds: Record<string, ValueKind> | undefined,
   suffix: string | undefined,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds, suffix };
+  if (scope)
+    scope[name] = {
+      kind,
+      mut,
+      refTo,
+      tupleKinds,
+      arrayKinds,
+      structKinds,
+      suffix,
+    };
 }
 
 /**
@@ -204,6 +264,23 @@ export function findDeclared(
 ): DeclaredBinding | null {
   for (let i = scopes.length - 1; i >= 0; i--) {
     const scope = scopes[i];
+    if (scope && scope[name]) return scope[name];
+  }
+  return null;
+}
+
+/**
+ * Find a declared struct, innermost scope first.
+ * @param structs - The stack of declared structs.
+ * @param name - The struct name.
+ * @returns The struct definition, or null if not found.
+ */
+export function findStruct(
+  structs: Record<string, StructDef>[],
+  name: string,
+): StructDef | null {
+  for (let i = structs.length - 1; i >= 0; i--) {
+    const scope = structs[i];
     if (scope && scope[name]) return scope[name];
   }
   return null;

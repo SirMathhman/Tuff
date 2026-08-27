@@ -85,6 +85,17 @@ test('evaluateTuff("type MyAlias = (U8, U8); let x : MyAlias = (3, 4); return x.
   });
 });
 
+test('evaluateTuff("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; return pt.x + pt.y;") => 7', () => {
+  expect(
+    evaluateTuff(
+      "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; return pt.x + pt.y;",
+    ),
+  ).toEqual({
+    ok: true,
+    value: 7,
+  });
+});
+
 test('evaluateTuff("let tuple = (1, 2); let other = tuple; return other.1;") => 2', () => {
   expect(
     evaluateTuff("let tuple = (1, 2); let other = tuple; return other.1;"),

@@ -2,23 +2,26 @@ import type { TuffError } from "../errors.ts";
 import type { IsNode, KindName, TuffExpr } from "../ast.ts";
 import {
   findDeclared,
+  findStruct,
   inferKind,
   kindName,
   type DeclaredBinding,
   type ResolveDeref,
+  type StructDef,
 } from "./kinds.ts";
 import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
 
 /**
- * Matches a bare kind name (a number suffix or a kind name) against an
- * expression. Passed to the kind-name matcher to break the mutual recursion
- * between the `is` type-test and the let-annotation matchers.
+ * Matches a bare kind name (a number suffix, a kind name, or a struct name)
+ * against an expression. Passed to the kind-name matcher to break the mutual
+ * recursion between the `is` type-test and the let-annotation matchers.
  */
 type BareMatch = (
   value: TuffExpr,
   name: string,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
 ) => boolean;
 
 /**
@@ -30,6 +33,7 @@ type BareMatch = (
  * @param right - The type-test right operand's kind name.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
+ * @param structs - The stack of declared structs.
  * @returns True if the left operand matches the kind name.
  */
 export function isRightMatch(
@@ -37,8 +41,9 @@ export function isRightMatch(
   right: KindName,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
 ): boolean {
-  return matchKindName(left, right, scopes, resolveDeref, isMatch);
+  return matchKindName(left, right, scopes, resolveDeref, structs, isMatch);
 }
 
 /**
@@ -49,6 +54,7 @@ export function isRightMatch(
  * @param annotation - The declared kind name.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
+ * @param structs - The stack of declared structs.
  * @returns True if the initializer matches the annotation.
  */
 export function annotationMatch(
@@ -56,12 +62,14 @@ export function annotationMatch(
   annotation: KindName,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
 ): boolean {
   return matchKindName(
     value,
     annotation,
     scopes,
     resolveDeref,
+    structs,
     annotationBareMatch,
   );
 }
@@ -75,6 +83,7 @@ export function annotationMatch(
  * @param name - The kind name to match against.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
+ * @param structs - The stack of declared structs.
  * @param bareMatch - The bare-name matcher, for the leaf case.
  * @returns True if the expression matches the kind name.
  */
@@ -83,6 +92,7 @@ function matchKindName(
   name: KindName,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
   bareMatch: BareMatch,
 ): boolean {
   if (name.kind === "KindNameRef") {
@@ -96,7 +106,14 @@ function matchKindName(
       const elementName = name.elements[i];
       if (element === undefined || elementName === undefined) return false;
       if (
-        !matchKindName(element, elementName, scopes, resolveDeref, bareMatch)
+        !matchKindName(
+          element,
+          elementName,
+          scopes,
+          resolveDeref,
+          structs,
+          bareMatch,
+        )
       ) {
         return false;
       }
@@ -108,14 +125,21 @@ function matchKindName(
     if (value.elements.length !== name.length) return false;
     for (const element of value.elements) {
       if (
-        !matchKindName(element, name.element, scopes, resolveDeref, bareMatch)
+        !matchKindName(
+          element,
+          name.element,
+          scopes,
+          resolveDeref,
+          structs,
+          bareMatch,
+        )
       ) {
         return false;
       }
     }
     return true;
   }
-  return bareMatch(value, name.name, scopes, resolveDeref);
+  return bareMatch(value, name.name, scopes, resolveDeref, structs);
 }
 
 /**
@@ -123,22 +147,28 @@ function matchKindName(
  * accepts an unsuffixed number literal (coercing it) or an expression
  * carrying that suffix; a kind name requires the inferred kind to match.
  * @param value - The initializer expression.
- * @param name - The suffix or kind name the annotation names.
+ * @param name - The suffix, kind, or struct name the annotation names.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
- * @returns True if the initializer matches the named suffix or kind.
+ * @param structs - The stack of declared structs.
+ * @returns True if the initializer matches the named suffix, kind, or struct.
  */
 function annotationBareMatch(
   value: TuffExpr,
   name: string,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
 ): boolean {
   if (isNumberSuffix(name)) {
     if (value.kind === "Literal" && value.value.kind === "number") {
       return value.suffix === undefined || value.suffix === name;
     }
     return exprSuffix(value, scopes) === name;
+  }
+  if (findStruct(structs, name)) {
+    if (value.kind === "StructLiteral") return value.name === name;
+    return inferKind(value, scopes, resolveDeref) === "struct";
   }
   const kind = kindName(name);
   if (kind === null) return false;
@@ -166,10 +196,16 @@ export function checkIsOperand(expr: IsNode, line: number): TuffError | null {
  * array of element tests must name legal element tests.
  * @param name - The kind name to inspect.
  * @param line - The 1-based line number.
- * @returns An InvalidNumberSuffix error if a name is neither a legal suffix
- * nor a legal kind, else null.
+ * @param structs - The stack of declared structs, so a bare struct name is
+ * legal.
+ * @returns An InvalidNumberSuffix error if a name is neither a legal suffix,
+ * a legal kind, nor a declared struct, else null.
  */
-export function checkKindName(name: KindName, line: number): TuffError | null {
+export function checkKindName(
+  name: KindName,
+  line: number,
+  structs: Record<string, StructDef>[] = [],
+): TuffError | null {
   if (name.kind === "KindNameRef") {
     if (!isNumberSuffix(name.name)) {
       return { kind: "InvalidNumberSuffix", suffix: name.name, line };
@@ -178,15 +214,19 @@ export function checkKindName(name: KindName, line: number): TuffError | null {
   }
   if (name.kind === "KindNameTuple") {
     for (const element of name.elements) {
-      const error = checkKindName(element, line);
+      const error = checkKindName(element, line, structs);
       if (error) return error;
     }
     return null;
   }
   if (name.kind === "KindNameArray") {
-    return checkKindName(name.element, line);
+    return checkKindName(name.element, line, structs);
   }
-  if (kindName(name.name) === null && !isNumberSuffix(name.name)) {
+  if (
+    kindName(name.name) === null &&
+    !isNumberSuffix(name.name) &&
+    !findStruct(structs, name.name)
+  ) {
     return { kind: "InvalidNumberSuffix", suffix: name.name, line };
   }
   return null;
@@ -195,19 +235,24 @@ export function checkKindName(name: KindName, line: number): TuffError | null {
 /**
  * Whether a folded `is` left operand matches the named suffix or kind.
  * @param left - The folded left operand.
- * @param name - The suffix or kind name the test names.
+ * @param name - The suffix, kind, or struct name the test names.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
- * @returns True if the left operand matches the named suffix or kind.
+ * @param structs - The stack of declared structs.
+ * @returns True if the left operand matches the named suffix, kind, or struct.
  */
 function isMatch(
   left: TuffExpr,
   name: string,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
+  structs: Record<string, StructDef>[],
 ): boolean {
   if (isNumberSuffix(name)) {
     return exprSuffix(left, scopes) === name;
+  }
+  if (findStruct(structs, name)) {
+    return inferKind(left, scopes, resolveDeref) === "struct";
   }
   const kind = kindName(name);
   if (kind === null) return false;

@@ -1,6 +1,6 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
-import type { KindName, Pos, TuffExpr } from "./ast.ts";
+import type { KindName, Pos, StructLiteralField, TuffExpr } from "./ast.ts";
 import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
@@ -101,7 +101,9 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Tuple" ||
     value.kind === "TupleIndex" ||
     value.kind === "Array" ||
-    value.kind === "ArrayIndex"
+    value.kind === "ArrayIndex" ||
+    value.kind === "StructLiteral" ||
+    value.kind === "FieldAccess"
   ) {
     return true;
   }
@@ -163,12 +165,17 @@ export function parseOperand(
     if (tokens[pos.i]?.kind === "Dot" && tokens[pos.i + 1]?.kind !== "Dot") {
       pos.i++;
       const indexTok = tokens[pos.i];
-      if (indexTok?.kind !== "Number" || !Number.isInteger(indexTok.value)) {
-        return { kind: "InvalidExpression", expression: "", line };
+      if (indexTok?.kind === "Number" && Number.isInteger(indexTok.value)) {
+        pos.i++;
+        left = { kind: "TupleIndex", operand: left, index: indexTok.value };
+        continue;
       }
-      pos.i++;
-      left = { kind: "TupleIndex", operand: left, index: indexTok.value };
-      continue;
+      if (indexTok?.kind === "Ident") {
+        pos.i++;
+        left = { kind: "FieldAccess", operand: left, field: indexTok.name };
+        continue;
+      }
+      return { kind: "InvalidExpression", expression: "", line };
     }
     if (tokens[pos.i]?.kind === "LBracket") {
       pos.i++;
@@ -228,6 +235,47 @@ function parseRef(
 }
 
 /**
+ * Parse a struct literal: `Name { field : expr, ... }`. The name and the
+ * opening brace are already consumed.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the literal.
+ * @param line {number} - The 1-based line number.
+ * @param name {string} - The struct name the literal constructs.
+ * @returns {TuffExpr | TuffError} The StructLiteral node, or a TuffError.
+ */
+function parseStructLiteral(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  name: string,
+): TuffExpr | TuffError {
+  const fields: StructLiteralField[] = [];
+  for (;;) {
+    const fieldTok = tokens[pos.i];
+    if (fieldTok?.kind === "RBrace") break;
+    if (fieldTok?.kind !== "Ident") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    if (tokens[pos.i]?.kind !== "Colon") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    const value = parseLevel(tokens, pos, line, 0);
+    if (!isExpr(value)) return value;
+    fields.push({ name: fieldTok.name, value });
+    if (tokens[pos.i]?.kind === "Comma") {
+      pos.i++;
+      continue;
+    }
+    if (tokens[pos.i]?.kind === "RBrace") break;
+    return { kind: "InvalidExpression", expression: "", line };
+  }
+  pos.i++;
+  return { kind: "StructLiteral", name, fields };
+}
+
+/**
  * Parse a primary operand: a literal, an identifier, a parenthesized
  * expression, or a tuple literal.
  * @param tokens {TuffToken[]} - The token list.
@@ -264,6 +312,10 @@ function parsePrimary(
   }
   if (token.kind === "Ident") {
     pos.i++;
+    if (tokens[pos.i]?.kind === "LBrace") {
+      pos.i++;
+      return parseStructLiteral(tokens, pos, line, token.name);
+    }
     return { kind: "Identifier", name: token.name };
   }
   if (token.kind === "LParen") {

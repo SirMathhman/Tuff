@@ -1,7 +1,13 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
-import type { KindName, Pos, TuffExpr, TuffStatement } from "./ast.ts";
+import type {
+  KindName,
+  Pos,
+  StructField,
+  TuffExpr,
+  TuffStatement,
+} from "./ast.ts";
 import {
   isExpr,
   isKindName,
@@ -370,12 +376,35 @@ function parseType(
   pos: Pos,
   line: number,
 ): TuffStatement | TuffError {
+  const name = parseDeclName(tokens, pos, line, "Assign");
+  if (typeof name !== "string") return name;
+  const alias = parseKindName(tokens, pos, line);
+  if (!isKindName(alias)) return alias;
+  return { kind: "Type", name, alias };
+}
+
+/**
+ * Parse the name and following token of a declaration: an identifier name
+ * followed by an expected token kind.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the name and
+ * the expected token.
+ * @param line {number} - The 1-based line number.
+ * @param expected {string} - The token kind expected after the name.
+ * @returns {string | TuffError} The declaration name, or a TuffError.
+ */
+function parseDeclName(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  expected: string,
+): string | TuffError {
   const nameTok = tokens[pos.i];
   if (nameTok?.kind !== "Ident") {
     return { kind: "InvalidStatement", token: tokenDetail(nameTok), line };
   }
   pos.i++;
-  if (tokens[pos.i]?.kind !== "Assign") {
+  if (tokens[pos.i]?.kind !== expected) {
     return {
       kind: "InvalidStatement",
       token: tokenDetail(tokens[pos.i]),
@@ -383,15 +412,61 @@ function parseType(
     };
   }
   pos.i++;
-  const alias = parseKindName(tokens, pos, line);
-  if (!isKindName(alias)) return alias;
-  return { kind: "Type", name: nameTok.name, alias };
+  return nameTok.name;
+}
+
+/**
+ * Parse a `struct` declaration: `struct Name { field : KindName, ... }`.
+ * @param tokens {TuffToken[]} - The token list; `struct` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the declaration.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffStatement | TuffError} The Struct node, or a TuffError.
+ */
+function parseStruct(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffStatement | TuffError {
+  const name = parseDeclName(tokens, pos, line, "LBrace");
+  if (typeof name !== "string") return name;
+  const fields: StructField[] = [];
+  for (;;) {
+    const fieldTok = tokens[pos.i];
+    if (fieldTok?.kind === "RBrace") break;
+    if (fieldTok?.kind !== "Ident") {
+      return { kind: "InvalidStatement", token: tokenDetail(fieldTok), line };
+    }
+    pos.i++;
+    if (tokens[pos.i]?.kind !== "Colon") {
+      return {
+        kind: "InvalidStatement",
+        token: tokenDetail(tokens[pos.i]),
+        line,
+      };
+    }
+    pos.i++;
+    const type = parseKindName(tokens, pos, line);
+    if (!isKindName(type)) return type;
+    fields.push({ name: fieldTok.name, type });
+    if (tokens[pos.i]?.kind === "Comma") {
+      pos.i++;
+      continue;
+    }
+    if (tokens[pos.i]?.kind === "RBrace") break;
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  return { kind: "Struct", name, fields };
 }
 
 /**
  * Parse a statement that begins with an identifier: a keyword (`let`,
- * `type`, `return`, `if`, `while`, `break`, `continue`) or an assignment
- * whose target is an identifier or an array index.
+ * `type`, `struct`, `return`, `if`, `while`, `break`, `continue`) or an
+ * assignment whose target is an identifier or an array index.
  * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
  * @param line {number} - The 1-based line number.
@@ -406,6 +481,7 @@ function parseIdentStatement(
 ): TuffStatement | TuffError {
   if (name === "let") return parseLet(tokens, pos, line);
   if (name === "type") return parseType(tokens, pos, line);
+  if (name === "struct") return parseStruct(tokens, pos, line);
   if (name === "return") {
     const value = parseLevel(tokens, pos, line, 0);
     if (!isExpr(value)) return value;
@@ -471,6 +547,7 @@ export function isStatement(
   return (
     value.kind === "Let" ||
     value.kind === "Type" ||
+    value.kind === "Struct" ||
     value.kind === "Assign" ||
     value.kind === "Return" ||
     value.kind === "Block" ||

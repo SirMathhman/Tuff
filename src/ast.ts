@@ -102,6 +102,39 @@ export interface IsNode {
   right: KindName;
 }
 
+/** A named field of a struct declaration. */
+export interface StructField {
+  /** The field's name. */
+  name: string;
+  /** The field's declared kind. */
+  type: KindName;
+}
+
+/** A named field of a struct literal. */
+export interface StructLiteralField {
+  /** The field's name. */
+  name: string;
+  /** The field's initializer expression. */
+  value: TuffExpr;
+}
+
+/** A struct literal expression node: `Name { field : expr, ... }`. */
+export interface StructLiteralNode {
+  kind: "StructLiteral";
+  /** The struct name the literal constructs. */
+  name: string;
+  /** The fields, in source order. */
+  fields: StructLiteralField[];
+}
+
+/** A field-access expression node: `operand.field`. */
+export interface FieldAccessNode {
+  kind: "FieldAccess";
+  operand: TuffExpr;
+  /** The field name being read. */
+  field: string;
+}
+
 /** A bare kind name in an `is` type-test right operand (e.g. `U8`, `Bool`). */
 export interface KindNameBareNode {
   kind: "KindNameBare";
@@ -159,7 +192,18 @@ export type TuffExpr =
   | ArrayNode
   | ArrayIndexNode
   | RangeNode
-  | IsNode;
+  | IsNode
+  | StructLiteralNode
+  | FieldAccessNode;
+
+/** A `struct Name { field : KindName, ... }` declaration statement node. */
+export interface StructNode {
+  kind: "Struct";
+  /** The struct name being declared. */
+  name: string;
+  /** The declared fields, in source order. */
+  fields: StructField[];
+}
 
 /** A `type Name = KindName` alias declaration statement node. */
 export interface TypeNode {
@@ -235,6 +279,7 @@ export interface ContinueNode {
 export type TuffStatement =
   | LetNode
   | TypeNode
+  | StructNode
   | AssignNode
   | ReturnNode
   | BlockNode
