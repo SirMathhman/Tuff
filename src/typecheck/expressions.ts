@@ -104,6 +104,10 @@ export function findUndeclared(
     // The right operand is a suffix name, not an identifier; check only the left.
     return findUndeclared(expr.left, line, scopes);
   }
+  if (expr.kind === "ArrayTest") {
+    // An array type-test is only legal as an `is` right operand.
+    return { kind: "InvalidExpression", expression: "", line };
+  }
   if (
     expr.kind === "Or" ||
     expr.kind === "And" ||

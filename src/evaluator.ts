@@ -470,6 +470,10 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     assert(element, "array index out of bounds");
     return element;
   }
+  assert(
+    node.kind !== "ArrayTest",
+    "array type-test must be folded before execution",
+  );
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);
   const shortcut = rule.shortCircuit(left);

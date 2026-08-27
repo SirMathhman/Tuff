@@ -44,6 +44,16 @@ export function isRightMatch(
     }
     return true;
   }
+  if (right.kind === "ArrayTest") {
+    if (left.kind !== "Array") return false;
+    if (left.elements.length !== testLength(right.length)) return false;
+    for (const element of left.elements) {
+      if (!isRightMatch(element, right.element, scopes, resolveDeref)) {
+        return false;
+      }
+    }
+    return true;
+  }
   return isMatch(
     left,
     right.kind === "Identifier" ? right.name : "",
@@ -56,17 +66,27 @@ export function isRightMatch(
  * Check the right operand of an `is` type-test: a bare operand must name a
  * legal number suffix or a legal kind name; a reference operand (`&Suffix`)
  * must name a legal number suffix; a tuple operand must be a tuple of legal
- * element tests.
+ * element tests; an array operand (`[Suffix; N]`) must name a legal element
+ * test and a non-negative integer literal length.
  * @param expr - The Is expression to inspect.
  * @param line - The 1-based line number.
- * @returns An InvalidNumberSuffix error if the right operand names neither a
- * legal suffix nor a legal kind, else null.
+ * @returns An InvalidNumberSuffix or InvalidExpression error if the right
+ * operand names neither a legal suffix nor a legal kind, or names an illegal
+ * array-test length, else null.
  */
 export function checkIsOperand(expr: IsNode, line: number): TuffError | null {
   if (expr.right.kind === "Tuple") {
     for (const element of expr.right.elements) {
       const error = checkIsElement(element, line);
       if (error) return error;
+    }
+    return null;
+  }
+  if (expr.right.kind === "ArrayTest") {
+    const elementError = checkIsElement(expr.right.element, line);
+    if (elementError) return elementError;
+    if (testLength(expr.right.length) === null) {
+      return { kind: "InvalidExpression", expression: "", line };
     }
     return null;
   }
@@ -82,7 +102,10 @@ export function checkIsOperand(expr: IsNode, line: number): TuffError | null {
  * @returns An InvalidNumberSuffix error if the element names neither a legal
  * suffix nor a legal kind, else null.
  */
-function checkIsElement(element: TuffExpr, line: number): TuffError | null {
+export function checkIsElement(
+  element: TuffExpr,
+  line: number,
+): TuffError | null {
   if (element.kind === "Ref") {
     let current: TuffExpr = element;
     while (current.kind === "Ref") current = current.operand;
@@ -167,6 +190,18 @@ function literalNumber(expr: TuffExpr): number | null {
   if (expr.kind !== "Literal") return null;
   if (expr.value.kind !== "number") return null;
   return expr.value.value;
+}
+
+/**
+ * The length an array type-test names, or null if the length operand is not
+ * a non-negative integer literal.
+ * @param expr - The length expression to inspect.
+ * @returns The named length, or null.
+ */
+function testLength(expr: TuffExpr): number | null {
+  const value = literalNumber(expr);
+  if (value === null) return null;
+  return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 /**

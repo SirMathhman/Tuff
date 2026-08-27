@@ -102,6 +102,17 @@ export interface IsNode {
   right: TuffExpr;
 }
 
+/**
+ * An array type-test node: `[element; length]`, the right operand of an `is`
+ * type-test that matches an array literal of the given length whose elements
+ * each match the element test.
+ */
+export interface ArrayTestNode {
+  kind: "ArrayTest";
+  element: TuffExpr;
+  length: TuffExpr;
+}
+
 /** A parsed tuff expression. */
 export type TuffExpr =
   | LiteralNode
@@ -117,6 +128,7 @@ export type TuffExpr =
   | TupleIndexNode
   | ArrayNode
   | ArrayIndexNode
+  | ArrayTestNode
   | RangeNode
   | IsNode;
 

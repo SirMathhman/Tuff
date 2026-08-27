@@ -89,7 +89,8 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Tuple" ||
     value.kind === "TupleIndex" ||
     value.kind === "Array" ||
-    value.kind === "ArrayIndex"
+    value.kind === "ArrayIndex" ||
+    value.kind === "ArrayTest"
   ) {
     return true;
   }
@@ -276,6 +277,17 @@ function parsePrimary(
     }
     const first = parseLevel(tokens, pos, line, 0);
     if (!isExpr(first)) return first;
+    if (tokens[pos.i]?.kind === "Semicolon") {
+      pos.i++;
+      const length = parseLevel(tokens, pos, line, 0);
+      if (!isExpr(length)) return length;
+      const close = tokens[pos.i];
+      if (close?.kind !== "RBracket") {
+        return { kind: "InvalidExpression", expression: "", line };
+      }
+      pos.i++;
+      return { kind: "ArrayTest", element: first, length };
+    }
     if (tokens[pos.i]?.kind === "RBracket") {
       pos.i++;
       return { kind: "Array", elements: [first] };
