@@ -172,6 +172,8 @@ function checkLet(
             (element) => inferKind(element, scopes, resolveDeref) ?? "number",
           )
         : undefined;
+    const suffix =
+      stmt.value.kind === "Literal" ? stmt.value.suffix : undefined;
     declareBinding(
       stmt.name,
       kind,
@@ -179,6 +181,7 @@ function checkLet(
       refTo,
       tupleKinds,
       arrayKinds,
+      suffix,
       scopes,
     );
   }
@@ -274,6 +277,7 @@ function checkFor(
       stmt.name,
       "number",
       true,
+      undefined,
       undefined,
       undefined,
       undefined,

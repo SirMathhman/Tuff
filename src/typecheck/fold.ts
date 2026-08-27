@@ -1,6 +1,7 @@
 import type { TuffExpr, TuffStatement } from "../ast.ts";
 import { bool } from "../values.ts";
 import {
+  findDeclared,
   inferKind,
   kindName,
   type DeclaredBinding,
@@ -105,7 +106,11 @@ function isMatch(
   resolveDeref: ResolveDeref,
 ): boolean {
   if (isNumberSuffix(name)) {
-    return left.kind === "Literal" && left.suffix === name;
+    if (left.kind === "Literal") return left.suffix === name;
+    if (left.kind === "Identifier") {
+      return findDeclared(scopes, left.name)?.suffix === name;
+    }
+    return false;
   }
   const kind = kindName(name);
   if (kind === null) return false;

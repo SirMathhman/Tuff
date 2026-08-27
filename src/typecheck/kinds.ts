@@ -35,6 +35,8 @@ export interface DeclaredBinding {
   tupleKinds?: ValueKind[];
   /** The element kinds, if the binding holds an array literal. */
   arrayKinds?: ValueKind[];
+  /** The number-suffix, if the binding holds a suffixed number literal. */
+  suffix?: string;
 }
 
 /** A successfully resolved dereference target. */
@@ -173,6 +175,7 @@ export function arrayElementKinds(
  * @param refTo - The name of the binding this is a reference to, if any.
  * @param tupleKinds - The element kinds, if the binding holds a tuple.
  * @param arrayKinds - The element kinds, if the binding holds an array.
+ * @param suffix - The number-suffix, if the binding holds a suffixed literal.
  * @param scopes - The stack of declared bindings.
  */
 export function declareBinding(
@@ -182,10 +185,12 @@ export function declareBinding(
   refTo: string | undefined,
   tupleKinds: ValueKind[] | undefined,
   arrayKinds: ValueKind[] | undefined,
+  suffix: string | undefined,
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope) scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds };
+  if (scope)
+    scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds, suffix };
 }
 
 /**
