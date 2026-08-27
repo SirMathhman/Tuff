@@ -131,6 +131,24 @@ test('evaluateTuff("return [1U8, 2U8, 3U8] is [U8; 3];") => 1', () => {
   });
 });
 
+test('evaluateTuff("return ((1U8, 2U8), 3U8) is ((U8, U8), U8);") => 1', () => {
+  expect(evaluateTuff("return ((1U8, 2U8), 3U8) is ((U8, U8), U8);")).toEqual(
+    {
+      ok: true,
+      value: 1,
+    },
+  );
+});
+
+test('evaluateTuff("return [(1U8, 2U8), (3U8, 4U8)] is [(U8, U8); 2];") => 1', () => {
+  expect(
+    evaluateTuff("return [(1U8, 2U8), (3U8, 4U8)] is [(U8, U8); 2];"),
+  ).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("return (1U8 + 2U8) is U8;") => 1', () => {
   expect(evaluateTuff("return (1U8 + 2U8) is U8;")).toEqual({
     ok: true,

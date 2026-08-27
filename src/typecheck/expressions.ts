@@ -101,12 +101,8 @@ export function findUndeclared(
     return null;
   }
   if (expr.kind === "Is") {
-    // The right operand is a suffix name, not an identifier; check only the left.
+    // The right operand is a kind name, not an expression; check only the left.
     return findUndeclared(expr.left, line, scopes);
-  }
-  if (expr.kind === "ArrayTest") {
-    // An array type-test is only legal as an `is` right operand.
-    return { kind: "InvalidExpression", expression: "", line };
   }
   if (
     expr.kind === "Or" ||
@@ -242,11 +238,14 @@ export function checkRangeLiterals(
     expr.kind === "Add" ||
     expr.kind === "Equal" ||
     expr.kind === "Less" ||
-    expr.kind === "Range" ||
-    expr.kind === "Is"
+    expr.kind === "Range"
   ) {
     const left = checkRangeLiterals(expr.left, line, scopes);
     return left ?? checkRangeLiterals(expr.right, line, scopes);
+  }
+  if (expr.kind === "Is") {
+    // The right operand is a kind name, not an expression; check only the left.
+    return checkRangeLiterals(expr.left, line, scopes);
   }
   if (expr.kind === "Ref" || expr.kind === "Deref") {
     return checkRangeLiterals(expr.operand, line, scopes);

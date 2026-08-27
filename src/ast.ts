@@ -99,19 +99,49 @@ export interface RangeNode {
 export interface IsNode {
   kind: "Is";
   left: TuffExpr;
-  right: TuffExpr;
+  right: KindName;
+}
+
+/** A bare kind name in an `is` type-test right operand (e.g. `U8`, `Bool`). */
+export interface KindNameBareNode {
+  kind: "KindNameBare";
+  name: string;
 }
 
 /**
- * An array type-test node: `[element; length]`, the right operand of an `is`
- * type-test that matches an array literal of the given length whose elements
- * each match the element test.
+ * A reference kind name in an `is` type-test right operand (e.g. `&U8`,
+ * `&&mut U8`): the depth of the `&` chain, the outermost `mut` flag, and the
+ * suffix the innermost name carries.
  */
-export interface ArrayTestNode {
-  kind: "ArrayTest";
-  element: TuffExpr;
-  length: TuffExpr;
+export interface KindNameRefNode {
+  kind: "KindNameRef";
+  depth: number;
+  mut: boolean;
+  name: string;
 }
+
+/** A tuple kind name in an `is` type-test right operand (e.g. `(U8, U8)`). */
+export interface KindNameTupleNode {
+  kind: "KindNameTuple";
+  elements: KindName[];
+}
+
+/**
+ * An array kind name in an `is` type-test right operand (e.g. `[U8; 3]`):
+ * the element test and the length the array literal must have.
+ */
+export interface KindNameArrayNode {
+  kind: "KindNameArray";
+  element: KindName;
+  length: number;
+}
+
+/** A kind name: the right operand of an `is` type-test. */
+export type KindName =
+  | KindNameBareNode
+  | KindNameRefNode
+  | KindNameTupleNode
+  | KindNameArrayNode;
 
 /** A parsed tuff expression. */
 export type TuffExpr =
@@ -128,7 +158,6 @@ export type TuffExpr =
   | TupleIndexNode
   | ArrayNode
   | ArrayIndexNode
-  | ArrayTestNode
   | RangeNode
   | IsNode;
 

@@ -1,5 +1,5 @@
 import type { TuffError } from "../errors.ts";
-import type { IsNode, TuffExpr } from "../ast.ts";
+import type { IsNode, KindName, TuffExpr } from "../ast.ts";
 import {
   findDeclared,
   inferKind,
@@ -10,26 +10,26 @@ import {
 import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
 
 /**
- * Whether a folded `is` left operand matches its right operand: a reference
- * chain, a tuple of element tests (matched element-wise against a tuple
- * left), or a bare suffix/kind name.
+ * Whether a folded `is` left operand matches its right operand's kind name:
+ * a bare suffix/kind name, a reference chain to a suffix, a tuple of element
+ * tests (matched element-wise against a tuple left), or an array element test
+ * and length (matched against an array left of the same length).
  * @param left - The folded left operand.
- * @param right - The type-test right operand.
+ * @param right - The type-test right operand's kind name.
  * @param scopes - The stack of declared bindings.
  * @param resolveDeref - The dereference resolver, for kind inference.
- * @returns True if the left operand matches the right operand.
+ * @returns True if the left operand matches the kind name.
  */
 export function isRightMatch(
   left: TuffExpr,
-  right: TuffExpr,
+  right: KindName,
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
 ): boolean {
-  if (right.kind === "Ref") {
-    const ref = refTest(right);
-    if (ref !== null) return isRefMatch(left, ref, right.mut, scopes);
+  if (right.kind === "KindNameRef") {
+    return isRefMatch(left, right.depth, right.mut, right.name, scopes);
   }
-  if (right.kind === "Tuple") {
+  if (right.kind === "KindNameTuple") {
     if (left.kind !== "Tuple") return false;
     if (left.elements.length !== right.elements.length) return false;
     for (let i = 0; i < left.elements.length; i++) {
@@ -44,9 +44,9 @@ export function isRightMatch(
     }
     return true;
   }
-  if (right.kind === "ArrayTest") {
+  if (right.kind === "KindNameArray") {
     if (left.kind !== "Array") return false;
-    if (left.elements.length !== testLength(right.length)) return false;
+    if (left.elements.length !== right.length) return false;
     for (const element of left.elements) {
       if (!isRightMatch(element, right.element, scopes, resolveDeref)) {
         return false;
@@ -54,70 +54,52 @@ export function isRightMatch(
     }
     return true;
   }
-  return isMatch(
-    left,
-    right.kind === "Identifier" ? right.name : "",
-    scopes,
-    resolveDeref,
-  );
+  return isMatch(left, right.name, scopes, resolveDeref);
 }
 
 /**
- * Check the right operand of an `is` type-test: a bare operand must name a
- * legal number suffix or a legal kind name; a reference operand (`&Suffix`)
- * must name a legal number suffix; a tuple operand must be a tuple of legal
- * element tests; an array operand (`[Suffix; N]`) must name a legal element
- * test and a non-negative integer literal length.
+ * Check the right operand of an `is` type-test: a bare name must name a
+ * legal number suffix or a legal kind name; a reference chain must name a
+ * legal number suffix; a tuple or array of element tests must name legal
+ * element tests. The parser guarantees an array test's length is a
+ * non-negative integer literal.
  * @param expr - The Is expression to inspect.
  * @param line - The 1-based line number.
- * @returns An InvalidNumberSuffix or InvalidExpression error if the right
- * operand names neither a legal suffix nor a legal kind, or names an illegal
- * array-test length, else null.
+ * @returns An InvalidNumberSuffix error if a name is neither a legal suffix
+ * nor a legal kind, else null.
  */
 export function checkIsOperand(expr: IsNode, line: number): TuffError | null {
-  if (expr.right.kind === "Tuple") {
-    for (const element of expr.right.elements) {
-      const error = checkIsElement(element, line);
+  return checkKindName(expr.right, line);
+}
+
+/**
+ * Check a kind name: a bare name must name a legal number suffix or a legal
+ * kind name; a reference chain must name a legal number suffix; a tuple or
+ * array of element tests must name legal element tests.
+ * @param name - The kind name to inspect.
+ * @param line - The 1-based line number.
+ * @returns An InvalidNumberSuffix error if a name is neither a legal suffix
+ * nor a legal kind, else null.
+ */
+function checkKindName(name: KindName, line: number): TuffError | null {
+  if (name.kind === "KindNameRef") {
+    if (!isNumberSuffix(name.name)) {
+      return { kind: "InvalidNumberSuffix", suffix: name.name, line };
+    }
+    return null;
+  }
+  if (name.kind === "KindNameTuple") {
+    for (const element of name.elements) {
+      const error = checkKindName(element, line);
       if (error) return error;
     }
     return null;
   }
-  if (expr.right.kind === "ArrayTest") {
-    const elementError = checkIsElement(expr.right.element, line);
-    if (elementError) return elementError;
-    if (testLength(expr.right.length) === null) {
-      return { kind: "InvalidExpression", expression: "", line };
-    }
-    return null;
+  if (name.kind === "KindNameArray") {
+    return checkKindName(name.element, line);
   }
-  return checkIsElement(expr.right, line);
-}
-
-/**
- * Check one element of an `is` type-test right operand: a reference chain
- * must name a legal number suffix; a bare operand must name a legal number
- * suffix or a legal kind name.
- * @param element - The element expression to inspect.
- * @param line - The 1-based line number.
- * @returns An InvalidNumberSuffix error if the element names neither a legal
- * suffix nor a legal kind, else null.
- */
-export function checkIsElement(
-  element: TuffExpr,
-  line: number,
-): TuffError | null {
-  if (element.kind === "Ref") {
-    let current: TuffExpr = element;
-    while (current.kind === "Ref") current = current.operand;
-    const name = current.kind === "Identifier" ? current.name : "";
-    if (!isNumberSuffix(name)) {
-      return { kind: "InvalidNumberSuffix", suffix: name, line };
-    }
-    return null;
-  }
-  const name = element.kind === "Identifier" ? element.name : "";
-  if (kindName(name) === null && !isNumberSuffix(name)) {
-    return { kind: "InvalidNumberSuffix", suffix: name, line };
+  if (kindName(name.name) === null && !isNumberSuffix(name.name)) {
+    return { kind: "InvalidNumberSuffix", suffix: name.name, line };
   }
   return null;
 }
@@ -193,18 +175,6 @@ function literalNumber(expr: TuffExpr): number | null {
 }
 
 /**
- * The length an array type-test names, or null if the length operand is not
- * a non-negative integer literal.
- * @param expr - The length expression to inspect.
- * @returns The named length, or null.
- */
-function testLength(expr: TuffExpr): number | null {
-  const value = literalNumber(expr);
-  if (value === null) return null;
-  return Number.isInteger(value) && value >= 0 ? value : null;
-}
-
-/**
  * Whether a number falls within a legal suffix's inclusive value range.
  * Unbounded suffixes (the float suffixes) accept any number.
  * @param value - The number to test.
@@ -219,65 +189,38 @@ function inSuffixRange(value: number, suffix: string): boolean {
 }
 
 /**
- * A reference type-test: the depth of the `&` chain and the suffix the
- * innermost identifier names.
- */
-interface RefTest {
-  depth: number;
-  name: string;
-}
-
-/**
- * The reference type-test a right operand names, or null if the operand is
- * not a reference test. A reference type-test operand is one or more nested
- * `&` whose innermost operand is an identifier naming a suffix (e.g. `&U16`,
- * `&&U8`).
- * @param expr - The type-test right operand to inspect.
- * @returns The reference test (depth and named suffix), or null if the
- * operand is not a chain of references to a suffix.
- */
-function refTest(expr: TuffExpr): RefTest | null {
-  let depth = 0;
-  let current = expr;
-  while (current.kind === "Ref") {
-    depth++;
-    current = current.operand;
-  }
-  if (depth === 0 || current.kind !== "Identifier") return null;
-  return { depth, name: current.name };
-}
-
-/**
- * Whether a folded `is` left operand matches a reference type-test: the left
+ * Whether a folded `is` left operand matches a reference kind name: the left
  * must be a `&` whose operand is an identifier, and the binding's reference
  * depth (the explicit `&` plus its `refTo` chain) must equal the test's depth,
  * with the innermost binding carrying the named suffix. Only the outermost
  * `&`'s mutability is compared: a `&mut` left reference also matches a `&`
  * test, but a non-`mut` left reference does not match a `&mut` test.
  * @param left - The folded left operand.
- * @param ref - The reference test (depth and named suffix).
+ * @param depth - The reference test's depth.
  * @param rightMut - Whether the outermost reference test names a `&mut`.
+ * @param name - The suffix the innermost reference test names.
  * @param scopes - The stack of declared bindings.
  * @returns True if the left operand's reference depth and innermost suffix
  * match the test, with a compatible outermost mutability.
  */
 function isRefMatch(
   left: TuffExpr,
-  ref: RefTest,
+  depth: number,
   rightMut: boolean,
+  name: string,
   scopes: Record<string, DeclaredBinding>[],
 ): boolean {
   if (left.kind !== "Ref") return false;
   if (left.operand.kind !== "Identifier") return false;
   if (rightMut && !left.mut) return false;
-  let depth = 1;
+  let leftDepth = 1;
   let binding = findDeclared(scopes, left.operand.name);
   while (binding !== null && binding.refTo !== undefined) {
-    depth++;
+    leftDepth++;
     const next = findDeclared(scopes, binding.refTo);
     if (next === null) return false;
     binding = next;
   }
-  if (depth !== ref.depth) return false;
-  return binding?.suffix === ref.name;
+  if (leftDepth !== depth) return false;
+  return binding?.suffix === name;
 }

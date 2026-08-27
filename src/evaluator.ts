@@ -384,16 +384,6 @@ const BINARY_RULES: Record<BinaryNodeKind, BinaryRule> = {
     shortCircuit: () => null,
     combine: (left, right) => ({ kind: "range", elements: [left, right] }),
   },
-  Is: {
-    shortCircuit: () => {
-      assert(false, "is nodes are folded by the typechecker");
-      return null;
-    },
-    combine: () => {
-      assert(false, "is nodes are folded by the typechecker");
-      return bool(false);
-    },
-  },
 };
 
 /**
@@ -470,10 +460,7 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     assert(element, "array index out of bounds");
     return element;
   }
-  assert(
-    node.kind !== "ArrayTest",
-    "array type-test must be folded before execution",
-  );
+  assert(node.kind !== "Is", "is type-test must be folded before execution");
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);
   const shortcut = rule.shortCircuit(left);

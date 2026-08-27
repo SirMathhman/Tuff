@@ -1,27 +1,38 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
-import type { Pos, TuffExpr } from "./ast.ts";
+import type { KindName, Pos, TuffExpr } from "./ast.ts";
 import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
-export type BinaryNodeKind =
-  | "Or"
-  | "And"
-  | "Add"
-  | "Equal"
-  | "Less"
-  | "Range"
-  | "Is";
+export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less" | "Range";
 
-/** A binary operator's grammar properties. */
-interface BinaryOp {
-  node: BinaryNodeKind;
+/** The grammar properties shared by every binary operator. */
+interface BinaryOpBase {
   assoc: "left" | "right";
   /** Whether the operator begins at the given token index. */
   startsAt: (tokens: TuffToken[], i: number) => boolean;
   /** How many tokens the operator consumes. */
   width: number;
 }
+
+/** A plain binary operator: the right operand is a sub-level expression. */
+interface BinaryOpEntry extends BinaryOpBase {
+  node: BinaryNodeKind;
+}
+
+/** The `is` type-test operator: the right operand is a kind name. */
+interface IsOpEntry extends BinaryOpBase {
+  node: "Is";
+  /** Parse the right operand as a kind name instead of an expression. */
+  parseRight: (
+    tokens: TuffToken[],
+    pos: Pos,
+    line: number,
+  ) => KindName | TuffError;
+}
+
+/** A binary operator's grammar properties. */
+type BinaryOp = BinaryOpEntry | IsOpEntry;
 
 /**
  * The binary operator grammar, loosest binding first.
@@ -72,6 +83,7 @@ const BINARY_OPS: BinaryOp[] = [
     assoc: "left",
     startsAt: (t, i) => t[i]?.kind === "Is",
     width: 1,
+    parseRight: parseKindName,
   },
 ];
 
@@ -89,8 +101,7 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "Tuple" ||
     value.kind === "TupleIndex" ||
     value.kind === "Array" ||
-    value.kind === "ArrayIndex" ||
-    value.kind === "ArrayTest"
+    value.kind === "ArrayIndex"
   ) {
     return true;
   }
@@ -277,17 +288,6 @@ function parsePrimary(
     }
     const first = parseLevel(tokens, pos, line, 0);
     if (!isExpr(first)) return first;
-    if (tokens[pos.i]?.kind === "Semicolon") {
-      pos.i++;
-      const length = parseLevel(tokens, pos, line, 0);
-      if (!isExpr(length)) return length;
-      const close = tokens[pos.i];
-      if (close?.kind !== "RBracket") {
-        return { kind: "InvalidExpression", expression: "", line };
-      }
-      pos.i++;
-      return { kind: "ArrayTest", element: first, length };
-    }
     if (tokens[pos.i]?.kind === "RBracket") {
       pos.i++;
       return { kind: "Array", elements: [first] };
@@ -318,6 +318,12 @@ export function parseLevel(
   let left: TuffExpr = first;
   while (op.startsAt(tokens, pos.i)) {
     pos.i += op.width;
+    if (op.node === "Is") {
+      const right = op.parseRight(tokens, pos, line);
+      if (!isKindName(right)) return right;
+      left = { kind: "Is", left, right };
+      continue;
+    }
     const right =
       op.assoc === "right"
         ? parseLevel(tokens, pos, line, level)
@@ -326,4 +332,106 @@ export function parseLevel(
     left = { kind: op.node, left, right };
   }
   return left;
+}
+
+/**
+ * Type guard distinguishing a parsed kind name from an error.
+ * @param value {KindName | TuffError} - The value to test.
+ * @returns {boolean} True if the value is a kind name.
+ */
+function isKindName(value: KindName | TuffError): value is KindName {
+  return (
+    value.kind === "KindNameBare" ||
+    value.kind === "KindNameRef" ||
+    value.kind === "KindNameTuple" ||
+    value.kind === "KindNameArray"
+  );
+}
+
+/**
+ * Parse the right operand of an `is` type-test: a kind name. A kind name is a
+ * bare name (`U8`, `Bool`), a chain of one or more references to a name
+ * (`&U8`, `&&U8`, optionally `&mut` on the outermost), a tuple of kind names
+ * (`(U8, U8)`), or an array of a kind name and a length (`[U8; 3]`).
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the kind name.
+ * @param line {number} - The 1-based line number.
+ * @returns {KindName | TuffError} The kind name, or a TuffError.
+ */
+function parseKindName(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): KindName | TuffError {
+  const token = tokens[pos.i];
+  if (!token) return { kind: "InvalidExpression", expression: "", line };
+  if (token.kind === "Ref") {
+    pos.i++;
+    let mut = false;
+    const mutTok = tokens[pos.i];
+    if (mutTok?.kind === "Ident" && mutTok.name === "mut") {
+      mut = true;
+      pos.i++;
+    }
+    let depth = 1;
+    while (tokens[pos.i]?.kind === "Ref") {
+      pos.i++;
+      const innerMut = tokens[pos.i];
+      if (innerMut?.kind === "Ident" && innerMut.name === "mut") pos.i++;
+      depth++;
+    }
+    const nameTok = tokens[pos.i];
+    if (nameTok?.kind !== "Ident") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    return { kind: "KindNameRef", depth, mut, name: nameTok.name };
+  }
+  if (token.kind === "Ident") {
+    pos.i++;
+    return { kind: "KindNameBare", name: token.name };
+  }
+  if (token.kind === "LParen") {
+    pos.i++;
+    const first = parseKindName(tokens, pos, line);
+    if (!isKindName(first)) return first;
+    const elements: KindName[] = [first];
+    while (tokens[pos.i]?.kind === "Comma") {
+      pos.i++;
+      const element = parseKindName(tokens, pos, line);
+      if (!isKindName(element)) return element;
+      elements.push(element);
+    }
+    const close = tokens[pos.i];
+    if (close?.kind !== "RParen") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    return { kind: "KindNameTuple", elements };
+  }
+  if (token.kind === "LBracket") {
+    pos.i++;
+    const element = parseKindName(tokens, pos, line);
+    if (!isKindName(element)) return element;
+    if (tokens[pos.i]?.kind !== "Semicolon") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    const lengthTok = tokens[pos.i];
+    if (
+      lengthTok?.kind !== "Number" ||
+      !Number.isInteger(lengthTok.value) ||
+      lengthTok.value < 0
+    ) {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    const close = tokens[pos.i];
+    if (close?.kind !== "RBracket") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    pos.i++;
+    return { kind: "KindNameArray", element, length: lengthTok.value };
+  }
+  return { kind: "InvalidExpression", expression: "", line };
 }
