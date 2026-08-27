@@ -28,6 +28,7 @@ import {
 } from "./expressions.ts";
 import { foldStatement } from "./fold.ts";
 import { annotationMatch, checkKindName } from "./is-match.ts";
+import { resolveTypeAliases } from "./aliases.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
@@ -51,6 +52,8 @@ export function typecheckProgram(
   statements: TuffStatement[],
   baseLine: number,
 ): TuffStatement[] | TuffError {
+  const aliasError = resolveTypeAliases(statements, baseLine);
+  if (aliasError) return aliasError;
   const scopes: Record<string, DeclaredBinding>[] = [{}];
   const error = checkStatements(statements, baseLine, scopes, false);
   if (error) return error;

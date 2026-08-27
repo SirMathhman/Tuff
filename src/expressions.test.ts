@@ -74,6 +74,17 @@ test('evaluateTuff("let x : (U8, U8) = (3, 4); return x.0 + x.1;") => 7', () => 
   });
 });
 
+test('evaluateTuff("type MyAlias = (U8, U8); let x : MyAlias = (3, 4); return x.0 + x.1;") => 7', () => {
+  expect(
+    evaluateTuff(
+      "type MyAlias = (U8, U8); let x : MyAlias = (3, 4); return x.0 + x.1;",
+    ),
+  ).toEqual({
+    ok: true,
+    value: 7,
+  });
+});
+
 test('evaluateTuff("let tuple = (1, 2); let other = tuple; return other.1;") => 2', () => {
   expect(
     evaluateTuff("let tuple = (1, 2); let other = tuple; return other.1;"),

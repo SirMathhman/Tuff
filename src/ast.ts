@@ -161,6 +161,14 @@ export type TuffExpr =
   | RangeNode
   | IsNode;
 
+/** A `type Name = KindName` alias declaration statement node. */
+export interface TypeNode {
+  kind: "Type";
+  name: string;
+  /** The kind name the alias stands for. */
+  alias: KindName;
+}
+
 /** A `let` declaration statement node. */
 export interface LetNode {
   kind: "Let";
@@ -226,6 +234,7 @@ export interface ContinueNode {
 /** A parsed tuff statement. */
 export type TuffStatement =
   | LetNode
+  | TypeNode
   | AssignNode
   | ReturnNode
   | BlockNode

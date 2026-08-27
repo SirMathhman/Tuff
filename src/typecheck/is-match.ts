@@ -57,7 +57,13 @@ export function annotationMatch(
   scopes: Record<string, DeclaredBinding>[],
   resolveDeref: ResolveDeref,
 ): boolean {
-  return matchKindName(value, annotation, scopes, resolveDeref, annotationBareMatch);
+  return matchKindName(
+    value,
+    annotation,
+    scopes,
+    resolveDeref,
+    annotationBareMatch,
+  );
 }
 
 /**
@@ -89,7 +95,9 @@ function matchKindName(
       const element = value.elements[i];
       const elementName = name.elements[i];
       if (element === undefined || elementName === undefined) return false;
-      if (!matchKindName(element, elementName, scopes, resolveDeref, bareMatch)) {
+      if (
+        !matchKindName(element, elementName, scopes, resolveDeref, bareMatch)
+      ) {
         return false;
       }
     }
@@ -99,7 +107,9 @@ function matchKindName(
     if (value.kind !== "Array") return false;
     if (value.elements.length !== name.length) return false;
     for (const element of value.elements) {
-      if (!matchKindName(element, name.element, scopes, resolveDeref, bareMatch)) {
+      if (
+        !matchKindName(element, name.element, scopes, resolveDeref, bareMatch)
+      ) {
         return false;
       }
     }

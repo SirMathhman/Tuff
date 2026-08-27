@@ -114,6 +114,10 @@ function executeStatement(
     if (scope) scope.set(stmt.name, { value, mut: stmt.mut });
     return undefined;
   }
+  if (stmt.kind === "Type") {
+    // Type aliases are compile-time only; the typechecker consumed them.
+    return undefined;
+  }
   if (stmt.kind === "Return") {
     const value = evalExpr(stmt.value, env);
     return { ok: true, value: toResultValue(value) };

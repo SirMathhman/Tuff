@@ -359,9 +359,39 @@ function parseBlock(
 }
 
 /**
+ * Parse a `type` alias declaration: `type Name = KindName`.
+ * @param tokens {TuffToken[]} - The token list; `type` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the declaration.
+ * @param line {number} - The 1-based line number.
+ * @returns {TuffStatement | TuffError} The Type node, or a TuffError.
+ */
+function parseType(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+): TuffStatement | TuffError {
+  const nameTok = tokens[pos.i];
+  if (nameTok?.kind !== "Ident") {
+    return { kind: "InvalidStatement", token: tokenDetail(nameTok), line };
+  }
+  pos.i++;
+  if (tokens[pos.i]?.kind !== "Assign") {
+    return {
+      kind: "InvalidStatement",
+      token: tokenDetail(tokens[pos.i]),
+      line,
+    };
+  }
+  pos.i++;
+  const alias = parseKindName(tokens, pos, line);
+  if (!isKindName(alias)) return alias;
+  return { kind: "Type", name: nameTok.name, alias };
+}
+
+/**
  * Parse a statement that begins with an identifier: a keyword (`let`,
- * `return`, `if`, `while`, `break`, `continue`) or an assignment whose
- * target is an identifier or an array index.
+ * `type`, `return`, `if`, `while`, `break`, `continue`) or an assignment
+ * whose target is an identifier or an array index.
  * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
  * @param line {number} - The 1-based line number.
@@ -375,6 +405,7 @@ function parseIdentStatement(
   name: string,
 ): TuffStatement | TuffError {
   if (name === "let") return parseLet(tokens, pos, line);
+  if (name === "type") return parseType(tokens, pos, line);
   if (name === "return") {
     const value = parseLevel(tokens, pos, line, 0);
     if (!isExpr(value)) return value;
@@ -439,6 +470,7 @@ export function isStatement(
 ): value is TuffStatement {
   return (
     value.kind === "Let" ||
+    value.kind === "Type" ||
     value.kind === "Assign" ||
     value.kind === "Return" ||
     value.kind === "Block" ||
