@@ -210,10 +210,11 @@ function readWord(text: string, j: number): ReadToken | TokenizeError {
   const rest = text.slice(j);
   const num = rest.match(/^-?\d+(\.\d+)?/);
   if (num) {
+    const suffix = rest.slice(num[0].length).match(/^[A-Za-z_]\w*/);
     return {
       kind: "token",
       token: { kind: "Number", value: Number(num[0]) },
-      next: j + num[0].length,
+      next: j + num[0].length + (suffix ? suffix[0].length : 0),
     };
   }
   if (/^true\b/.test(rest))

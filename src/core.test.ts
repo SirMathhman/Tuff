@@ -13,6 +13,10 @@ test('evaluateTuff("return 1;") => 1', () => {
   expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluateTuff("return 100U8;") => 100', () => {
+  expect(evaluateTuff("return 100U8;")).toEqual({ ok: true, value: 100 });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,
