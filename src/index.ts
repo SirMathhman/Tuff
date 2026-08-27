@@ -4,7 +4,7 @@ import { executeStatements, isBreak, isContinue } from "./evaluator.ts";
 import { parseProgram } from "./parser.ts";
 import { createEnvironment } from "./scopes.ts";
 import { tokenize } from "./tokenizer.ts";
-import { typecheckProgram } from "./typecheck.ts";
+import { typecheckProgram } from "./typecheck/index.ts";
 
 export type {
   TuffError,

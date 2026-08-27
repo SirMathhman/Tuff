@@ -23,7 +23,7 @@ No build step — Bun runs TypeScript directly; imports use explicit `.ts` exten
 - `src/parser.ts` — program-level parse loop; re-exports `ast.ts` types for import compatibility.
 - `src/ast.ts` — single home of AST node interfaces and `Pos`.
 - `src/statements.ts` / `src/expr.ts` — statement and expression parsers; mutual recursion broken by passing the statement parser as a `ParseStatement` parameter.
-- `src/typecheck.ts` + `src/typecheck/kinds.ts` + `src/typecheck/expressions.ts` — static pass, **the sole source of semantic errors** (undeclared identifiers, mutability, kind mismatches, invalid deref, index bounds, break/continue outside loops).
+- `src/typecheck/index.ts` + `src/typecheck/kinds.ts` + `src/typecheck/expressions.ts` — static pass, **the sole source of semantic errors** (undeclared identifiers, mutability, kind mismatches, invalid deref, index bounds, break/continue outside loops).
 - `src/evaluator.ts` — pure executor; walks a typechecked AST with an `Environment`; returns only `TuffOk` or `undefined`. `break`/`continue` are structural `ControlSignal` values consumed only by the innermost loop.
 - `src/scopes.ts` — `Binding`, `Environment` (scope chain + reference registry).
 - `src/values.ts` — `TuffValue` tagged union (number/bool/tuple/array).

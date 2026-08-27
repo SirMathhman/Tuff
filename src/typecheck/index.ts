@@ -1,4 +1,4 @@
-import type { TuffError } from "./errors.ts";
+import type { TuffError } from "../errors.ts";
 import type {
   ArrayIndexNode,
   AssignNode,
@@ -7,7 +7,7 @@ import type {
   LetNode,
   TuffStatement,
   WhileNode,
-} from "./ast.ts";
+} from "../ast.ts";
 import {
   arrayElementKinds,
   declareBinding,
@@ -16,15 +16,15 @@ import {
   literalIndex,
   type DeclaredBinding,
   type ValueKind,
-} from "./typecheck/kinds.ts";
+} from "./kinds.ts";
 import {
   checkNumberSuffixes,
   checkRangeLiterals,
   findUndeclared,
   resolveDeref,
   resolveIndex,
-} from "./typecheck/expressions.ts";
-import { foldStatement } from "./typecheck/fold.ts";
+} from "./expressions.ts";
+import { foldStatement } from "./fold.ts";
 
 /**
  * Whether the current check position is inside a loop body, so that `break`
