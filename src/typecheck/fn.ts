@@ -8,6 +8,7 @@ import {
   type FnDef,
 } from "./kinds.ts";
 import { checkKindName } from "./is-match.ts";
+import { checkReservedName } from "./reserved.ts";
 
 /**
  * A function that checks one statement in the current context. Passed to the
@@ -38,8 +39,12 @@ export function checkFn(
   context: CheckContext,
   checkStatement: CheckStatement,
 ): TuffError | null {
+  const reservedError = checkReservedName(stmt.name, line);
+  if (reservedError) return reservedError;
   const params: FnDef["params"] = [];
   for (const param of stmt.params) {
+    const paramError = checkReservedName(param.name, line);
+    if (paramError) return paramError;
     const resolved = resolveKindName(param.type, context.aliases);
     const error = checkKindName(resolved, line, context.structs);
     if (error) return error;

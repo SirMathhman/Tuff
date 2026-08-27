@@ -37,6 +37,7 @@ import {
 import { foldStatement } from "./fold.ts";
 import { checkFn } from "./fn.ts";
 import { annotationMatch, checkKindName } from "./is-match.ts";
+import { checkReservedName } from "./reserved.ts";
 
 /**
  * Build the expression-level check context from a statement-level check
@@ -171,36 +172,6 @@ function checkStatementBody(
   return null;
 }
 
-/** The reserved words that may not be used as identifiers. */
-const RESERVED_WORDS = [
-  "let",
-  "type",
-  "struct",
-  "fn",
-  "return",
-  "if",
-  "while",
-  "for",
-  "break",
-  "continue",
-  "mut",
-  "is",
-  "true",
-  "false",
-];
-
-/**
- * Check that a binding name is not a reserved word.
- * @param name - The identifier to check.
- * @param line - The 1-based line number.
- * @returns A ReservedIdentifier error if the name is reserved, else null.
- */
-function checkReservedName(name: string, line: number): TuffError | null {
-  return RESERVED_WORDS.includes(name)
-    ? { kind: "ReservedIdentifier", name, line }
-    : null;
-}
-
 /**
  * Check a `let` declaration: its initializer, then declare the binding.
  * @param stmt - The Let statement to check.
@@ -325,6 +296,8 @@ function checkType(
   line: number,
   aliases: Record<string, KindName>[],
 ): TuffError | null {
+  const reservedError = checkReservedName(stmt.name, line);
+  if (reservedError) return reservedError;
   const resolved = resolveKindName(stmt.alias, aliases);
   const error = checkKindName(resolved, line);
   if (error) return error;
@@ -349,6 +322,8 @@ function checkStruct(
   aliases: Record<string, KindName>[],
   structs: Record<string, StructDef>[],
 ): TuffError | null {
+  const reservedError = checkReservedName(stmt.name, line);
+  if (reservedError) return reservedError;
   const fields: Record<string, ValueKind> = {};
   for (const field of stmt.fields) {
     const resolved = resolveKindName(field.type, aliases);
@@ -441,6 +416,8 @@ function checkFor(
   line: number,
   context: CheckContext,
 ): TuffError | null {
+  const reservedError = checkReservedName(stmt.name, line);
+  if (reservedError) return reservedError;
   const scopes = context.scopes;
   const exprCtx = exprContext(context);
   const rangeError = findUndeclared(stmt.range, line, exprCtx);

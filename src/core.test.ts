@@ -320,6 +320,41 @@ test('evaluateTuff("let type = 1;") => Err', () => {
   });
 });
 
+test('evaluateTuff("type let = U8;") => Err', () => {
+  expect(evaluateTuff("type let = U8;")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "let", line: 1 },
+  });
+});
+
+test('evaluateTuff("struct if { x : I32 }") => Err', () => {
+  expect(evaluateTuff("struct if { x : I32 }")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "if", line: 1 },
+  });
+});
+
+test('evaluateTuff("for (type in 1..3) { return 1; }") => Err', () => {
+  expect(evaluateTuff("for (type in 1..3) { return 1; }")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "type", line: 1 },
+  });
+});
+
+test('evaluateTuff("fn type() : I32 => { return 1; }") => Err', () => {
+  expect(evaluateTuff("fn type() : I32 => { return 1; }")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "type", line: 1 },
+  });
+});
+
+test('evaluateTuff("fn f(type : U8) : I32 => { return 1; }") => Err', () => {
+  expect(evaluateTuff("fn f(type : U8) : I32 => { return 1; }")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "type", line: 1 },
+  });
+});
+
 test('evaluateTuff("fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);") => 7', () => {
   expect(
     evaluateTuff(
