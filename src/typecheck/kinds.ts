@@ -189,8 +189,7 @@ export function declareBinding(
   scopes: Record<string, DeclaredBinding>[],
 ): void {
   const scope = scopes[scopes.length - 1];
-  if (scope)
-    scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds, suffix };
+  if (scope) scope[name] = { kind, mut, refTo, tupleKinds, arrayKinds, suffix };
 }
 
 /**
