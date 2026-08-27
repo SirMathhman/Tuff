@@ -371,6 +371,26 @@ test('evaluateTuff("fn add(first :  I32, second : I32) => { return first + secon
   ).toEqual({ ok: true, value: 7 });
 });
 
+test('evaluateTuff("fn f() => { return 1; } let r = f(); return r;") => 1', () => {
+  expect(
+    evaluateTuff("fn f() => { return 1; } let r = f(); return r;"),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("fn f() => { return 1; return true; }") => Err', () => {
+  expect(evaluateTuff("fn f() => { return 1; return true; }")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "f", line: 1 },
+  });
+});
+
+test('evaluateTuff("fn f() : Bool => { return 1; }") => Err', () => {
+  expect(evaluateTuff("fn f() : Bool => { return 1; }")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "f", line: 1 },
+  });
+});
+
 test('evaluateTuff("fn f(x : I32) : I32 => { return x; } let r = f(1); return r;") => 1', () => {
   expect(
     evaluateTuff(
