@@ -92,6 +92,31 @@ function foldExpr(
 }
 
 /**
+ * The number-suffix an expression statically carries, or undefined if it
+ * carries none. A literal carries its own suffix; an identifier carries the
+ * suffix of the binding it names; an `Add` carries a suffix only when both
+ * operands carry the same one.
+ * @param expr - The expression to inspect.
+ * @param scopes - The stack of declared bindings.
+ * @returns The suffix the expression carries, or undefined.
+ */
+function exprSuffix(
+  expr: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+): string | undefined {
+  if (expr.kind === "Literal") return expr.suffix;
+  if (expr.kind === "Identifier") {
+    return findDeclared(scopes, expr.name)?.suffix;
+  }
+  if (expr.kind === "Add") {
+    const left = exprSuffix(expr.left, scopes);
+    const right = exprSuffix(expr.right, scopes);
+    return left !== undefined && left === right ? left : undefined;
+  }
+  return undefined;
+}
+
+/**
  * Whether a folded `is` left operand matches the named suffix or kind.
  * @param left - The folded left operand.
  * @param name - The suffix or kind name the test names.
@@ -106,11 +131,7 @@ function isMatch(
   resolveDeref: ResolveDeref,
 ): boolean {
   if (isNumberSuffix(name)) {
-    if (left.kind === "Literal") return left.suffix === name;
-    if (left.kind === "Identifier") {
-      return findDeclared(scopes, left.name)?.suffix === name;
-    }
-    return false;
+    return exprSuffix(left, scopes) === name;
   }
   const kind = kindName(name);
   if (kind === null) return false;
