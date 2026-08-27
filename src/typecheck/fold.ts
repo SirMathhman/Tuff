@@ -51,22 +51,10 @@ function foldExpr(
 ): TuffExpr {
   if (expr.kind === "Is") {
     const left = foldExpr(expr.left, scopes, resolveDeref);
-    const ref = refTest(expr.right);
-    const matched =
-      ref !== null
-        ? isRefMatch(
-            left,
-            ref,
-            expr.right.kind === "Ref" ? expr.right.mut : false,
-            scopes,
-          )
-        : isMatch(
-            left,
-            expr.right.kind === "Identifier" ? expr.right.name : "",
-            scopes,
-            resolveDeref,
-          );
-    return { kind: "Literal", value: bool(matched) };
+    return {
+      kind: "Literal",
+      value: bool(isRightMatch(left, expr.right, scopes, resolveDeref)),
+    };
   }
   if (
     expr.kind === "Or" ||
@@ -226,6 +214,49 @@ function isRefMatch(
   }
   if (depth !== ref.depth) return false;
   return binding?.suffix === ref.name;
+}
+
+/**
+ * Whether a folded `is` left operand matches its right operand: a reference
+ * chain, a tuple of element tests (matched element-wise against a tuple
+ * left), or a bare suffix/kind name.
+ * @param left - The folded left operand.
+ * @param right - The type-test right operand.
+ * @param scopes - The stack of declared bindings.
+ * @param resolveDeref - The dereference resolver, for kind inference.
+ * @returns True if the left operand matches the right operand.
+ */
+function isRightMatch(
+  left: TuffExpr,
+  right: TuffExpr,
+  scopes: Record<string, DeclaredBinding>[],
+  resolveDeref: ResolveDeref,
+): boolean {
+  if (right.kind === "Ref") {
+    const ref = refTest(right);
+    if (ref !== null) return isRefMatch(left, ref, right.mut, scopes);
+  }
+  if (right.kind === "Tuple") {
+    if (left.kind !== "Tuple") return false;
+    if (left.elements.length !== right.elements.length) return false;
+    for (let i = 0; i < left.elements.length; i++) {
+      const leftElement = left.elements[i];
+      const rightElement = right.elements[i];
+      if (leftElement === undefined || rightElement === undefined) {
+        return false;
+      }
+      if (!isRightMatch(leftElement, rightElement, scopes, resolveDeref)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return isMatch(
+    left,
+    right.kind === "Identifier" ? right.name : "",
+    scopes,
+    resolveDeref,
+  );
 }
 
 /**

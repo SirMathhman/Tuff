@@ -212,15 +212,36 @@ export function checkNumberSuffixes(
 /**
  * Check the right operand of an `is` type-test: a bare operand must name a
  * legal number suffix or a legal kind name; a reference operand (`&Suffix`)
- * must name a legal number suffix.
+ * must name a legal number suffix; a tuple operand must be a tuple of legal
+ * element tests.
  * @param expr - The Is expression to inspect.
  * @param line - The 1-based line number.
  * @returns An InvalidNumberSuffix error if the right operand names neither a
  * legal suffix nor a legal kind, else null.
  */
 function checkIsOperand(expr: IsNode, line: number): TuffError | null {
-  if (expr.right.kind === "Ref") {
-    let current: TuffExpr = expr.right;
+  if (expr.right.kind === "Tuple") {
+    for (const element of expr.right.elements) {
+      const error = checkIsElement(element, line);
+      if (error) return error;
+    }
+    return null;
+  }
+  return checkIsElement(expr.right, line);
+}
+
+/**
+ * Check one element of an `is` type-test right operand: a reference chain
+ * must name a legal number suffix; a bare operand must name a legal number
+ * suffix or a legal kind name.
+ * @param element - The element expression to inspect.
+ * @param line - The 1-based line number.
+ * @returns An InvalidNumberSuffix error if the element names neither a legal
+ * suffix nor a legal kind, else null.
+ */
+function checkIsElement(element: TuffExpr, line: number): TuffError | null {
+  if (element.kind === "Ref") {
+    let current: TuffExpr = element;
     while (current.kind === "Ref") current = current.operand;
     const name = current.kind === "Identifier" ? current.name : "";
     if (!isNumberSuffix(name)) {
@@ -228,7 +249,7 @@ function checkIsOperand(expr: IsNode, line: number): TuffError | null {
     }
     return null;
   }
-  const name = expr.right.kind === "Identifier" ? expr.right.name : "";
+  const name = element.kind === "Identifier" ? element.name : "";
   if (kindName(name) === null && !isNumberSuffix(name)) {
     return { kind: "InvalidNumberSuffix", suffix: name, line };
   }
