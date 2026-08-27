@@ -124,6 +124,13 @@ test('evaluateTuff("return (1U8 + 255U8) is U8;") => 0', () => {
   });
 });
 
+test('evaluateTuff("return (1U8 == 2U8) is Bool;") => 1', () => {
+  expect(evaluateTuff("return (1U8 == 2U8) is Bool;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,
