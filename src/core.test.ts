@@ -321,6 +321,31 @@ test('evaluateTuff("fn add(first : I32, second : I32) : I32 => { return first + 
   ).toEqual({ ok: true, value: 7 });
 });
 
+test('evaluateTuff("fn f(x : I32) : I32 => { return x; } let r = f(1); return r;") => 1', () => {
+  expect(
+    evaluateTuff(
+      "fn f(x : I32) : I32 => { return x; } let r = f(1); return r;",
+    ),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("fn f(x : Bool) : I32 => { return 1; } return f(100U8 is U8);") => 1', () => {
+  expect(
+    evaluateTuff(
+      "fn f(x : Bool) : I32 => { return 1; } return f(100U8 is U8);",
+    ),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("fn f(x : I32) : I32 => { return x; } return f(100FOO);") => Err', () => {
+  expect(
+    evaluateTuff("fn f(x : I32) : I32 => { return x; } return f(100FOO);"),
+  ).toEqual({
+    ok: false,
+    error: { kind: "InvalidNumberSuffix", suffix: "FOO", line: 2 },
+  });
+});
+
 test('evaluateTuff("unidentifiedIdentifier = 1;") => Err', () => {
   expectUnidentifiedIdentifier(
     evaluateTuff("unidentifiedIdentifier = 1;"),

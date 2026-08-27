@@ -73,16 +73,12 @@ export function resolveIndex(
   if (error) return error;
   const indexError = findUndeclared(expr.index, line, context);
   if (indexError) return indexError;
-  const operandKind = inferKind(
-    expr.operand,
-    context.scopes,
-    context.resolveDeref,
-  );
+  const operandKind = inferKind(expr.operand, context);
   if (operandKind !== null && operandKind !== "array") {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "InvalidArrayIndexAssign", name, line };
   }
-  const indexCheck = checkArrayIndex(expr, line, context.scopes);
+  const indexCheck = checkArrayIndex(expr, line, context);
   if (indexCheck) return indexCheck;
   const declared = findDeclared(context.scopes, expr.operand.name);
   if (!declared) {
@@ -190,7 +186,7 @@ function checkCall(
     if (arg === undefined || param === undefined) continue;
     const error = findUndeclared(arg, line, context);
     if (error) return error;
-    const kind = inferKind(arg, context.scopes, context.resolveDeref);
+    const kind = inferKind(arg, context);
     if (kind && kind !== param.kind) {
       return { kind: "TypeMismatch", name: expr.name, line };
     }
@@ -270,6 +266,12 @@ export function checkNumberSuffixes(
       if (error) return error;
     }
   }
+  if (expr.kind === "Call") {
+    for (const arg of expr.args) {
+      const error = checkNumberSuffixes(arg, line);
+      if (error) return error;
+    }
+  }
   return null;
 }
 
@@ -278,21 +280,21 @@ export function checkNumberSuffixes(
  * bound is a TypeMismatch.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
+ * @param context - The expression check context.
  * @returns A TypeMismatch error if a range literal has a non-numeric bound,
  * else null.
  */
 export function checkRangeLiterals(
   expr: TuffExpr,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
+  context: ExprCheckContext,
 ): TuffError | null {
   if (expr.kind === "Range") {
-    const startKind = inferKind(expr.left, scopes, resolveDeref);
+    const startKind = inferKind(expr.left, context);
     if (startKind !== null && startKind !== "number") {
       return { kind: "TypeMismatch", name: "", line };
     }
-    const endKind = inferKind(expr.right, scopes, resolveDeref);
+    const endKind = inferKind(expr.right, context);
     if (endKind !== null && endKind !== "number") {
       return { kind: "TypeMismatch", name: "", line };
     }
@@ -305,35 +307,41 @@ export function checkRangeLiterals(
     expr.kind === "Less" ||
     expr.kind === "Range"
   ) {
-    const left = checkRangeLiterals(expr.left, line, scopes);
-    return left ?? checkRangeLiterals(expr.right, line, scopes);
+    const left = checkRangeLiterals(expr.left, line, context);
+    return left ?? checkRangeLiterals(expr.right, line, context);
   }
   if (expr.kind === "Is") {
     // The right operand is a kind name, not an expression; check only the left.
-    return checkRangeLiterals(expr.left, line, scopes);
+    return checkRangeLiterals(expr.left, line, context);
   }
   if (expr.kind === "Ref" || expr.kind === "Deref") {
-    return checkRangeLiterals(expr.operand, line, scopes);
+    return checkRangeLiterals(expr.operand, line, context);
   }
   if (expr.kind === "TupleIndex") {
-    return checkRangeLiterals(expr.operand, line, scopes);
+    return checkRangeLiterals(expr.operand, line, context);
   }
   if (expr.kind === "FieldAccess") {
-    return checkRangeLiterals(expr.operand, line, scopes);
+    return checkRangeLiterals(expr.operand, line, context);
   }
   if (expr.kind === "ArrayIndex") {
-    const operand = checkRangeLiterals(expr.operand, line, scopes);
-    return operand ?? checkRangeLiterals(expr.index, line, scopes);
+    const operand = checkRangeLiterals(expr.operand, line, context);
+    return operand ?? checkRangeLiterals(expr.index, line, context);
   }
   if (expr.kind === "Tuple" || expr.kind === "Array") {
     for (const element of expr.elements) {
-      const error = checkRangeLiterals(element, line, scopes);
+      const error = checkRangeLiterals(element, line, context);
       if (error) return error;
     }
   }
   if (expr.kind === "StructLiteral") {
     for (const field of expr.fields) {
-      const error = checkRangeLiterals(field.value, line, scopes);
+      const error = checkRangeLiterals(field.value, line, context);
+      if (error) return error;
+    }
+  }
+  if (expr.kind === "Call") {
+    for (const arg of expr.args) {
+      const error = checkRangeLiterals(arg, line, context);
       if (error) return error;
     }
   }
@@ -377,11 +385,7 @@ function checkTupleExpr(
   }
   const error = findUndeclared(expr.operand, line, context);
   if (error) return error;
-  const kinds = tupleElementKinds(
-    expr.operand,
-    context.scopes,
-    context.resolveDeref,
-  );
+  const kinds = tupleElementKinds(expr.operand, context);
   if (kinds && expr.index >= kinds.length) {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "InvalidTupleIndex", name, index: expr.index, line };
@@ -410,7 +414,7 @@ function checkArrayExpr(
   if (error) return error;
   const indexError = findUndeclared(expr.index, line, context);
   if (indexError) return indexError;
-  return checkArrayIndex(expr, line, context.scopes);
+  return checkArrayIndex(expr, line, context);
 }
 
 /**
@@ -418,20 +422,20 @@ function checkArrayExpr(
  * TypeMismatch, and an out-of-bounds literal index is an InvalidArrayIndex.
  * @param expr - The array-index expression to check.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
+ * @param context - The expression check context.
  * @returns A TypeMismatch or InvalidArrayIndex error, else null.
  */
 function checkArrayIndex(
   expr: ArrayIndexNode,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
+  context: ExprCheckContext,
 ): TuffError | null {
-  const indexKind = inferKind(expr.index, scopes, resolveDeref);
+  const indexKind = inferKind(expr.index, context);
   if (indexKind !== null && indexKind !== "number") {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
     return { kind: "TypeMismatch", name, line };
   }
-  const kinds = arrayElementKinds(expr.operand, scopes, resolveDeref);
+  const kinds = arrayElementKinds(expr.operand, context);
   const index = literalIndex(expr.index);
   if (kinds && index !== null && index >= kinds.length) {
     const name = expr.operand.kind === "Identifier" ? expr.operand.name : "";
@@ -464,7 +468,7 @@ function checkStructLiteral(
     }
     const error = findUndeclared(field.value, line, context);
     if (error) return error;
-    const kind = inferKind(field.value, context.scopes, context.resolveDeref);
+    const kind = inferKind(field.value, context);
     if (kind !== null && kind !== expected) {
       return { kind: "TypeMismatch", name: field.name, line };
     }
@@ -487,11 +491,7 @@ function checkFieldAccess(
 ): TuffError | null {
   const operandError = findUndeclared(expr.operand, line, context);
   if (operandError) return operandError;
-  const kinds = structFieldKinds(
-    expr.operand,
-    context.scopes,
-    context.resolveDeref,
-  );
+  const kinds = structFieldKinds(expr.operand, context);
   if (kinds && kinds[expr.field] === undefined) {
     const name =
       expr.operand.kind === "Identifier" ? expr.operand.name : expr.field;

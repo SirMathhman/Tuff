@@ -184,9 +184,10 @@ function checkLet(
   context: CheckContext,
 ): TuffError | null {
   const scopes = context.scopes;
-  const error = findUndeclared(stmt.value, line, exprContext(context));
+  const exprCtx = exprContext(context);
+  const error = findUndeclared(stmt.value, line, exprCtx);
   if (error) return error;
-  const rangeError = checkRangeLiterals(stmt.value, line, scopes);
+  const rangeError = checkRangeLiterals(stmt.value, line, exprCtx);
   if (rangeError) return rangeError;
   const suffixError = checkNumberSuffixes(stmt.value, line);
   if (suffixError) return suffixError;
@@ -202,7 +203,7 @@ function checkLet(
     );
     if (annotationError) return annotationError;
   }
-  const kind = inferKind(stmt.value, scopes, resolveDeref);
+  const kind = inferKind(stmt.value, exprCtx);
   if (kind) {
     const refTo =
       stmt.value.kind === "Ref" && stmt.value.operand.kind === "Identifier"
@@ -211,18 +212,18 @@ function checkLet(
     const tupleKinds =
       stmt.value.kind === "Tuple"
         ? stmt.value.elements.map(
-            (element) => inferKind(element, scopes, resolveDeref) ?? "number",
+            (element) => inferKind(element, exprCtx) ?? "number",
           )
         : undefined;
     const arrayKinds =
       stmt.value.kind === "Array"
         ? stmt.value.elements.map(
-            (element) => inferKind(element, scopes, resolveDeref) ?? "number",
+            (element) => inferKind(element, exprCtx) ?? "number",
           )
         : undefined;
     const structKinds =
       stmt.value.kind === "StructLiteral"
-        ? (structFieldKinds(stmt.value, scopes, resolveDeref) ?? undefined)
+        ? (structFieldKinds(stmt.value, exprCtx) ?? undefined)
         : undefined;
     const suffix =
       stmt.value.kind === "Literal" ? stmt.value.suffix : undefined;
@@ -409,13 +410,14 @@ function checkFor(
   context: CheckContext,
 ): TuffError | null {
   const scopes = context.scopes;
-  const rangeError = findUndeclared(stmt.range, line, exprContext(context));
+  const exprCtx = exprContext(context);
+  const rangeError = findUndeclared(stmt.range, line, exprCtx);
   if (rangeError) return rangeError;
-  const rangeKind = inferKind(stmt.range, scopes, resolveDeref);
+  const rangeKind = inferKind(stmt.range, exprCtx);
   if (rangeKind !== null && rangeKind !== "range") {
     return { kind: "TypeMismatch", name: stmt.name, line };
   }
-  const boundsError = checkRangeLiterals(stmt.range, line, scopes);
+  const boundsError = checkRangeLiterals(stmt.range, line, exprCtx);
   if (boundsError) return boundsError;
   const suffixError = checkNumberSuffixes(stmt.range, line);
   if (suffixError) return suffixError;
@@ -479,17 +481,18 @@ function checkAssignment(
     return { kind: "InvalidDeref", name: "", line };
   }
   if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
-  const valueError = findUndeclared(stmt.value, line, exprContext(context));
+  const exprCtx = exprContext(context);
+  const valueError = findUndeclared(stmt.value, line, exprCtx);
   if (valueError) return valueError;
-  const rangeError = checkRangeLiterals(stmt.value, line, scopes);
+  const rangeError = checkRangeLiterals(stmt.value, line, exprCtx);
   if (rangeError) return rangeError;
   const suffixError = checkNumberSuffixes(stmt.value, line);
   if (suffixError) return suffixError;
   const expected =
     stmt.target.kind === "ArrayIndex"
-      ? elementKind(stmt.target, scopes)
+      ? elementKind(stmt.target, exprCtx)
       : declared.kind;
-  const kind = inferKind(stmt.value, scopes, resolveDeref);
+  const kind = inferKind(stmt.value, exprCtx);
   if (expected && kind && kind !== expected) {
     return { kind: "TypeMismatch", name, line };
   }
@@ -500,14 +503,14 @@ function checkAssignment(
  * The element kind an array-index assignment must match, or null if the
  * element kind is not statically known.
  * @param target - The ArrayIndex assignment target.
- * @param scopes - The stack of declared bindings.
+ * @param context - The expression check context.
  * @returns The expected element kind, or null if not statically inferable.
  */
 function elementKind(
   target: ArrayIndexNode,
-  scopes: Record<string, DeclaredBinding>[],
+  context: ExprCheckContext,
 ): ValueKind | null {
-  const kinds = arrayElementKinds(target.operand, scopes, resolveDeref);
+  const kinds = arrayElementKinds(target.operand, context);
   if (!kinds) return null;
   const index = literalIndex(target.index);
   return index !== null && index < kinds.length ? (kinds[index] ?? null) : null;

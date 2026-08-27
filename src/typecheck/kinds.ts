@@ -131,20 +131,18 @@ export interface CheckContext {
 /**
  * Infer the value kind of an expression, or null if not statically inferable.
  * @param expr - The expression to inspect.
- * @param scopes - The stack of declared bindings.
- * @param resolveDeref - The dereference resolver, for `*` operands.
+ * @param context - The expression check context.
  * @returns The inferred kind, or null if not statically inferable.
  */
 export function inferKind(
   expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
+  context: ExprCheckContext,
 ): ValueKind | null {
   if (expr.kind === "Literal") {
     return expr.value.kind === "bool" ? "bool" : "number";
   }
   if (expr.kind === "Identifier") {
-    return findDeclared(scopes, expr.name)?.kind ?? null;
+    return findDeclared(context.scopes, expr.name)?.kind ?? null;
   }
   if (expr.kind === "Add") return "number";
   if (
@@ -156,20 +154,23 @@ export function inferKind(
   )
     return "bool";
   if (expr.kind === "Ref") return "number";
+  if (expr.kind === "Call") {
+    return findFn(context.fns, expr.name)?.returnType ?? null;
+  }
   if (expr.kind === "Deref") {
-    const resolved = resolveDeref(expr.operand, 0, scopes);
+    const resolved = context.resolveDeref(expr.operand, 0, context.scopes);
     return "kind" in resolved ? null : resolved.binding.kind;
   }
   if (expr.kind === "Tuple") return "tuple";
   if (expr.kind === "TupleIndex") {
-    const kinds = tupleElementKinds(expr.operand, scopes, resolveDeref);
+    const kinds = tupleElementKinds(expr.operand, context);
     return kinds ? (kinds[expr.index] ?? null) : null;
   }
   if (expr.kind === "Array") return "array";
   if (expr.kind === "Range") return "range";
   if (expr.kind === "StructLiteral") return "struct";
   if (expr.kind === "ArrayIndex") {
-    const kinds = arrayElementKinds(expr.operand, scopes, resolveDeref);
+    const kinds = arrayElementKinds(expr.operand, context);
     if (!kinds) return null;
     const index = literalIndex(expr.index);
     return index !== null && index < kinds.length
@@ -177,7 +178,7 @@ export function inferKind(
       : null;
   }
   if (expr.kind === "FieldAccess") {
-    const kinds = structFieldKinds(expr.operand, scopes, resolveDeref);
+    const kinds = structFieldKinds(expr.operand, context);
     return kinds ? (kinds[expr.field] ?? null) : null;
   }
   return null;
@@ -200,22 +201,20 @@ export function literalIndex(expr: TuffExpr): number | null {
 /**
  * The element kinds of a tuple expression, or null if not statically a tuple.
  * @param expr - The expression to inspect.
- * @param scopes - The stack of declared bindings.
- * @param resolveDeref - The dereference resolver, for `*` operands.
+ * @param context - The expression check context.
  * @returns {ValueKind[] | null} The element kinds, or null.
  */
 export function tupleElementKinds(
   expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
+  context: ExprCheckContext,
 ): ValueKind[] | null {
   if (expr.kind === "Tuple") {
     return expr.elements.map(
-      (element) => inferKind(element, scopes, resolveDeref) ?? "number",
+      (element) => inferKind(element, context) ?? "number",
     );
   }
   if (expr.kind === "Identifier") {
-    return findDeclared(scopes, expr.name)?.tupleKinds ?? null;
+    return findDeclared(context.scopes, expr.name)?.tupleKinds ?? null;
   }
   return null;
 }
@@ -223,22 +222,20 @@ export function tupleElementKinds(
 /**
  * The element kinds of an array expression, or null if not statically an array.
  * @param expr - The expression to inspect.
- * @param scopes - The stack of declared bindings.
- * @param resolveDeref - The dereference resolver, for `*` operands.
+ * @param context - The expression check context.
  * @returns {ValueKind[] | null} The element kinds, or null.
  */
 export function arrayElementKinds(
   expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
+  context: ExprCheckContext,
 ): ValueKind[] | null {
   if (expr.kind === "Array") {
     return expr.elements.map(
-      (element) => inferKind(element, scopes, resolveDeref) ?? "number",
+      (element) => inferKind(element, context) ?? "number",
     );
   }
   if (expr.kind === "Identifier") {
-    return findDeclared(scopes, expr.name)?.arrayKinds ?? null;
+    return findDeclared(context.scopes, expr.name)?.arrayKinds ?? null;
   }
   return null;
 }
@@ -246,25 +243,22 @@ export function arrayElementKinds(
 /**
  * The field kinds of a struct expression, or null if not statically a struct.
  * @param expr - The expression to inspect.
- * @param scopes - The stack of declared bindings.
- * @param resolveDeref - The dereference resolver, for `*` operands.
+ * @param context - The expression check context.
  * @returns {Record<string, ValueKind> | null} The field kinds, or null.
  */
 export function structFieldKinds(
   expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
-  resolveDeref: ResolveDeref,
+  context: ExprCheckContext,
 ): Record<string, ValueKind> | null {
   if (expr.kind === "StructLiteral") {
     const fields: Record<string, ValueKind> = {};
     for (const field of expr.fields) {
-      fields[field.name] =
-        inferKind(field.value, scopes, resolveDeref) ?? "number";
+      fields[field.name] = inferKind(field.value, context) ?? "number";
     }
     return fields;
   }
   if (expr.kind === "Identifier") {
-    return findDeclared(scopes, expr.name)?.structKinds ?? null;
+    return findDeclared(context.scopes, expr.name)?.structKinds ?? null;
   }
   return null;
 }

@@ -80,5 +80,9 @@ function foldExpr(expr: TuffExpr, context: ExprCheckContext): TuffExpr {
     }));
     return expr;
   }
+  if (expr.kind === "Call") {
+    expr.args = expr.args.map((arg) => foldExpr(arg, context));
+    return expr;
+  }
   return expr;
 }

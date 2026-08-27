@@ -125,11 +125,11 @@ function annotationBareMatch(
   }
   if (findStruct(context.structs, name)) {
     if (value.kind === "StructLiteral") return value.name === name;
-    return inferKind(value, context.scopes, context.resolveDeref) === "struct";
+    return inferKind(value, context) === "struct";
   }
   const kind = kindName(name);
   if (kind === null) return false;
-  return inferKind(value, context.scopes, context.resolveDeref) === kind;
+  return inferKind(value, context) === kind;
 }
 
 /**
@@ -205,11 +205,11 @@ function isMatch(
     return exprSuffix(left, context.scopes) === name;
   }
   if (findStruct(context.structs, name)) {
-    return inferKind(left, context.scopes, context.resolveDeref) === "struct";
+    return inferKind(left, context) === "struct";
   }
   const kind = kindName(name);
   if (kind === null) return false;
-  return inferKind(left, context.scopes, context.resolveDeref) === kind;
+  return inferKind(left, context) === kind;
 }
 
 /**
