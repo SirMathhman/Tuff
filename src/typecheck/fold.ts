@@ -50,10 +50,10 @@ function foldStatement(stmt: TuffStatement): void {
 function foldExpr(expr: TuffExpr): TuffExpr {
   if (expr.kind === "Is") {
     const left = foldExpr(expr.left);
+    const name = expr.right.kind === "Identifier" ? expr.right.name : "";
     const matches =
       left.kind === "Literal" &&
-      expr.right.kind === "Identifier" &&
-      left.suffix === expr.right.name;
+      (name === "Bool" ? left.value.kind === "bool" : left.suffix === name);
     return { kind: "Literal", value: bool(matches) };
   }
   if (

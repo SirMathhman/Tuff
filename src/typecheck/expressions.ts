@@ -173,9 +173,9 @@ export function checkNumberSuffixes(
     }
   }
   if (expr.kind === "Is") {
-    if (expr.right.kind !== "Identifier" || !isNumberSuffix(expr.right.name)) {
-      const suffix = expr.right.kind === "Identifier" ? expr.right.name : "";
-      return { kind: "InvalidNumberSuffix", suffix, line };
+    const name = expr.right.kind === "Identifier" ? expr.right.name : "";
+    if (name !== "Bool" && !isNumberSuffix(name)) {
+      return { kind: "InvalidNumberSuffix", suffix: name, line };
     }
     return checkNumberSuffixes(expr.left, line);
   }
