@@ -138,6 +138,13 @@ test('evaluateTuff("return (1U8 < 2U8) is Bool;") => 1', () => {
   });
 });
 
+test('evaluateTuff("let x = 10U16; return &x is &U16;") => 1', () => {
+  expect(evaluateTuff("let x = 10U16; return &x is &U16;")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluateTuff("let x = 1; return x;") => 1', () => {
   expect(evaluateTuff("let x = 1; return x;")).toEqual({
     ok: true,

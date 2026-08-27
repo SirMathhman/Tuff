@@ -210,14 +210,23 @@ export function checkNumberSuffixes(
 }
 
 /**
- * Check the right operand of an `is` type-test: it must name a legal number
- * suffix or a legal kind name.
+ * Check the right operand of an `is` type-test: a bare operand must name a
+ * legal number suffix or a legal kind name; a reference operand (`&Suffix`)
+ * must name a legal number suffix.
  * @param expr - The Is expression to inspect.
  * @param line - The 1-based line number.
  * @returns An InvalidNumberSuffix error if the right operand names neither a
  * legal suffix nor a legal kind, else null.
  */
 function checkIsOperand(expr: IsNode, line: number): TuffError | null {
+  if (expr.right.kind === "Ref") {
+    const name =
+      expr.right.operand.kind === "Identifier" ? expr.right.operand.name : "";
+    if (!isNumberSuffix(name)) {
+      return { kind: "InvalidNumberSuffix", suffix: name, line };
+    }
+    return null;
+  }
   const name = expr.right.kind === "Identifier" ? expr.right.name : "";
   if (kindName(name) === null && !isNumberSuffix(name)) {
     return { kind: "InvalidNumberSuffix", suffix: name, line };

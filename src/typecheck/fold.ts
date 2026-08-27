@@ -51,11 +51,17 @@ function foldExpr(
 ): TuffExpr {
   if (expr.kind === "Is") {
     const left = foldExpr(expr.left, scopes, resolveDeref);
-    const name = expr.right.kind === "Identifier" ? expr.right.name : "";
-    return {
-      kind: "Literal",
-      value: bool(isMatch(left, name, scopes, resolveDeref)),
-    };
+    const refName = refSuffix(expr.right);
+    const matched =
+      refName !== null
+        ? isRefMatch(left, refName, scopes)
+        : isMatch(
+            left,
+            expr.right.kind === "Identifier" ? expr.right.name : "",
+            scopes,
+            resolveDeref,
+          );
+    return { kind: "Literal", value: bool(matched) };
   }
   if (
     expr.kind === "Or" ||
@@ -144,6 +150,39 @@ function inSuffixRange(value: number, suffix: string): boolean {
   const spec = suffixSpec(suffix);
   if ("unbounded" in spec) return true;
   return value >= spec.min && value <= spec.max;
+}
+
+/**
+ * The suffix a reference type-test operand names, or null if the operand is
+ * not a reference to a suffix. A reference type-test operand is a `&` whose
+ * operand is an identifier naming a suffix (e.g. `&U16`).
+ * @param expr - The type-test right operand to inspect.
+ * @returns The named suffix, or null if the operand is not a reference test.
+ */
+function refSuffix(expr: TuffExpr): string | null {
+  if (expr.kind !== "Ref") return null;
+  if (expr.operand.kind !== "Identifier") return null;
+  return expr.operand.name;
+}
+
+/**
+ * Whether a folded `is` left operand matches a reference type-test: the left
+ * must be a `&` whose operand is an identifier bound to a value carrying the
+ * named suffix.
+ * @param left - The folded left operand.
+ * @param name - The suffix the reference test names.
+ * @param scopes - The stack of declared bindings.
+ * @returns True if the left operand is a reference to a binding carrying the
+ * named suffix.
+ */
+function isRefMatch(
+  left: TuffExpr,
+  name: string,
+  scopes: Record<string, DeclaredBinding>[],
+): boolean {
+  if (left.kind !== "Ref") return false;
+  if (left.operand.kind !== "Identifier") return false;
+  return findDeclared(scopes, left.operand.name)?.suffix === name;
 }
 
 /**
