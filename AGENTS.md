@@ -16,6 +16,16 @@ The full canonical architecture (language spec, invariants, module dependency gr
 
 No build step — Bun runs TypeScript directly; imports use explicit `.ts` extensions.
 
+## Hooks
+
+Stop hooks (`.github/hooks/hooks.json`) run automatically at the end of every turn: `bun run test`, `bun run lint`, `bun run pmd:cpd`, `bun tools/callgraph.ts`, `bun run madge:circular`. A failing hook blocks the turn — make all five pass before concluding work. The callgraph hook regenerates `docs/callgraph.dot` / `.svg`; commit those files when the graph changes.
+
+## Commit Conventions
+
+- Imperative, specific subjects: `Add reference type-tests: &x is &Suffix`, `Move && disambiguation from tokenizer to parser (reviewer fix)`.
+- One logical change per commit; commit after each completed test case or refactor.
+- Append `(reviewer fix)` to commits that implement an architectural-review recommendation.
+
 ## Architecture
 
 - `src/index.ts` — facade; owns the pipeline; maps tokenizer failure to `UnexpectedCharacter`; asserts no control signal escapes.
