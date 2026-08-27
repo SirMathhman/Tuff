@@ -5,7 +5,6 @@ import type {
   ForNode,
   IfNode,
   LetNode,
-  RangeNode,
   TuffStatement,
   WhileNode,
 } from "./ast.ts";
@@ -19,6 +18,7 @@ import {
   type ValueKind,
 } from "./typecheck/kinds.ts";
 import {
+  checkRangeLiterals,
   findUndeclared,
   resolveDeref,
   resolveIndex,
@@ -120,6 +120,8 @@ function checkLet(
 ): TuffError | null {
   const error = findUndeclared(stmt.value, line, scopes);
   if (error) return error;
+  const rangeError = checkRangeLiterals(stmt.value, line, scopes);
+  if (rangeError) return rangeError;
   const kind = inferKind(stmt.value, scopes, resolveDeref);
   if (kind) {
     const refTo =
@@ -230,10 +232,8 @@ function checkFor(
   if (rangeKind !== null && rangeKind !== "range") {
     return { kind: "TypeMismatch", name: stmt.name, line };
   }
-  if (stmt.range.kind === "Range") {
-    const boundsError = checkRangeBounds(stmt.range, line, scopes);
-    if (boundsError) return boundsError;
-  }
+  const boundsError = checkRangeLiterals(stmt.range, line, scopes);
+  if (boundsError) return boundsError;
   scopes.push({});
   try {
     declareBinding(
@@ -249,29 +249,6 @@ function checkFor(
   } finally {
     scopes.pop();
   }
-}
-
-/**
- * Check a range expression's bounds: a non-numeric bound is a TypeMismatch.
- * @param range - The Range expression to check.
- * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @returns A TypeMismatch error if a bound is not a number, else null.
- */
-function checkRangeBounds(
-  range: RangeNode,
-  line: number,
-  scopes: Record<string, DeclaredBinding>[],
-): TuffError | null {
-  const startKind = inferKind(range.left, scopes, resolveDeref);
-  if (startKind !== null && startKind !== "number") {
-    return { kind: "TypeMismatch", name: "", line };
-  }
-  const endKind = inferKind(range.right, scopes, resolveDeref);
-  if (endKind !== null && endKind !== "number") {
-    return { kind: "TypeMismatch", name: "", line };
-  }
-  return null;
 }
 
 /**
@@ -310,6 +287,8 @@ function checkAssignment(
   if (!declared.mut) return { kind: "ImmutableAssignment", name, line };
   const valueError = findUndeclared(stmt.value, line, scopes);
   if (valueError) return valueError;
+  const rangeError = checkRangeLiterals(stmt.value, line, scopes);
+  if (rangeError) return rangeError;
   const expected =
     stmt.target.kind === "ArrayIndex"
       ? elementKind(stmt.target, scopes)

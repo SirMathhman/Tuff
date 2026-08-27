@@ -4,13 +4,7 @@ import type { Pos, TuffExpr } from "./ast.ts";
 import { bool, num } from "./values.ts";
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
-export type BinaryNodeKind =
-  | "Or"
-  | "And"
-  | "Add"
-  | "Equal"
-  | "Less"
-  | "Range";
+export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less" | "Range";
 
 /** A binary operator's grammar properties. */
 interface BinaryOp {
@@ -105,10 +99,7 @@ export function parseOperand(
   if (!isExpr(operand)) return operand;
   let left: TuffExpr = operand;
   for (;;) {
-    if (
-      tokens[pos.i]?.kind === "Dot" &&
-      tokens[pos.i + 1]?.kind !== "Dot"
-    ) {
+    if (tokens[pos.i]?.kind === "Dot" && tokens[pos.i + 1]?.kind !== "Dot") {
       pos.i++;
       const indexTok = tokens[pos.i];
       if (indexTok?.kind !== "Number" || !Number.isInteger(indexTok.value)) {

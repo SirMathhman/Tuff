@@ -75,6 +75,29 @@ test('evaluateTuff("let mut sum = 0; let range = 0..4; for (i in range) { sum +=
   });
 });
 
+test('evaluateTuff("let r = true..2; return 0;") => Err', () => {
+  expect(evaluateTuff("let r = true..2; return 0;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "", line: 1 },
+  });
+});
+
+test('evaluateTuff("let mut r = 0..4; r = true..2; return 0;") => Err', () => {
+  expect(evaluateTuff("let mut r = 0..4; r = true..2; return 0;")).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "", line: 2 },
+  });
+});
+
+test('evaluateTuff("let a = [true..2]; for (i in a[0]) { return i; }") => Err', () => {
+  expect(
+    evaluateTuff("let a = [true..2]; for (i in a[0]) { return i; }"),
+  ).toEqual({
+    ok: false,
+    error: { kind: "TypeMismatch", name: "", line: 1 },
+  });
+});
+
 test('evaluateTuff("let mut x = 0; while (x < 4) { x += 1; break; } return x;") => 1', () => {
   expect(
     evaluateTuff("let mut x = 0; while (x < 4) { x += 1; break; } return x;"),

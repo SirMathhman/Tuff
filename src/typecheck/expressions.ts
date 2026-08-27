@@ -137,6 +137,60 @@ export function findUndeclared(
 }
 
 /**
+ * Check the bounds of every range literal in an expression: a non-numeric
+ * bound is a TypeMismatch.
+ * @param expr - The expression to inspect.
+ * @param line - The 1-based line number.
+ * @param scopes - The stack of declared bindings.
+ * @returns A TypeMismatch error if a range literal has a non-numeric bound,
+ * else null.
+ */
+export function checkRangeLiterals(
+  expr: TuffExpr,
+  line: number,
+  scopes: Record<string, DeclaredBinding>[],
+): TuffError | null {
+  if (expr.kind === "Range") {
+    const startKind = inferKind(expr.left, scopes, resolveDeref);
+    if (startKind !== null && startKind !== "number") {
+      return { kind: "TypeMismatch", name: "", line };
+    }
+    const endKind = inferKind(expr.right, scopes, resolveDeref);
+    if (endKind !== null && endKind !== "number") {
+      return { kind: "TypeMismatch", name: "", line };
+    }
+  }
+  if (
+    expr.kind === "Or" ||
+    expr.kind === "And" ||
+    expr.kind === "Add" ||
+    expr.kind === "Equal" ||
+    expr.kind === "Less" ||
+    expr.kind === "Range"
+  ) {
+    const left = checkRangeLiterals(expr.left, line, scopes);
+    return left ?? checkRangeLiterals(expr.right, line, scopes);
+  }
+  if (expr.kind === "Ref" || expr.kind === "Deref") {
+    return checkRangeLiterals(expr.operand, line, scopes);
+  }
+  if (expr.kind === "TupleIndex") {
+    return checkRangeLiterals(expr.operand, line, scopes);
+  }
+  if (expr.kind === "ArrayIndex") {
+    const operand = checkRangeLiterals(expr.operand, line, scopes);
+    return operand ?? checkRangeLiterals(expr.index, line, scopes);
+  }
+  if (expr.kind === "Tuple" || expr.kind === "Array") {
+    for (const element of expr.elements) {
+      const error = checkRangeLiterals(element, line, scopes);
+      if (error) return error;
+    }
+  }
+  return null;
+}
+
+/**
  * Check each element of a tuple or array literal for undeclared identifiers.
  * @param elements - The element expressions to check.
  * @param line - The 1-based line number.
