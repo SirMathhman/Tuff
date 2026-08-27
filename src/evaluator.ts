@@ -115,7 +115,7 @@ function executeStatement(
     return undefined;
   }
   if (stmt.kind === "Type") {
-    // Type aliases are compile-time only; the typechecker consumed them.
+    // Type aliases are compile-time only; a no-op at runtime.
     return undefined;
   }
   if (stmt.kind === "Return") {
