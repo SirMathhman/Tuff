@@ -112,6 +112,14 @@ export interface NumberOutOfRangeError {
   line: number;
 }
 
+/** An error for using a reserved keyword as an identifier. */
+export interface ReservedIdentifierError {
+  kind: "ReservedIdentifier";
+  /** The reserved word used as an identifier. */
+  name: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -128,7 +136,8 @@ export type TuffError =
   | InvalidArrayIndexError
   | InvalidArrayIndexAssignError
   | InvalidNumberSuffixError
-  | NumberOutOfRangeError;
+  | NumberOutOfRangeError
+  | ReservedIdentifierError;
 
 /** A successful evaluation result. */
 export interface TuffOk {

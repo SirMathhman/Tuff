@@ -313,6 +313,13 @@ test('evaluateTuff("let x = 0; x = 1; return x;") => Err', () => {
   );
 });
 
+test('evaluateTuff("let type = 1;") => Err', () => {
+  expect(evaluateTuff("let type = 1;")).toEqual({
+    ok: false,
+    error: { kind: "ReservedIdentifier", name: "type", line: 1 },
+  });
+});
+
 test('evaluateTuff("fn add(first : I32, second : I32) : I32 => { return first + second; } return add(3, 4);") => 7', () => {
   expect(
     evaluateTuff(
