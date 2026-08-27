@@ -54,7 +54,12 @@ function foldExpr(
     const refName = refSuffix(expr.right);
     const matched =
       refName !== null
-        ? isRefMatch(left, refName, scopes)
+        ? isRefMatch(
+            left,
+            refName,
+            expr.right.kind === "Ref" ? expr.right.mut : false,
+            scopes,
+          )
         : isMatch(
             left,
             expr.right.kind === "Identifier" ? expr.right.name : "",
@@ -168,20 +173,24 @@ function refSuffix(expr: TuffExpr): string | null {
 /**
  * Whether a folded `is` left operand matches a reference type-test: the left
  * must be a `&` whose operand is an identifier bound to a value carrying the
- * named suffix.
+ * named suffix. A `&mut` left reference also matches a `&` test, but a
+ * non-`mut` left reference does not match a `&mut` test.
  * @param left - The folded left operand.
  * @param name - The suffix the reference test names.
+ * @param rightMut - Whether the reference test names a `&mut` reference.
  * @param scopes - The stack of declared bindings.
  * @returns True if the left operand is a reference to a binding carrying the
- * named suffix.
+ * named suffix, with a compatible mutability.
  */
 function isRefMatch(
   left: TuffExpr,
   name: string,
+  rightMut: boolean,
   scopes: Record<string, DeclaredBinding>[],
 ): boolean {
   if (left.kind !== "Ref") return false;
   if (left.operand.kind !== "Identifier") return false;
+  if (rightMut && !left.mut) return false;
   return findDeclared(scopes, left.operand.name)?.suffix === name;
 }
 
