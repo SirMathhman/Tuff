@@ -76,6 +76,28 @@ test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
   });
 });
 
+test('evaluate("let x = 1; x = 2; x") => immutable-assignment error', () => {
+  expect(evaluate("let x = 1; x = 2; x")).toEqual({
+    ok: false,
+    error: {
+      kind: "immutable-assignment",
+      input: "let x = 1; x = 2; x",
+      name: "x",
+    },
+  });
+});
+
+test('evaluate("x = 1; x") => immutable-assignment error', () => {
+  expect(evaluate("x = 1; x")).toEqual({
+    ok: false,
+    error: {
+      kind: "immutable-assignment",
+      input: "x = 1; x",
+      name: "x",
+    },
+  });
+});
+
 test('evaluate("{ 2 + 3 )") => syntax error', () => {
   expect(evaluate("{ 2 + 3 )")).toEqual({
     ok: false,

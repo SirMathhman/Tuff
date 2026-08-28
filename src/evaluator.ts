@@ -1,4 +1,4 @@
-import type { AstNode } from "./ast.ts";
+import type { AstNode, Binding, BlockNode, Statement } from "./ast.ts";
 
 /**
  * A variable environment mapping names to values.
@@ -24,7 +24,9 @@ export interface EvalSuccess {
 export interface EvalFailure {
   /** Marks the outcome as failed. */
   ok: false;
-  /** The name of the unknown variable. */
+  /** What kind of failure this is. */
+  kind: "unknown-variable" | "immutable-assignment";
+  /** The name of the variable involved. */
   name: string;
 }
 
@@ -46,26 +48,12 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   if (node.kind === "ident") {
     const value = env.get(node.name);
     if (value === undefined) {
-      return { ok: false, name: node.name };
+      return { ok: false, kind: "unknown-variable", name: node.name };
     }
     return { ok: true, value };
   }
   if (node.kind === "block") {
-    const values: Record<string, number> = {};
-    const child: Env = {
-      get: (name: string) => {
-        const value = values[name];
-        return value === undefined ? env.get(name) : value;
-      },
-    };
-    for (const statement of node.statements) {
-      const out = evalAst(statement.value, child);
-      if (!out.ok) {
-        return out;
-      }
-      values[statement.name] = out.value;
-    }
-    return evalAst(node.body, child);
+    return evalBlock(node, env);
   }
   const left = evalAst(node.left, env);
   if (!left.ok) {
@@ -87,4 +75,53 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
       return exhaustive;
     }
   }
+}
+
+/**
+ * Evaluate a block node, resolving its statements eagerly in a child env.
+ * @param {BlockNode} node - The block node to evaluate.
+ * @param {Env} env - The enclosing variable environment.
+ * @returns {EvalOutcome} The evaluated body, or a structured error.
+ */
+function evalBlock(node: BlockNode, env: Env): EvalOutcome {
+  const values: Record<string, number> = {};
+  const mutable: Record<string, boolean> = {};
+  const child: Env = {
+    get: (name: string) => {
+      const value = values[name];
+      return value === undefined ? env.get(name) : value;
+    },
+  };
+  for (const statement of node.statements) {
+    const out = evalAst(statement.value, child);
+    if (!out.ok) {
+      return out;
+    }
+    if (isBinding(statement)) {
+      mutable[statement.name] = statement.mutable;
+    } else if (!isMutable(mutable, statement.name)) {
+      return { ok: false, kind: "immutable-assignment", name: statement.name };
+    }
+    values[statement.name] = out.value;
+  }
+  return evalAst(node.body, child);
+}
+
+/**
+ * Whether a statement is a binding (as opposed to an assignment).
+ * @param {Statement} statement - The statement to test.
+ * @returns {boolean} True when the statement is a binding.
+ */
+function isBinding(statement: Statement): statement is Binding {
+  return "mutable" in statement;
+}
+
+/**
+ * Whether a name is bound mutable in a block's local scope.
+ * @param {Record<string, boolean>} mutable - The block's mutability map.
+ * @param {string} name - The name to test.
+ * @returns {boolean} True when the name is bound and mutable.
+ */
+function isMutable(mutable: Record<string, boolean>, name: string): boolean {
+  return mutable[name] === true;
 }
