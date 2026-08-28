@@ -21,6 +21,10 @@ test('evaluate("2 + 3 - 4") => 1', () => {
   expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("2 * 3 + 4") => 10', () => {
+  expect(evaluate("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
+});
+
 test('evaluate("abc") => error', () => {
   expect(evaluate("abc")).toEqual({
     ok: false,

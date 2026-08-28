@@ -82,7 +82,7 @@ function tokenize(input: string): Token[] {
       i = j;
       continue;
     }
-    if (ch === "+" || ch === "-") {
+    if (ch === "+" || ch === "-" || ch === "*") {
       tokens.push({ type: "op", text: ch, position: i });
       i += 1;
       continue;
@@ -104,12 +104,12 @@ function peek(cursor: Cursor): Token {
 }
 
 /**
- * Parse a term (a single number).
+ * Parse a factor (a single number).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed number node, or a structured error.
  */
-function parseTerm(cursor: Cursor, input: string): ParseResult {
+function parseFactor(cursor: Cursor, input: string): ParseResult {
   const tok = peek(cursor);
   if (tok.type === "num") {
     cursor.index += 1;
@@ -117,6 +117,33 @@ function parseTerm(cursor: Cursor, input: string): ParseResult {
   }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
+}
+
+/**
+ * Parse a term (factors joined by *).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed AST, or a structured error.
+ */
+function parseTerm(cursor: Cursor, input: string): ParseResult {
+  const left = parseFactor(cursor, input);
+  if (!left.ok) {
+    return left;
+  }
+  let node: AstNode = left.value;
+  for (;;) {
+    const opTok = peek(cursor);
+    if (opTok.type !== "op" || opTok.text !== "*") {
+      break;
+    }
+    cursor.index += 1;
+    const right = parseFactor(cursor, input);
+    if (!right.ok) {
+      return right;
+    }
+    node = { kind: "binop", op: opTok.text, left: node, right: right.value };
+  }
+  return { ok: true, value: node };
 }
 
 /**
