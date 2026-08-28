@@ -626,6 +626,8 @@ export function parseStatement(
     if (!isExpr(value)) return value;
     return { kind: "Assign", target, value };
   }
+  const value = parseLevel(tokens, pos, line, 0);
+  if (isExpr(value)) return { kind: "Expr", value };
   return { kind: "InvalidStatement", token: tokenDetail(token), line };
 }
 
@@ -644,6 +646,7 @@ export function isStatement(
     value.kind === "Fn" ||
     value.kind === "Assign" ||
     value.kind === "Return" ||
+    value.kind === "Expr" ||
     value.kind === "Block" ||
     value.kind === "If" ||
     value.kind === "While" ||

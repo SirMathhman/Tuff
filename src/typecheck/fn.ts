@@ -225,7 +225,7 @@ function collectReturnsInto(
   context: ExprCheckContext,
   result: FnReturns,
 ): void {
-  if (stmt.kind === "Return") {
+  if (stmt.kind === "Return" || stmt.kind === "Expr") {
     const kind = inferKind(stmt.value, context);
     if (kind) result.kinds.push(kind);
     result.suffixes.push(exprSuffix(stmt.value, context));

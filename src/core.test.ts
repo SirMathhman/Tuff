@@ -9,6 +9,10 @@ test('evaluateTuff("") => 0', () => {
   expect(evaluateTuff("")).toEqual({ ok: true, value: 0 });
 });
 
+test('evaluateTuff("100") => 100', () => {
+  expect(evaluateTuff("100")).toEqual({ ok: true, value: 100 });
+});
+
 test('evaluateTuff("return 1;") => 1', () => {
   expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
 });
@@ -443,16 +447,8 @@ test('evaluateTuff("let x = 1; x;") => Err', () => {
   }
 });
 
-test('evaluateTuff("return 1; 2;") => Err', () => {
-  const result = evaluateTuff("return 1; 2;");
-  expect(result.ok).toBe(false);
-  if (!result.ok) {
-    expect(result.error).toEqual({
-      kind: "InvalidStatement",
-      token: "2",
-      line: 2,
-    });
-  }
+test('evaluateTuff("return 1; 2;") => 1', () => {
+  expect(evaluateTuff("return 1; 2;")).toEqual({ ok: true, value: 1 });
 });
 
 test('evaluateTuff("let x = 1;\nlet y = @") => Err', () => {

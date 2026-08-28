@@ -52,6 +52,7 @@ export type {
   LetNode,
   AssignNode,
   ReturnNode,
+  ExprNode,
   BlockNode,
   IfNode,
   WhileNode,

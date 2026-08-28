@@ -272,6 +272,12 @@ export interface ReturnNode {
   value: TuffExpr;
 }
 
+/** A bare expression used as a statement; its value is the program's result. */
+export interface ExprNode {
+  kind: "Expr";
+  value: TuffExpr;
+}
+
 /** A braced block statement node. */
 export interface BlockNode {
   kind: "Block";
@@ -319,6 +325,7 @@ export type TuffStatement =
   | FnNode
   | AssignNode
   | ReturnNode
+  | ExprNode
   | BlockNode
   | IfNode
   | WhileNode

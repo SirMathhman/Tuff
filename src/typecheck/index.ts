@@ -61,9 +61,10 @@ function exprContext(context: CheckContext): ExprCheckContext {
  * mutability, and reference target each binding is declared with. Catches
  * undeclared identifiers, invalid references and dereferences, assignments to
  * non-`mut` bindings, and kind mismatches on assignment. On success, folds
- * every `is` type-test into a boolean literal and strips the compile-time
- * `type` alias statements, so the evaluator never sees an `Is` or `Type`
- * node.
+ * every `is` type-test into a boolean literal, strips the compile-time
+ * `type` alias and `struct` statements, and rewrites every bare expression
+ * statement into a `return`, so the evaluator never sees an `Is`, `Type`,
+ * `Struct`, or `Expr` node.
  * @param statements - The parsed program statements.
  * @param baseLine - The 1-based line number.
  * @returns The folded program if no semantic error is found, else a TuffError.
@@ -81,9 +82,54 @@ export function typecheckProgram(
   };
   const error = checkStatements(statements, baseLine, context);
   if (error) return error;
-  return statements.filter(
-    (stmt) => stmt.kind !== "Type" && stmt.kind !== "Struct",
-  );
+  return statements
+    .filter((stmt) => stmt.kind !== "Type" && stmt.kind !== "Struct")
+    .map(transformStatement);
+}
+
+/**
+ * Rewrite a statement for the evaluator: a bare expression becomes a
+ * `return`, and the rewrite recurses into blocks and control-flow bodies so
+ * the evaluator never sees an `Expr` node.
+ * @param stmt - The statement to rewrite.
+ * @returns The rewritten statement.
+ */
+function transformStatement(stmt: TuffStatement): TuffStatement {
+  if (stmt.kind === "Expr") return { kind: "Return", value: stmt.value };
+  if (stmt.kind === "Block")
+    return { kind: "Block", statements: stmt.statements.map(transformStatement) };
+  if (stmt.kind === "If")
+    return {
+      kind: "If",
+      condition: stmt.condition,
+      then: transformStatement(stmt.then),
+      else: stmt.else ? transformStatement(stmt.else) : null,
+    };
+  if (stmt.kind === "While")
+    return {
+      kind: "While",
+      condition: stmt.condition,
+      body: transformStatement(stmt.body),
+    };
+  if (stmt.kind === "For")
+    return {
+      kind: "For",
+      name: stmt.name,
+      range: stmt.range,
+      body: transformStatement(stmt.body),
+    };
+  if (stmt.kind === "Fn")
+    return {
+      kind: "Fn",
+      name: stmt.name,
+      params: stmt.params,
+      returnType: stmt.returnType,
+      body: {
+        kind: "Block",
+        statements: stmt.body.statements.map(transformStatement),
+      },
+    };
+  return stmt;
 }
 
 /**
@@ -161,7 +207,7 @@ function checkStatementBody(
   if (stmt.kind === "While") return checkWhile(stmt, line, context);
   if (stmt.kind === "For") return checkFor(stmt, line, context);
   if (stmt.kind === "Assign") return checkAssignment(stmt, line, context);
-  if (stmt.kind === "Return") {
+  if (stmt.kind === "Return" || stmt.kind === "Expr") {
     const error = findUndeclared(stmt.value, line, exprContext(context));
     return error ?? checkNumberSuffixes(stmt.value, line);
   }
