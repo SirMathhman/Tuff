@@ -42,7 +42,17 @@ test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
 });
 
 test('evaluate("{ let x = 2 + 3; let y = 1; y } * 4") => 4', () => {
-  expect(evaluate("{ let x = 2 + 3; let y = 1; y } * 4")).toEqual({ ok: true, value: 4 });
+  expect(evaluate("{ let x = 2 + 3; let y = 1; y } * 4")).toEqual({
+    ok: true,
+    value: 4,
+  });
+});
+
+test('evaluate("{ let x = 2 + 3; let x = 1; x } * 4") => 4', () => {
+  expect(evaluate("{ let x = 2 + 3; let x = 1; x } * 4")).toEqual({
+    ok: true,
+    value: 4,
+  });
 });
 
 test('evaluate("{ let x = y; x }") => error naming y', () => {
