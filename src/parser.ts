@@ -1,10 +1,5 @@
 import { OPERATOR_PRECEDENCE } from "./ast.ts";
-import type {
-  Assign,
-  AstNode,
-  Operator,
-  Statement,
-} from "./ast.ts";
+import type { Assign, AstNode, Operator, Statement } from "./ast.ts";
 import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
 
@@ -301,10 +296,7 @@ function parseBlockBody(cursor: Cursor, input: string): ParseResult {
  * @param {string} input - The original input.
  * @returns {StatementResult | null} The parsed statement, or null if no statement starts here.
  */
-function parseStatement(
-  cursor: Cursor,
-  input: string,
-): StatementResult | null {
+function parseStatement(cursor: Cursor, input: string): StatementResult | null {
   const kw = peek(cursor);
   if (kw.type === "kw-let") {
     cursor.index += 1;

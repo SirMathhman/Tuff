@@ -16,6 +16,8 @@ export interface Ref {
   name: string;
   /** Whether the reference allows mutation. */
   mutable: boolean;
+  /** The captured value (immutable refs only). */
+  value?: number;
 }
 
 /**
@@ -118,7 +120,20 @@ function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
     if (target.kind !== "ident") {
       return { ok: false, kind: "deref-non-ref", name: "" };
     }
-    return { ok: true, value: { name: target.name, mutable: node.mutable } };
+    if (node.mutable) {
+      return { ok: true, value: { name: target.name, mutable: true } };
+    }
+    const val = env.get(target.name);
+    if (val === undefined) {
+      return { ok: false, kind: "unknown-variable", name: target.name };
+    }
+    if (typeof val !== "number") {
+      return { ok: false, kind: "deref-non-ref", name: target.name };
+    }
+    return {
+      ok: true,
+      value: { name: target.name, mutable: false, value: val },
+    };
   }
   const out = evalAst(node.target, env);
   if (!out.ok) {
@@ -126,6 +141,9 @@ function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
   }
   if (typeof out.value !== "number" && "name" in out.value) {
     const ref = out.value as Ref;
+    if (!ref.mutable) {
+      return { ok: true, value: ref.value! };
+    }
     const val = env.get(ref.name);
     if (val === undefined) {
       return { ok: false, kind: "unknown-variable", name: ref.name };
@@ -176,7 +194,11 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
       if (isBinding(statement)) {
         mutable[statement.name] = statement.mutable;
       } else if (!isMutable(mutable, statement.name)) {
-        return { ok: false, kind: "immutable-assignment", name: statement.name };
+        return {
+          ok: false,
+          kind: "immutable-assignment",
+          name: statement.name,
+        };
       }
       values[statement.name] = out.value;
     }
