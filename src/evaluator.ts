@@ -58,12 +58,12 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
         return value === undefined ? env.get(name) : value;
       },
     };
-    for (const binding of node.bindings) {
-      const out = evalAst(binding.value, child);
+    for (const statement of node.statements) {
+      const out = evalAst(statement.value, child);
       if (!out.ok) {
         return out;
       }
-      values[binding.name] = out.value;
+      values[statement.name] = out.value;
     }
     return evalAst(node.body, child);
   }

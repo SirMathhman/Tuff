@@ -52,18 +52,35 @@ export interface IdentNode {
 export interface Binding {
   /** The variable name. */
   name: string;
+  /** Whether the binding can be reassigned. */
+  mutable: boolean;
   /** The initializer expression. */
   value: AstNode;
 }
 
 /**
- * A block node with let-bindings and a body expression.
+ * An assignment statement in a block.
+ */
+export interface Assign {
+  /** The variable name. */
+  name: string;
+  /** The value expression. */
+  value: AstNode;
+}
+
+/**
+ * A statement in a block body.
+ */
+export type Statement = Binding | Assign;
+
+/**
+ * A block node with statements and a body expression.
  */
 export interface BlockNode {
   /** The node kind. */
   kind: "block";
-  /** The variable bindings. */
-  bindings: Binding[];
+  /** The statements (bindings and assignments). */
+  statements: Statement[];
   /** The body expression. */
   body: AstNode;
 }

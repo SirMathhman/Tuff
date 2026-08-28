@@ -14,6 +14,7 @@ export interface Token {
     | "rbrace"
     | "ident"
     | "kw-let"
+    | "kw-mut"
     | "assign"
     | "semi"
     | "invalid"
@@ -61,8 +62,10 @@ function readToken(input: string, i: number): ReadToken {
       j += 1;
     }
     const text = input.slice(i, j);
+    const type =
+      text === "let" ? "kw-let" : text === "mut" ? "kw-mut" : "ident";
     return {
-      token: { type: text === "let" ? "kw-let" : "ident", text, position: i },
+      token: { type, text, position: i },
       next: j,
     };
   }

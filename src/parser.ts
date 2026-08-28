@@ -1,5 +1,5 @@
 import { OPERATOR_PRECEDENCE } from "./ast.ts";
-import type { AstNode, Binding, Operator } from "./ast.ts";
+import type { AstNode, Binding, Operator, Statement } from "./ast.ts";
 import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
 
@@ -56,6 +56,21 @@ interface BindingSuccess {
 type BindingResult = BindingSuccess | ParseFailure;
 
 /**
+ * A successful statement outcome.
+ */
+interface StatementSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed statement. */
+  value: Statement;
+}
+
+/**
+ * The outcome of parsing a statement.
+ */
+type StatementResult = StatementSuccess | ParseFailure;
+
+/**
  * A successful close-delimiter outcome.
  */
 interface CloseSuccess {
@@ -88,6 +103,20 @@ function peek(cursor: Cursor): Token {
 }
 
 /**
+ * Get the token a fixed number of positions ahead of the cursor.
+ * @param {Cursor} cursor - The token cursor.
+ * @param {number} offset - How many tokens ahead to look.
+ * @returns {Token} The token at that offset, or the eof token past the end.
+ */
+function peekAt(cursor: Cursor, offset: number): Token {
+  const index = cursor.index + offset;
+  if (index >= cursor.tokens.length) {
+    return cursor.tokens[cursor.tokens.length - 1]!;
+  }
+  return cursor.tokens[index]!;
+}
+
+/**
  * Parse a factor (a single number).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
@@ -106,7 +135,7 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   if (tok.type === "lparen" || tok.type === "lbrace") {
     cursor.index += 1;
     const closeType = tok.type === "lparen" ? "rparen" : "rbrace";
-    if (tok.type === "lbrace" && peek(cursor).type === "kw-let") {
+    if (tok.type === "lbrace" && isBlockStart(cursor)) {
       return parseBlock(cursor, input, closeType);
     }
     const inner = parseExpr(cursor, input);
@@ -124,11 +153,18 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
 }
 
 /**
- * Parse a block body (the opening delimiter has been consumed).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed block node, or a structured error.
+ * Check whether the tokens after an opening brace start a block.
+ * @param {Cursor} cursor - The token cursor, positioned after the brace.
+ * @returns {boolean} True if a let-binding or assignment follows.
  */
+function isBlockStart(cursor: Cursor): boolean {
+  const first = peek(cursor);
+  if (first.type === "kw-let") {
+    return true;
+  }
+  return first.type === "ident" && peekAt(cursor, 1).type === "assign";
+}
+
 /**
  * Parse a single let-binding (the let keyword has been consumed).
  * @param {Cursor} cursor - The token cursor.
@@ -136,6 +172,67 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
  * @returns {ParseResult} The binding, or a structured error.
  */
 function parseBinding(cursor: Cursor, input: string): BindingResult {
+  let mutable = false;
+  if (peek(cursor).type === "kw-mut") {
+    mutable = true;
+    cursor.index += 1;
+  }
+  const nv = parseNameEqualsExpr(cursor, input);
+  if (!nv.ok) {
+    return nv;
+  }
+  return {
+    ok: true,
+    value: { name: nv.value.name, mutable, value: nv.value.value },
+  };
+}
+
+/**
+ * Parse a single assignment statement (the variable name has not been consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The assignment, or a structured error.
+ */
+function parseAssign(cursor: Cursor, input: string): StatementResult {
+  const nv = parseNameEqualsExpr(cursor, input);
+  if (!nv.ok) {
+    return nv;
+  }
+  return { ok: true, value: { name: nv.value.name, value: nv.value.value } };
+}
+
+/**
+ * A parsed name and value pair.
+ */
+interface NameValue {
+  /** The variable name. */
+  name: string;
+  /** The value expression. */
+  value: AstNode;
+}
+
+/**
+ * A successful name-value outcome.
+ */
+interface NameValueSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed name and value. */
+  value: NameValue;
+}
+
+/**
+ * The outcome of parsing a name-equals-expression.
+ */
+type NameValueResult = NameValueSuccess | ParseFailure;
+
+/**
+ * Parse a `name = expr ;` sequence.
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {NameValueResult} The name and value, or a structured error.
+ */
+function parseNameEqualsExpr(cursor: Cursor, input: string): NameValueResult {
   const nameTok = peek(cursor);
   if (nameTok.type !== "ident") {
     return {
@@ -168,30 +265,39 @@ function parseBinding(cursor: Cursor, input: string): BindingResult {
 }
 
 /**
- * Parse a sequence of let-bindings followed by a body expression.
+ * Parse a sequence of statements followed by a body expression.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed block node, or a structured error.
  */
 function parseBlockBody(cursor: Cursor, input: string): ParseResult {
-  const bindings: Binding[] = [];
+  const statements: Statement[] = [];
   for (;;) {
     const kw = peek(cursor);
-    if (kw.type !== "kw-let") {
-      break;
+    if (kw.type === "kw-let") {
+      cursor.index += 1;
+      const binding = parseBinding(cursor, input);
+      if (!binding.ok) {
+        return binding;
+      }
+      statements.push(binding.value);
+      continue;
     }
-    cursor.index += 1;
-    const binding = parseBinding(cursor, input);
-    if (!binding.ok) {
-      return binding;
+    if (kw.type === "ident" && peekAt(cursor, 1).type === "assign") {
+      const assign = parseAssign(cursor, input);
+      if (!assign.ok) {
+        return assign;
+      }
+      statements.push(assign.value);
+      continue;
     }
-    bindings.push(binding.value);
+    break;
   }
   const body = parseExpr(cursor, input);
   if (!body.ok) {
     return body;
   }
-  return { ok: true, value: { kind: "block", bindings, body: body.value } };
+  return { ok: true, value: { kind: "block", statements, body: body.value } };
 }
 
 /**
