@@ -1,4 +1,18 @@
 /**
+ * A binary operator.
+ */
+export type Operator = "+" | "-" | "*";
+
+/**
+ * The precedence of each operator (higher binds tighter).
+ */
+export const OPERATOR_PRECEDENCE: Record<Operator, number> = {
+  "*": 2,
+  "+": 1,
+  "-": 1,
+};
+
+/**
  * A numeric literal node.
  */
 export interface NumNode {
@@ -15,7 +29,7 @@ export interface BinOpNode {
   /** The node kind. */
   kind: "binop";
   /** The operator. */
-  op: "+" | "-" | "*";
+  op: Operator;
   /** The left operand. */
   left: AstNode;
   /** The right operand. */

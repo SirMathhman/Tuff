@@ -1,4 +1,5 @@
-import type { AstNode } from "./ast.ts";
+import { OPERATOR_PRECEDENCE } from "./ast.ts";
+import type { AstNode, Operator } from "./ast.ts";
 
 /**
  * A structured parse failure.
@@ -82,7 +83,7 @@ function tokenize(input: string): Token[] {
       i = j;
       continue;
     }
-    if (ch === "+" || ch === "-" || ch === "*") {
+    if (ch in OPERATOR_PRECEDENCE) {
       tokens.push({ type: "op", text: ch, position: i });
       i += 1;
       continue;
@@ -133,7 +134,7 @@ function parseTerm(cursor: Cursor, input: string): ParseResult {
   let node: AstNode = left.value;
   for (;;) {
     const opTok = peek(cursor);
-    if (opTok.type !== "op" || opTok.text !== "*") {
+    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== 2) {
       break;
     }
     cursor.index += 1;
@@ -141,7 +142,7 @@ function parseTerm(cursor: Cursor, input: string): ParseResult {
     if (!right.ok) {
       return right;
     }
-    node = { kind: "binop", op: opTok.text, left: node, right: right.value };
+    node = { kind: "binop", op: opTok.text as Operator, left: node, right: right.value };
   }
   return { ok: true, value: node };
 }
@@ -160,7 +161,7 @@ function parseExpr(cursor: Cursor, input: string): ParseResult {
   let node: AstNode = left.value;
   for (;;) {
     const opTok = peek(cursor);
-    if (opTok.type !== "op" || (opTok.text !== "+" && opTok.text !== "-")) {
+    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== 1) {
       break;
     }
     cursor.index += 1;
@@ -168,7 +169,7 @@ function parseExpr(cursor: Cursor, input: string): ParseResult {
     if (!right.ok) {
       return right;
     }
-    node = { kind: "binop", op: opTok.text, left: node, right: right.value };
+    node = { kind: "binop", op: opTok.text as Operator, left: node, right: right.value };
   }
   return { ok: true, value: node };
 }
