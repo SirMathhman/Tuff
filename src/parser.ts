@@ -43,7 +43,7 @@ export type ParseResult = ParseSuccess | ParseFailure;
  */
 interface Token {
   /** The token kind. */
-  type: "num" | "op" | "invalid" | "eof";
+  type: "num" | "op" | "lparen" | "rparen" | "invalid" | "eof";
   /** The token text. */
   text: string;
   /** The position of the token in the input. */
@@ -88,6 +88,16 @@ function tokenize(input: string): Token[] {
       i += 1;
       continue;
     }
+    if (ch === "(") {
+      tokens.push({ type: "lparen", text: ch, position: i });
+      i += 1;
+      continue;
+    }
+    if (ch === ")") {
+      tokens.push({ type: "rparen", text: ch, position: i });
+      i += 1;
+      continue;
+    }
     tokens.push({ type: "invalid", text: ch, position: i });
     i += 1;
   }
@@ -116,6 +126,22 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "num", value: Number(tok.text) } };
   }
+  if (tok.type === "lparen") {
+    cursor.index += 1;
+    const inner = parseExpr(cursor, input);
+    if (!inner.ok) {
+      return inner;
+    }
+    const close = peek(cursor);
+    if (close.type !== "rparen") {
+      return {
+        ok: false,
+        error: { kind: "syntax", input, position: close.position },
+      };
+    }
+    cursor.index += 1;
+    return { ok: true, value: inner.value };
+  }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
 }
@@ -141,7 +167,10 @@ function parseBinaryLevel(
   let node: AstNode = left.value;
   for (;;) {
     const opTok = peek(cursor);
-    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== precedence) {
+    if (
+      opTok.type !== "op" ||
+      OPERATOR_PRECEDENCE[opTok.text as Operator] !== precedence
+    ) {
       break;
     }
     cursor.index += 1;
@@ -149,7 +178,12 @@ function parseBinaryLevel(
     if (!right.ok) {
       return right;
     }
-    node = { kind: "binop", op: opTok.text as Operator, left: node, right: right.value };
+    node = {
+      kind: "binop",
+      op: opTok.text as Operator,
+      left: node,
+      right: right.value,
+    };
   }
   return { ok: true, value: node };
 }
