@@ -2,6 +2,7 @@ import type { TuffError } from "../errors.ts";
 import type { IsNode, KindName, TuffExpr } from "../ast.ts";
 import {
   findDeclared,
+  findFn,
   findStruct,
   inferKind,
   kindName,
@@ -121,7 +122,7 @@ function annotationBareMatch(
     if (value.kind === "Literal" && value.value.kind === "number") {
       return value.suffix === undefined || value.suffix === name;
     }
-    return exprSuffix(value, context.scopes) === name;
+    return exprSuffix(value, context) === name;
   }
   if (findStruct(context.structs, name)) {
     if (value.kind === "StructLiteral") return value.name === name;
@@ -202,7 +203,7 @@ function isMatch(
   context: ExprCheckContext,
 ): boolean {
   if (isNumberSuffix(name)) {
-    return exprSuffix(left, context.scopes) === name;
+    return exprSuffix(left, context) === name;
   }
   if (findStruct(context.structs, name)) {
     return inferKind(left, context) === "struct";
@@ -216,29 +217,33 @@ function isMatch(
  * The number-suffix an expression statically carries, or undefined if it
  * carries none. A literal carries its own suffix; an identifier carries the
  * suffix of the binding it names; a dereference carries the suffix of the
- * binding its operand references; an `Add` carries a suffix only when both
- * operands carry the same one.
+ * binding its operand references; a call carries the suffix its function's
+ * returns agree on; an `Add` carries a suffix only when both operands carry
+ * the same one.
  * @param expr - The expression to inspect.
- * @param scopes - The stack of declared bindings.
+ * @param context - The expression check context.
  * @returns The suffix the expression carries, or undefined.
  */
-function exprSuffix(
+export function exprSuffix(
   expr: TuffExpr,
-  scopes: Record<string, DeclaredBinding>[],
+  context: ExprCheckContext,
 ): string | undefined {
   if (expr.kind === "Literal") return expr.suffix;
   if (expr.kind === "Identifier") {
-    return findDeclared(scopes, expr.name)?.suffix;
+    return findDeclared(context.scopes, expr.name)?.suffix;
   }
   if (expr.kind === "Deref") {
     if (expr.operand.kind !== "Identifier") return undefined;
-    const binding = findDeclared(scopes, expr.operand.name);
+    const binding = findDeclared(context.scopes, expr.operand.name);
     if (binding?.refTo === undefined) return undefined;
-    return findDeclared(scopes, binding.refTo)?.suffix;
+    return findDeclared(context.scopes, binding.refTo)?.suffix;
+  }
+  if (expr.kind === "Call") {
+    return findFn(context.fns, expr.name)?.returnSuffix;
   }
   if (expr.kind === "Add") {
-    const left = exprSuffix(expr.left, scopes);
-    const right = exprSuffix(expr.right, scopes);
+    const left = exprSuffix(expr.left, context);
+    const right = exprSuffix(expr.right, context);
     if (left === undefined || left !== right) return undefined;
     const leftValue = literalNumber(expr.left);
     const rightValue = literalNumber(expr.right);

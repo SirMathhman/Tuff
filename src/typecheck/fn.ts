@@ -12,7 +12,7 @@ import {
   type ValueKind,
 } from "./kinds.ts";
 import { resolveDeref } from "./expressions.ts";
-import { checkKindName } from "./is-match.ts";
+import { checkKindName, exprSuffix } from "./is-match.ts";
 import { checkReservedName } from "./reserved.ts";
 
 /**
@@ -159,9 +159,65 @@ function checkReturnKinds(
     return { kind: "TypeMismatch", name: stmt.name, line };
   if (first !== undefined && expectedReturn === undefined) {
     const def = findFn(context.fns, stmt.name);
-    if (def) def.returnType = first;
+    if (def) {
+      def.returnType = first;
+      def.returnSuffix = collectReturnSuffix(stmt.body, exprCtx);
+    }
   }
   return null;
+}
+
+/**
+ * The number-suffix every `return` in a `fn` body carries, or undefined if
+ * any return carries no suffix or the returns disagree on one.
+ * @param body - The function body to walk.
+ * @param context - The expression check context.
+ * @returns The agreed return suffix, or undefined.
+ */
+function collectReturnSuffix(
+  body: TuffStatement,
+  context: ExprCheckContext,
+): string | undefined {
+  const suffixes: (string | undefined)[] = [];
+  collectReturnSuffixes(body, context, suffixes);
+  const first = suffixes[0];
+  if (first === undefined) return undefined;
+  for (const suffix of suffixes) {
+    if (suffix !== first) return undefined;
+  }
+  return first;
+}
+
+/**
+ * Collect the number-suffix of every `return` in a statement, recursing
+ * into blocks and control-flow bodies.
+ * @param stmt - The statement to walk.
+ * @param context - The expression check context.
+ * @param suffixes - The array to append each return's suffix to.
+ */
+function collectReturnSuffixes(
+  stmt: TuffStatement,
+  context: ExprCheckContext,
+  suffixes: (string | undefined)[],
+): void {
+  if (stmt.kind === "Return") {
+    suffixes.push(exprSuffix(stmt.value, context));
+    return;
+  }
+  if (stmt.kind === "Block") {
+    for (const inner of stmt.statements) {
+      collectReturnSuffixes(inner, context, suffixes);
+    }
+    return;
+  }
+  if (stmt.kind === "If") {
+    collectReturnSuffixes(stmt.then, context, suffixes);
+    if (stmt.else) collectReturnSuffixes(stmt.else, context, suffixes);
+    return;
+  }
+  if (stmt.kind === "While" || stmt.kind === "For") {
+    collectReturnSuffixes(stmt.body, context, suffixes);
+  }
 }
 
 /**

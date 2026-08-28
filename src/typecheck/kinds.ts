@@ -35,6 +35,8 @@ export interface FnDef {
   params: FnParamDef[];
   /** The declared return kind, if the declaration annotated one. */
   returnType?: ValueKind;
+  /** The number-suffix every return carries, if all returns agree on one. */
+  returnSuffix?: string;
 }
 
 /**

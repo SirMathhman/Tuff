@@ -493,3 +493,9 @@ test('evaluateTuff("let mut arr = [0]; { let c = 0; arr[0] = &c; }") => Err', ()
     error: { kind: "DanglingReference", name: "c", line: 3 },
   });
 });
+
+test('evaluateTuff("fn get() => { return 100U8; } return (get() is U8);") => 1', () => {
+  expect(
+    evaluateTuff("fn get() => { return 100U8; } return (get() is U8);"),
+  ).toEqual({ ok: true, value: 1 });
+});
