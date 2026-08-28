@@ -140,7 +140,7 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     }
     return { ok: true, value: { kind: "ref", target: target.value } };
   }
-  if (tok.type === "deref") {
+  if (tok.type === "op" && tok.text === "*") {
     cursor.index += 1;
     const target = parseFactor(cursor, input);
     if (!target.ok) {
