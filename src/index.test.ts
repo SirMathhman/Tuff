@@ -62,6 +62,13 @@ test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   });
 });
 
+test('evaluate("let x = 1; let y = x; y") => 1', () => {
+  expect(evaluate("let x = 1; let y = x; y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluate("{ 2 + 3 )") => syntax error', () => {
   expect(evaluate("{ 2 + 3 )")).toEqual({
     ok: false,
