@@ -82,7 +82,7 @@ function tokenize(input: string): Token[] {
       i = j;
       continue;
     }
-    if (ch === "+") {
+    if (ch === "+" || ch === "-") {
       tokens.push({ type: "op", text: ch, position: i });
       i += 1;
       continue;
@@ -120,7 +120,7 @@ function parseTerm(cursor: Cursor, input: string): ParseResult {
 }
 
 /**
- * Parse an expression (terms joined by +).
+ * Parse an expression (terms joined by + or -).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed AST, or a structured error.
@@ -133,7 +133,7 @@ function parseExpr(cursor: Cursor, input: string): ParseResult {
   let node: AstNode = left.value;
   for (;;) {
     const opTok = peek(cursor);
-    if (opTok.type !== "op" || opTok.text !== "+") {
+    if (opTok.type !== "op" || (opTok.text !== "+" && opTok.text !== "-")) {
       break;
     }
     cursor.index += 1;
@@ -141,7 +141,7 @@ function parseExpr(cursor: Cursor, input: string): ParseResult {
     if (!right.ok) {
       return right;
     }
-    node = { kind: "binop", op: "+", left: node, right: right.value };
+    node = { kind: "binop", op: opTok.text, left: node, right: right.value };
   }
   return { ok: true, value: node };
 }

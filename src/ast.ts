@@ -15,7 +15,7 @@ export interface BinOpNode {
   /** The node kind. */
   kind: "binop";
   /** The operator. */
-  op: "+";
+  op: "+" | "-";
   /** The left operand. */
   left: AstNode;
   /** The right operand. */

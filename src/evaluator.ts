@@ -14,6 +14,8 @@ export function evalAst(node: AstNode): number {
   switch (node.op) {
     case "+":
       return left + right;
+    case "-":
+      return left - right;
     default: {
       const exhaustive: never = node.op;
       return exhaustive;
