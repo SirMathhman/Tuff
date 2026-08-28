@@ -103,16 +103,17 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "ident", name: tok.text } };
   }
-  if (tok.type === "lparen") {
+  if (tok.type === "lparen" || tok.type === "lbrace") {
     cursor.index += 1;
-    if (peek(cursor).type === "kw-let") {
-      return parseBlock(cursor, input);
+    const closeType = tok.type === "lparen" ? "rparen" : "rbrace";
+    if (tok.type === "lbrace" && peek(cursor).type === "kw-let") {
+      return parseBlock(cursor, input, closeType);
     }
     const inner = parseExpr(cursor, input);
     if (!inner.ok) {
       return inner;
     }
-    const close = expectClose(cursor, input);
+    const close = expectClose(cursor, input, closeType);
     if (!close.ok) {
       return close;
     }
@@ -197,14 +198,19 @@ function parseBlockBody(cursor: Cursor, input: string): ParseResult {
  * Parse a block body (the opening delimiter has been consumed).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
+ * @param {"rparen" | "rbrace"} closeType - The expected closing delimiter.
  * @returns {ParseResult} The parsed block node, or a structured error.
  */
-function parseBlock(cursor: Cursor, input: string): ParseResult {
+function parseBlock(
+  cursor: Cursor,
+  input: string,
+  closeType: "rparen" | "rbrace",
+): ParseResult {
   const body = parseBlockBody(cursor, input);
   if (!body.ok) {
     return body;
   }
-  const close = expectClose(cursor, input);
+  const close = expectClose(cursor, input, closeType);
   if (!close.ok) {
     return close;
   }
@@ -215,11 +221,16 @@ function parseBlock(cursor: Cursor, input: string): ParseResult {
  * Consume the closing delimiter of a group.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
+ * @param {"rparen" | "rbrace"} closeType - The expected closing delimiter.
  * @returns {CloseResult} A success marker, or a structured error.
  */
-function expectClose(cursor: Cursor, input: string): CloseResult {
+function expectClose(
+  cursor: Cursor,
+  input: string,
+  closeType: "rparen" | "rbrace",
+): CloseResult {
   const close = peek(cursor);
-  if (close.type !== "rparen") {
+  if (close.type !== closeType) {
     return {
       ok: false,
       error: { kind: "syntax", input, position: close.position },

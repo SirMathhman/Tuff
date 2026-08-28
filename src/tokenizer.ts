@@ -10,6 +10,8 @@ export interface Token {
     | "op"
     | "lparen"
     | "rparen"
+    | "lbrace"
+    | "rbrace"
     | "ident"
     | "kw-let"
     | "assign"
@@ -70,11 +72,17 @@ function readToken(input: string, i: number): ReadToken {
   if (ch === ";") {
     return { token: { type: "semi", text: ch, position: i }, next: i + 1 };
   }
-  if (ch === "(" || ch === "{") {
+  if (ch === "(") {
     return { token: { type: "lparen", text: ch, position: i }, next: i + 1 };
   }
-  if (ch === ")" || ch === "}") {
+  if (ch === "{") {
+    return { token: { type: "lbrace", text: ch, position: i }, next: i + 1 };
+  }
+  if (ch === ")") {
     return { token: { type: "rparen", text: ch, position: i }, next: i + 1 };
+  }
+  if (ch === "}") {
+    return { token: { type: "rbrace", text: ch, position: i }, next: i + 1 };
   }
   return { token: { type: "invalid", text: ch, position: i }, next: i + 1 };
 }

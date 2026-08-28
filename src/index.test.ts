@@ -62,6 +62,20 @@ test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   });
 });
 
+test('evaluate("{ 2 + 3 )") => syntax error', () => {
+  expect(evaluate("{ 2 + 3 )")).toEqual({
+    ok: false,
+    error: { kind: "syntax", input: "{ 2 + 3 )", position: 8 },
+  });
+});
+
+test('evaluate("( 2 + 3 }") => syntax error', () => {
+  expect(evaluate("( 2 + 3 }")).toEqual({
+    ok: false,
+    error: { kind: "syntax", input: "( 2 + 3 }", position: 8 },
+  });
+});
+
 test('evaluate("{ let x = y; x }") => error naming y', () => {
   expect(evaluate("{ let x = y; x }")).toEqual({
     ok: false,
