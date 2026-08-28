@@ -33,8 +33,8 @@ Stop hooks (`.github/hooks/hooks.json`) run automatically at the end of every tu
 - `src/parser.ts` — program-level parse loop; re-exports `ast.ts` types for import compatibility.
 - `src/ast.ts` — single home of AST node interfaces and `Pos`.
 - `src/statements.ts` / `src/expr.ts` — statement and expression parsers; mutual recursion broken by passing the statement parser as a `ParseStatement` parameter.
-- `src/typecheck/index.ts` + `src/typecheck/kinds.ts` + `src/typecheck/expressions.ts` — static pass, **the sole source of semantic errors** (undeclared identifiers, mutability, kind mismatches, invalid deref, index bounds, break/continue outside loops).
-- `src/evaluator.ts` — pure executor; walks a typechecked AST with an `Environment`; returns only `TuffOk` or `undefined`. `break`/`continue` are structural `ControlSignal` values consumed only by the innermost loop.
+- `src/typecheck/` — static pass, **the sole source of semantic errors** (all error kinds in `src/errors.ts` are reported here, before execution). `index.ts` owns the `CheckContext` (binding/alias/struct/fn scope stacks + in-loop flag) and the statement checkers; `kinds.ts` kind inference; `expressions.ts` expression-level checks; `fn.ts` the fn checker; `fold.ts` folds every `is` to a boolean literal; `is-match.ts` the `is` right-operand grammar; `suffixes.ts` the suffix table; `reserved.ts` reserved-word checks.
+- `src/evaluator.ts` — pure executor; walks a typechecked AST with an `Environment`; returns only `TuffOk` or `undefined`. `break`/`continue`/`return` are structural signal values consumed only by the innermost loop or call. A `fn` declaration registers an `FnEntry`; `type`/`struct` declarations are no-ops.
 - `src/scopes.ts` — `Binding`, `Environment` (scope chain + reference registry).
 - `src/values.ts` — `TuffValue` tagged union (number/bool/tuple/array).
 - `src/errors.ts` — leaf module; `TuffError` structured union.
@@ -48,7 +48,7 @@ Stop hooks (`.github/hooks/hooks.json`) run automatically at the end of every tu
 - **Mandatory JSDoc** on function declarations, methods, interfaces, type aliases, and enums, with param/returns descriptions.
 - **File size limits:** 300 lines per file, 50 lines per function (warnings).
 - **Typechecker is the sole semantic gate.** The evaluator performs no semantic checks; do not add error returns to it.
-- **Mutual recursion is broken by passing functions as parameters** (`ParseStatement`, `ExecuteList`, `ResolveDeref`), never by circular imports.
+- **Mutual recursion is broken by passing functions as parameters** (`ParseStatement`, `ExecuteList`, `ResolveDeref`, `CheckStatement`), never by circular imports.
 - **Tests use `bun:test`** (`import { expect, test } from "bun:test"`), not Jest/Vitest.
 - Public result rendering: booleans render as 1/0, tuples/arrays as element count; the tagged `TuffValue` domain never crosses the public boundary.
 
