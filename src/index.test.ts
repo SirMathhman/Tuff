@@ -16,6 +16,6 @@ test('evaluate("1 + 2") => 3', () => {
 test('evaluate("abc") => error', () => {
   expect(evaluate("abc")).toEqual({
     ok: false,
-    error: { kind: "invalid-number", input: "abc" },
+    error: { kind: "invalid-number", input: "abc", position: 0 },
   });
 });

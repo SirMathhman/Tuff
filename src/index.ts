@@ -1,11 +1,16 @@
+import { parse } from "./parser.ts";
+import { evalAst } from "./evaluator.ts";
+
 /**
  * A structured evaluation failure.
  */
 export interface EvalError {
   /** What kind of failure this is. */
-  kind: "invalid-number";
+  kind: "syntax" | "invalid-number";
   /** The input that caused the failure. */
   input: string;
+  /** The position where the failure was found. */
+  position: number;
 }
 
 /**
@@ -39,15 +44,9 @@ export type EvalResult = EvalSuccess | EvalFailure;
  * @returns {EvalResult} The evaluated result, or a structured error.
  */
 export function evaluate(expression: string): EvalResult {
-  if (expression === "") {
-    return { ok: true, value: 0 };
+  const parsed = parse(expression);
+  if (!parsed.ok) {
+    return { ok: false, error: parsed.error };
   }
-  if (/^[0-9]+$/.test(expression)) {
-    return { ok: true, value: Number(expression) };
-  }
-  const sum = expression.match(/^([0-9]+) \+ ([0-9]+)$/);
-  if (sum) {
-    return { ok: true, value: Number(sum[1]) + Number(sum[2]) };
-  }
-  return { ok: false, error: { kind: "invalid-number", input: expression } };
+  return { ok: true, value: evalAst(parsed.value) };
 }
