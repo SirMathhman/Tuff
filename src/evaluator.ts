@@ -101,6 +101,11 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
       return { ok: true, value: left.value - right.value };
     case "*":
       return { ok: true, value: left.value * right.value };
+    case "||":
+      return {
+        ok: true,
+        value: left.value !== 0 || right.value !== 0 ? 1 : 0,
+      };
     default: {
       const exhaustive: never = node.op;
       return exhaustive;

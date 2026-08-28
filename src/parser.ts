@@ -431,15 +431,28 @@ function parseBinaryLevel(
 function parseTerm(cursor: Cursor, input: string): ParseResult {
   return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["*"], parseFactor);
 }
-
 /**
- * Parse an expression (terms joined by + or -).
+ * Parse an additive expression (terms joined by + or -).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed AST, or a structured error.
+ */
+function parseAddSub(cursor: Cursor, input: string): ParseResult {
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["+"], parseTerm);
+}
+/**
+ * Parse an expression (additive terms joined by ||).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseExpr(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["+"], parseTerm);
+  return parseBinaryLevel(
+    cursor,
+    input,
+    OPERATOR_PRECEDENCE["||"],
+    parseAddSub,
+  );
 }
 
 /**

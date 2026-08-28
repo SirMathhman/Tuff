@@ -13,6 +13,13 @@ test('evaluate("let x = true; x") => 1', () => {
   expect(evaluate("let x = true; x")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("let x = true; let y = false; x || y") => 1', () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
