@@ -167,12 +167,12 @@ function parseBinding(cursor: Cursor, input: string): BindingResult {
 }
 
 /**
- * Parse a block body (the opening delimiter has been consumed).
+ * Parse a sequence of let-bindings followed by a body expression.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed block node, or a structured error.
  */
-function parseBlock(cursor: Cursor, input: string): ParseResult {
+function parseBlockBody(cursor: Cursor, input: string): ParseResult {
   const bindings: Binding[] = [];
   for (;;) {
     const kw = peek(cursor);
@@ -190,11 +190,25 @@ function parseBlock(cursor: Cursor, input: string): ParseResult {
   if (!body.ok) {
     return body;
   }
+  return { ok: true, value: { kind: "block", bindings, body: body.value } };
+}
+
+/**
+ * Parse a block body (the opening delimiter has been consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed block node, or a structured error.
+ */
+function parseBlock(cursor: Cursor, input: string): ParseResult {
+  const body = parseBlockBody(cursor, input);
+  if (!body.ok) {
+    return body;
+  }
   const close = expectClose(cursor, input);
   if (!close.ok) {
     return close;
   }
-  return { ok: true, value: { kind: "block", bindings, body: body.value } };
+  return body;
 }
 
 /**
@@ -287,7 +301,7 @@ export function parse(expression: string): ParseResult {
     return { ok: true, value: { kind: "num", value: 0 } };
   }
   const cursor: Cursor = { tokens: tokenize(expression), index: 0 };
-  const result = parseExpr(cursor, expression);
+  const result = parseBlockBody(cursor, expression);
   if (!result.ok) {
     return result;
   }
