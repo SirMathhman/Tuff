@@ -499,3 +499,23 @@ test('evaluateTuff("fn get() => { return 100U8; } return (get() is U8);") => 1',
     evaluateTuff("fn get() => { return 100U8; } return (get() is U8);"),
   ).toEqual({ ok: true, value: 1 });
 });
+
+test('evaluateTuff("fn get() : U8 => { return 100U8; } return (get() is U8);") => 1', () => {
+  expect(
+    evaluateTuff("fn get() : U8 => { return 100U8; } return (get() is U8);"),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("fn get() : U8 => { return 100U8; return 200U16; } return (get() is U8);") => 0', () => {
+  expect(
+    evaluateTuff(
+      "fn get() : U8 => { return 100U8; return 200U16; } return (get() is U8);",
+    ),
+  ).toEqual({ ok: true, value: 0 });
+});
+
+test('evaluateTuff("fn get() : U8 => { return 100; } return (get() is U8);") => 0', () => {
+  expect(
+    evaluateTuff("fn get() : U8 => { return 100; } return (get() is U8);"),
+  ).toEqual({ ok: true, value: 0 });
+});

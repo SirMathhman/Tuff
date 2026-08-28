@@ -121,10 +121,25 @@ function checkFnBody(
 }
 
 /**
+ * The returns of a `fn` body: how many there are, the inferable kind of
+ * each, and the number-suffix each carries.
+ */
+interface FnReturns {
+  /** The number of `return` statements found. */
+  count: number;
+  /** The inferable kind of each return, in source order. */
+  kinds: ValueKind[];
+  /** The number-suffix each return carries, in source order. */
+  suffixes: (string | undefined)[];
+}
+
+/**
  * Verify a `fn` body's returns: there must be at least one, all inferable
  * return kinds must agree with each other, and (when the return kind is
  * annotated) with the annotation. When the declaration is unannotated, the
- * inferred kind is registered on the function so call sites can use it.
+ * inferred kind is registered on the function so call sites can use it. The
+ * agreed return suffix is registered on every function, annotated or not,
+ * so `is` type-tests on calls fold the same either way.
  * @param stmt - The Fn statement whose returns to check.
  * @param line - The 1-based line number.
  * @param context - The mutable check context, with the parameter scope pushed.
@@ -143,11 +158,11 @@ function checkReturnKinds(
     fns: context.fns,
     resolveDeref,
   };
-  const kinds: ValueKind[] = [];
-  const returns = collectReturnKinds(stmt.body, exprCtx, kinds);
-  if (returns === 0) return { kind: "TypeMismatch", name: stmt.name, line };
-  const first = kinds[0];
-  for (const kind of kinds) {
+  const returns = collectReturns(stmt.body, exprCtx);
+  if (returns.count === 0)
+    return { kind: "TypeMismatch", name: stmt.name, line };
+  const first = returns.kinds[0];
+  for (const kind of returns.kinds) {
     if (first === undefined || kind !== first)
       return { kind: "TypeMismatch", name: stmt.name, line };
   }
@@ -157,29 +172,23 @@ function checkReturnKinds(
     first !== expectedReturn
   )
     return { kind: "TypeMismatch", name: stmt.name, line };
-  if (first !== undefined && expectedReturn === undefined) {
-    const def = findFn(context.fns, stmt.name);
-    if (def) {
+  const def = findFn(context.fns, stmt.name);
+  if (def) {
+    if (first !== undefined && expectedReturn === undefined) {
       def.returnType = first;
-      def.returnSuffix = collectReturnSuffix(stmt.body, exprCtx);
     }
+    def.returnSuffix = agreedSuffix(returns.suffixes);
   }
   return null;
 }
 
 /**
- * The number-suffix every `return` in a `fn` body carries, or undefined if
- * any return carries no suffix or the returns disagree on one.
- * @param body - The function body to walk.
- * @param context - The expression check context.
- * @returns The agreed return suffix, or undefined.
+ * The number-suffix every return carries, or undefined if any return
+ * carries no suffix or the returns disagree on one.
+ * @param suffixes - The suffix of each return, in source order.
+ * @returns The agreed suffix, or undefined.
  */
-function collectReturnSuffix(
-  body: TuffStatement,
-  context: ExprCheckContext,
-): string | undefined {
-  const suffixes: (string | undefined)[] = [];
-  collectReturnSuffixes(body, context, suffixes);
+function agreedSuffix(suffixes: (string | undefined)[]): string | undefined {
   const first = suffixes[0];
   if (first === undefined) return undefined;
   for (const suffix of suffixes) {
@@ -189,69 +198,52 @@ function collectReturnSuffix(
 }
 
 /**
- * Collect the number-suffix of every `return` in a statement, recursing
- * into blocks and control-flow bodies.
+ * Collect the returns of a statement: the inferable kind and number-suffix
+ * of each `return`, recursing into blocks and control-flow bodies.
  * @param stmt - The statement to walk.
  * @param context - The expression check context.
- * @param suffixes - The array to append each return's suffix to.
+ * @returns The returns found, with their kinds and suffixes.
  */
-function collectReturnSuffixes(
+function collectReturns(
   stmt: TuffStatement,
   context: ExprCheckContext,
-  suffixes: (string | undefined)[],
-): void {
-  if (stmt.kind === "Return") {
-    suffixes.push(exprSuffix(stmt.value, context));
-    return;
-  }
-  if (stmt.kind === "Block") {
-    for (const inner of stmt.statements) {
-      collectReturnSuffixes(inner, context, suffixes);
-    }
-    return;
-  }
-  if (stmt.kind === "If") {
-    collectReturnSuffixes(stmt.then, context, suffixes);
-    if (stmt.else) collectReturnSuffixes(stmt.else, context, suffixes);
-    return;
-  }
-  if (stmt.kind === "While" || stmt.kind === "For") {
-    collectReturnSuffixes(stmt.body, context, suffixes);
-  }
+): FnReturns {
+  const result: FnReturns = { count: 0, kinds: [], suffixes: [] };
+  collectReturnsInto(stmt, context, result);
+  return result;
 }
 
 /**
- * Collect the inferable kinds of every `return` in a statement, recursing
- * into blocks and control-flow bodies.
+ * Append the returns of a statement to an accumulator, recursing into
+ * blocks and control-flow bodies.
  * @param stmt - The statement to walk.
  * @param context - The expression check context.
- * @param kinds - The array to append each inferable return kind to.
- * @returns The number of `return` statements found.
+ * @param result - The accumulator to append each return's kind and suffix to.
  */
-function collectReturnKinds(
+function collectReturnsInto(
   stmt: TuffStatement,
   context: ExprCheckContext,
-  kinds: ValueKind[],
-): number {
+  result: FnReturns,
+): void {
   if (stmt.kind === "Return") {
     const kind = inferKind(stmt.value, context);
-    if (kind) kinds.push(kind);
-    return 1;
+    if (kind) result.kinds.push(kind);
+    result.suffixes.push(exprSuffix(stmt.value, context));
+    result.count++;
+    return;
   }
   if (stmt.kind === "Block") {
-    let count = 0;
     for (const inner of stmt.statements) {
-      count += collectReturnKinds(inner, context, kinds);
+      collectReturnsInto(inner, context, result);
     }
-    return count;
+    return;
   }
   if (stmt.kind === "If") {
-    let count = collectReturnKinds(stmt.then, context, kinds);
-    if (stmt.else) count += collectReturnKinds(stmt.else, context, kinds);
-    return count;
+    collectReturnsInto(stmt.then, context, result);
+    if (stmt.else) collectReturnsInto(stmt.else, context, result);
+    return;
   }
   if (stmt.kind === "While" || stmt.kind === "For") {
-    return collectReturnKinds(stmt.body, context, kinds);
+    collectReturnsInto(stmt.body, context, result);
   }
-  return 0;
 }
