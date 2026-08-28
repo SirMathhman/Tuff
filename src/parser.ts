@@ -121,24 +121,31 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
 }
 
 /**
- * Parse a term (factors joined by *).
+ * Parse a left-associative chain of binary operators at a given precedence.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
+ * @param {number} precedence - The precedence level to consume.
+ * @param {(c: Cursor, i: string) => ParseResult} parseOperand - Parses one operand.
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
-function parseTerm(cursor: Cursor, input: string): ParseResult {
-  const left = parseFactor(cursor, input);
+function parseBinaryLevel(
+  cursor: Cursor,
+  input: string,
+  precedence: number,
+  parseOperand: (c: Cursor, i: string) => ParseResult,
+): ParseResult {
+  const left = parseOperand(cursor, input);
   if (!left.ok) {
     return left;
   }
   let node: AstNode = left.value;
   for (;;) {
     const opTok = peek(cursor);
-    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== 2) {
+    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== precedence) {
       break;
     }
     cursor.index += 1;
-    const right = parseFactor(cursor, input);
+    const right = parseOperand(cursor, input);
     if (!right.ok) {
       return right;
     }
@@ -148,30 +155,23 @@ function parseTerm(cursor: Cursor, input: string): ParseResult {
 }
 
 /**
+ * Parse a term (factors joined by *).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed AST, or a structured error.
+ */
+function parseTerm(cursor: Cursor, input: string): ParseResult {
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["*"], parseFactor);
+}
+
+/**
  * Parse an expression (terms joined by + or -).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseExpr(cursor: Cursor, input: string): ParseResult {
-  const left = parseTerm(cursor, input);
-  if (!left.ok) {
-    return left;
-  }
-  let node: AstNode = left.value;
-  for (;;) {
-    const opTok = peek(cursor);
-    if (opTok.type !== "op" || OPERATOR_PRECEDENCE[opTok.text as Operator] !== 1) {
-      break;
-    }
-    cursor.index += 1;
-    const right = parseTerm(cursor, input);
-    if (!right.ok) {
-      return right;
-    }
-    node = { kind: "binop", op: opTok.text as Operator, left: node, right: right.value };
-  }
-  return { ok: true, value: node };
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["+"], parseTerm);
 }
 
 /**
