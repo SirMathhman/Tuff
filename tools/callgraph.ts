@@ -129,8 +129,16 @@ for (const file of files) {
      * @param body - The node to walk.
      */
     function walk(body: ts.Node): void {
-      if (ts.isCallExpression(body) && ts.isIdentifier(body.expression)) {
-        called.add(body.expression.text);
+      if (ts.isCallExpression(body)) {
+        if (ts.isIdentifier(body.expression)) {
+          called.add(body.expression.text);
+        }
+        // A function handed to another function as an argument is called
+        // through that parameter, so the graph would otherwise show no edge
+        // to it at all.
+        for (const arg of body.arguments) {
+          if (ts.isIdentifier(arg)) called.add(arg.text);
+        }
       }
       ts.forEachChild(body, walk);
     }
