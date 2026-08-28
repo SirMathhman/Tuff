@@ -16,7 +16,7 @@ export function foldStatement(
   stmt: TuffStatement,
   context: ExprCheckContext,
 ): void {
-  if (stmt.kind === "Let" || stmt.kind === "Return" || stmt.kind === "Expr") {
+  if (stmt.kind === "Let" || stmt.kind === "Return") {
     stmt.value = foldExpr(stmt.value, context);
   } else if (stmt.kind === "Assign") {
     stmt.value = foldExpr(stmt.value, context);

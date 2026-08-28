@@ -26,7 +26,6 @@ export type {
   FnParam,
   AssignNode,
   ReturnNode,
-  ExprNode,
   BlockNode,
   IfNode,
   WhileNode,

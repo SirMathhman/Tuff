@@ -172,10 +172,6 @@ function executeStatement(
   if (stmt.kind === "Continue") {
     return CONTINUE;
   }
-  assert(
-    stmt.kind !== "Expr",
-    "Expr statements must be transformed to Return by the typechecker",
-  );
   executeAssignment(stmt.target, stmt.value, env);
   return undefined;
 }
