@@ -475,3 +475,21 @@ test('evaluateTuff("let a = 0; let mut b = &a; { let c = 0; b = &c; }") => Err',
     error: { kind: "DanglingReference", name: "c", line: 4 },
   });
 });
+
+test('evaluateTuff("let mut a = 0; let r = &a; { let c = 0; *r = &c; }") => Err', () => {
+  expect(
+    evaluateTuff("let mut a = 0; let r = &a; { let c = 0; *r = &c; }"),
+  ).toEqual({
+    ok: false,
+    error: { kind: "DanglingReference", name: "c", line: 4 },
+  });
+});
+
+test('evaluateTuff("let mut arr = [0]; { let c = 0; arr[0] = &c; }") => Err', () => {
+  expect(
+    evaluateTuff("let mut arr = [0]; { let c = 0; arr[0] = &c; }"),
+  ).toEqual({
+    ok: false,
+    error: { kind: "DanglingReference", name: "c", line: 3 },
+  });
+});

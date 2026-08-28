@@ -511,16 +511,19 @@ function checkAssignment(
 }
 
 /**
- * Check that re-pointing a reference binding at a new referent does not
- * create a dangling reference: the new referent must be declared in a scope
- * that is the same as or outer to the reference binding's own scope, so it
- * cannot die before the binding that holds the reference.
+ * Check that storing a reference id in a binding does not create a dangling
+ * reference: the referent must be declared in a scope that is the same as or
+ * outer to the holder binding's own scope, so it cannot die before the
+ * binding that holds the reference id. Applies to every assignment target
+ * (identifier, dereference, and array index), since any of them can store a
+ * reference id.
  * @param value - The assignment value expression.
- * @param declared - The target binding's declaration.
+ * @param declared - The holder binding's declaration (the binding that will
+ * store the reference id).
  * @param scopes - The stack of declared bindings.
  * @param line - The 1-based line number.
- * @returns A DanglingReference error if the new referent does not outlive
- * the target, else null.
+ * @returns A DanglingReference error if the referent does not outlive the
+ * holder, else null.
  */
 function checkDanglingRef(
   value: TuffExpr,
@@ -529,7 +532,6 @@ function checkDanglingRef(
   line: number,
 ): TuffError | null {
   if (value.kind !== "Ref") return null;
-  if (declared.refTo === undefined) return null;
   if (value.operand.kind !== "Identifier") return null;
   const referent = findDeclared(scopes, value.operand.name);
   if (!referent) return null;
