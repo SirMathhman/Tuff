@@ -45,5 +45,9 @@ export function evaluate(expression: string): EvalResult {
   if (/^[0-9]+$/.test(expression)) {
     return { ok: true, value: Number(expression) };
   }
+  const sum = expression.match(/^([0-9]+) \+ ([0-9]+)$/);
+  if (sum) {
+    return { ok: true, value: Number(sum[1]) + Number(sum[2]) };
+  }
   return { ok: false, error: { kind: "invalid-number", input: expression } };
 }

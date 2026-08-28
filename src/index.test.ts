@@ -9,6 +9,10 @@ test('evaluate("1") => 1', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("1 + 2") => 3', () => {
+  expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
+});
+
 test('evaluate("abc") => error', () => {
   expect(evaluate("abc")).toEqual({
     ok: false,
