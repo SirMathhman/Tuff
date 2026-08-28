@@ -88,12 +88,12 @@ function tokenize(input: string): Token[] {
       i += 1;
       continue;
     }
-    if (ch === "(") {
+    if (ch === "(" || ch === "{") {
       tokens.push({ type: "lparen", text: ch, position: i });
       i += 1;
       continue;
     }
-    if (ch === ")") {
+    if (ch === ")" || ch === "}") {
       tokens.push({ type: "rparen", text: ch, position: i });
       i += 1;
       continue;
