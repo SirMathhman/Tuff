@@ -1,5 +1,5 @@
 import { OPERATOR_PRECEDENCE } from "./ast.ts";
-import type { AstNode, Operator } from "./ast.ts";
+import type { AstNode, Binding, Operator } from "./ast.ts";
 
 /**
  * A structured parse failure.
@@ -39,11 +39,49 @@ export interface ParseFailure {
 export type ParseResult = ParseSuccess | ParseFailure;
 
 /**
+ * A successful binding outcome.
+ */
+interface BindingSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed binding. */
+  value: Binding;
+}
+
+/**
+ * The outcome of parsing a binding.
+ */
+type BindingResult = BindingSuccess | ParseFailure;
+
+/**
+ * A successful close-delimiter outcome.
+ */
+interface CloseSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+}
+
+/**
+ * The outcome of consuming a close delimiter.
+ */
+type CloseResult = CloseSuccess | ParseFailure;
+
+/**
  * A token produced by the tokenizer.
  */
 interface Token {
   /** The token kind. */
-  type: "num" | "op" | "lparen" | "rparen" | "invalid" | "eof";
+  type:
+    | "num"
+    | "op"
+    | "lparen"
+    | "rparen"
+    | "ident"
+    | "kw-let"
+    | "assign"
+    | "semi"
+    | "invalid"
+    | "eof";
   /** The token text. */
   text: string;
   /** The position of the token in the input. */
@@ -61,6 +99,60 @@ interface Cursor {
 }
 
 /**
+ * The result of reading one token from the input.
+ */
+interface ReadToken {
+  /** The token read. */
+  token: Token;
+  /** The index just past the token. */
+  next: number;
+}
+
+/**
+ * Read a single token starting at an index.
+ * @param {string} input - The input string.
+ * @param {number} i - The index to start reading at.
+ * @returns {ReadToken} The token and the index just past it.
+ */
+function readToken(input: string, i: number): ReadToken {
+  const ch = input[i]!;
+  if (ch >= "0" && ch <= "9") {
+    let j = i;
+    while (j < input.length && isDigit(input[j]!)) {
+      j += 1;
+    }
+    return { token: { type: "num", text: input.slice(i, j), position: i }, next: j };
+  }
+  if (ch in OPERATOR_PRECEDENCE) {
+    return { token: { type: "op", text: ch, position: i }, next: i + 1 };
+  }
+  if (isLetter(ch)) {
+    let j = i;
+    while (j < input.length && (isLetter(input[j]!) || isDigit(input[j]!))) {
+      j += 1;
+    }
+    const text = input.slice(i, j);
+    return {
+      token: { type: text === "let" ? "kw-let" : "ident", text, position: i },
+      next: j,
+    };
+  }
+  if (ch === "=") {
+    return { token: { type: "assign", text: ch, position: i }, next: i + 1 };
+  }
+  if (ch === ";") {
+    return { token: { type: "semi", text: ch, position: i }, next: i + 1 };
+  }
+  if (ch === "(" || ch === "{") {
+    return { token: { type: "lparen", text: ch, position: i }, next: i + 1 };
+  }
+  if (ch === ")" || ch === "}") {
+    return { token: { type: "rparen", text: ch, position: i }, next: i + 1 };
+  }
+  return { token: { type: "invalid", text: ch, position: i }, next: i + 1 };
+}
+
+/**
  * Tokenize an expression into a list of tokens.
  * @param {string} input - The expression to tokenize.
  * @returns {Token[]} The list of tokens, ending with an eof token.
@@ -69,37 +161,13 @@ function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {
-    const ch = input[i]!;
-    if (ch === " ") {
+    if (input[i] === " ") {
       i += 1;
       continue;
     }
-    if (ch >= "0" && ch <= "9") {
-      let j = i;
-      while (j < input.length && input[j]! >= "0" && input[j]! <= "9") {
-        j += 1;
-      }
-      tokens.push({ type: "num", text: input.slice(i, j), position: i });
-      i = j;
-      continue;
-    }
-    if (ch in OPERATOR_PRECEDENCE) {
-      tokens.push({ type: "op", text: ch, position: i });
-      i += 1;
-      continue;
-    }
-    if (ch === "(" || ch === "{") {
-      tokens.push({ type: "lparen", text: ch, position: i });
-      i += 1;
-      continue;
-    }
-    if (ch === ")" || ch === "}") {
-      tokens.push({ type: "rparen", text: ch, position: i });
-      i += 1;
-      continue;
-    }
-    tokens.push({ type: "invalid", text: ch, position: i });
-    i += 1;
+    const { token, next } = readToken(input, i);
+    tokens.push(token);
+    i = next;
   }
   tokens.push({ type: "eof", text: "", position: i });
   return tokens;
@@ -115,6 +183,24 @@ function peek(cursor: Cursor): Token {
 }
 
 /**
+ * Check whether a character is an ASCII letter.
+ * @param {string} ch - The character to check.
+ * @returns {boolean} True if the character is a letter.
+ */
+function isLetter(ch: string): boolean {
+  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
+}
+
+/**
+ * Check whether a character is an ASCII digit.
+ * @param {string} ch - The character to check.
+ * @returns {boolean} True if the character is a digit.
+ */
+function isDigit(ch: string): boolean {
+  return ch >= "0" && ch <= "9";
+}
+
+/**
  * Parse a factor (a single number).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
@@ -126,24 +212,120 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "num", value: Number(tok.text) } };
   }
+  if (tok.type === "ident") {
+    cursor.index += 1;
+    return { ok: true, value: { kind: "ident", name: tok.text } };
+  }
   if (tok.type === "lparen") {
     cursor.index += 1;
+    if (peek(cursor).type === "kw-let") {
+      return parseBlock(cursor, input);
+    }
     const inner = parseExpr(cursor, input);
     if (!inner.ok) {
       return inner;
     }
-    const close = peek(cursor);
-    if (close.type !== "rparen") {
-      return {
-        ok: false,
-        error: { kind: "syntax", input, position: close.position },
-      };
+    const close = expectClose(cursor, input);
+    if (!close.ok) {
+      return close;
     }
-    cursor.index += 1;
     return { ok: true, value: inner.value };
   }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
+}
+
+/**
+ * Parse a block body (the opening delimiter has been consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed block node, or a structured error.
+ */
+/**
+ * Parse a single let-binding (the let keyword has been consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The binding, or a structured error.
+ */
+function parseBinding(cursor: Cursor, input: string): BindingResult {
+  const nameTok = peek(cursor);
+  if (nameTok.type !== "ident") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: nameTok.position },
+    };
+  }
+  cursor.index += 1;
+  const eq = peek(cursor);
+  if (eq.type !== "assign") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: eq.position },
+    };
+  }
+  cursor.index += 1;
+  const value = parseExpr(cursor, input);
+  if (!value.ok) {
+    return value;
+  }
+  const semi = peek(cursor);
+  if (semi.type !== "semi") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: semi.position },
+    };
+  }
+  cursor.index += 1;
+  return { ok: true, value: { name: nameTok.text, value: value.value } };
+}
+
+/**
+ * Parse a block body (the opening delimiter has been consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed block node, or a structured error.
+ */
+function parseBlock(cursor: Cursor, input: string): ParseResult {
+  const bindings: Binding[] = [];
+  for (;;) {
+    const kw = peek(cursor);
+    if (kw.type !== "kw-let") {
+      break;
+    }
+    cursor.index += 1;
+    const binding = parseBinding(cursor, input);
+    if (!binding.ok) {
+      return binding;
+    }
+    bindings.push(binding.value);
+  }
+  const body = parseExpr(cursor, input);
+  if (!body.ok) {
+    return body;
+  }
+  const close = expectClose(cursor, input);
+  if (!close.ok) {
+    return close;
+  }
+  return { ok: true, value: { kind: "block", bindings, body: body.value } };
+}
+
+/**
+ * Consume the closing delimiter of a group.
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {CloseResult} A success marker, or a structured error.
+ */
+function expectClose(cursor: Cursor, input: string): CloseResult {
+  const close = peek(cursor);
+  if (close.type !== "rparen") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: close.position },
+    };
+  }
+  cursor.index += 1;
+  return { ok: true };
 }
 
 /**

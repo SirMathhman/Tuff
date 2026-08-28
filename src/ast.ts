@@ -37,6 +37,38 @@ export interface BinOpNode {
 }
 
 /**
+ * A variable reference node.
+ */
+export interface IdentNode {
+  /** The node kind. */
+  kind: "ident";
+  /** The variable name. */
+  name: string;
+}
+
+/**
+ * A variable binding in a block.
+ */
+export interface Binding {
+  /** The variable name. */
+  name: string;
+  /** The initializer expression. */
+  value: AstNode;
+}
+
+/**
+ * A block node with let-bindings and a body expression.
+ */
+export interface BlockNode {
+  /** The node kind. */
+  kind: "block";
+  /** The variable bindings. */
+  bindings: Binding[];
+  /** The body expression. */
+  body: AstNode;
+}
+
+/**
  * A node in the expression AST.
  */
-export type AstNode = NumNode | BinOpNode;
+export type AstNode = NumNode | BinOpNode | IdentNode | BlockNode;

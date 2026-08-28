@@ -37,9 +37,13 @@ test('evaluate("{ 2 + 3 } * 4") => 20', () => {
   expect(evaluate("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+});
+
 test('evaluate("abc") => error', () => {
   expect(evaluate("abc")).toEqual({
     ok: false,
-    error: { kind: "invalid-number", input: "abc", position: 0 },
+    error: { kind: "unknown-variable", input: "abc", name: "abc" },
   });
 });
