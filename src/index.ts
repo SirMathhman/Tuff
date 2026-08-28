@@ -6,7 +6,12 @@ import { evalAst } from "./evaluator.ts";
  */
 export interface EvalError {
   /** What kind of failure this is. */
-  kind: "syntax" | "invalid-number" | "unknown-variable" | "immutable-assignment";
+  kind:
+    | "syntax"
+    | "invalid-number"
+    | "unknown-variable"
+    | "immutable-assignment"
+    | "deref-non-ref";
   /** The input that caused the failure. */
   input: string;
   /** The position where the failure was found, when known. */
@@ -59,6 +64,12 @@ export function evaluate(expression: string): EvalResult {
         input: expression,
         name: outcome.name,
       },
+    };
+  }
+  if (typeof outcome.value !== "number") {
+    return {
+      ok: false,
+      error: { kind: "deref-non-ref", input: expression, name: "" },
     };
   }
   return { ok: true, value: outcome.value };

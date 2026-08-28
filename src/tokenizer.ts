@@ -17,6 +17,8 @@ export interface Token {
     | "kw-mut"
     | "assign"
     | "semi"
+    | "deref"
+    | "amp"
     | "invalid"
     | "eof";
   /** The token text. */
@@ -24,6 +26,19 @@ export interface Token {
   /** The position of the token in the input. */
   position: number;
 }
+
+/**
+ * Single-character punctuation mapped to its token type.
+ */
+const PUNCT: Record<string, Token["type"]> = {
+  "=": "assign",
+  "&": "amp",
+  ";": "semi",
+  "(": "lparen",
+  "{": "lbrace",
+  ")": "rparen",
+  "}": "rbrace",
+};
 
 /**
  * The result of reading one token from the input.
@@ -69,23 +84,9 @@ function readToken(input: string, i: number): ReadToken {
       next: j,
     };
   }
-  if (ch === "=") {
-    return { token: { type: "assign", text: ch, position: i }, next: i + 1 };
-  }
-  if (ch === ";") {
-    return { token: { type: "semi", text: ch, position: i }, next: i + 1 };
-  }
-  if (ch === "(") {
-    return { token: { type: "lparen", text: ch, position: i }, next: i + 1 };
-  }
-  if (ch === "{") {
-    return { token: { type: "lbrace", text: ch, position: i }, next: i + 1 };
-  }
-  if (ch === ")") {
-    return { token: { type: "rparen", text: ch, position: i }, next: i + 1 };
-  }
-  if (ch === "}") {
-    return { token: { type: "rbrace", text: ch, position: i }, next: i + 1 };
+  const punct = PUNCT[ch];
+  if (punct !== undefined) {
+    return { token: { type: punct, text: ch, position: i }, next: i + 1 };
   }
   return { token: { type: "invalid", text: ch, position: i }, next: i + 1 };
 }
@@ -98,17 +99,37 @@ function readToken(input: string, i: number): ReadToken {
 export function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
+  let prevType: string | null = null;
   while (i < input.length) {
     if (input[i] === " ") {
       i += 1;
       continue;
     }
     const { token, next } = readToken(input, i);
+    if (token.type === "op" && token.text === "*" && isDerefContext(prevType)) {
+      token.type = "deref";
+    }
     tokens.push(token);
+    prevType = token.type;
     i = next;
   }
   tokens.push({ type: "eof", text: "", position: i });
   return tokens;
+}
+
+/**
+ * Check whether a * token is in a dereference context (start of expression).
+ * @param {string | null} prevType - The type of the previous token, or null at start.
+ * @returns {boolean} True if * should be treated as dereference.
+ */
+function isDerefContext(prevType: string | null): boolean {
+  return (
+    prevType === null ||
+    prevType === "assign" ||
+    prevType === "semi" ||
+    prevType === "lparen" ||
+    prevType === "lbrace"
+  );
 }
 
 /**

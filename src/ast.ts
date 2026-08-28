@@ -86,6 +86,32 @@ export interface BlockNode {
 }
 
 /**
+ * A reference (address-of) node.
+ */
+export interface RefNode {
+  /** The node kind. */
+  kind: "ref";
+  /** The target expression (must be an identifier). */
+  target: AstNode;
+}
+
+/**
+ * A dereference node.
+ */
+export interface DerefNode {
+  /** The node kind. */
+  kind: "deref";
+  /** The target expression (must evaluate to a reference). */
+  target: AstNode;
+}
+
+/**
  * A node in the expression AST.
  */
-export type AstNode = NumNode | BinOpNode | IdentNode | BlockNode;
+export type AstNode =
+  | NumNode
+  | BinOpNode
+  | IdentNode
+  | BlockNode
+  | RefNode
+  | DerefNode;

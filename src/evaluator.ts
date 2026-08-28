@@ -1,11 +1,31 @@
-import type { AstNode, Binding, BlockNode, Statement } from "./ast.ts";
+import type {
+  AstNode,
+  Binding,
+  BlockNode,
+  DerefNode,
+  RefNode,
+  Statement,
+} from "./ast.ts";
+
+/**
+ * A reference to a variable by name.
+ */
+export interface Ref {
+  /** The referenced variable name. */
+  name: string;
+}
+
+/**
+ * A value produced by evaluation: a number or a reference.
+ */
+export type Value = number | Ref;
 
 /**
  * A variable environment mapping names to values.
  */
 export interface Env {
   /** Look up a variable by name. */
-  get(name: string): number | undefined;
+  get(name: string): Value | undefined;
 }
 
 /**
@@ -15,7 +35,7 @@ export interface EvalSuccess {
   /** Marks the outcome as successful. */
   ok: true;
   /** The evaluated value. */
-  value: number;
+  value: Value;
 }
 
 /**
@@ -25,7 +45,7 @@ export interface EvalFailure {
   /** Marks the outcome as failed. */
   ok: false;
   /** What kind of failure this is. */
-  kind: "unknown-variable" | "immutable-assignment";
+  kind: "unknown-variable" | "immutable-assignment" | "deref-non-ref";
   /** The name of the variable involved. */
   name: string;
 }
@@ -55,6 +75,9 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   if (node.kind === "block") {
     return evalBlock(node, env);
   }
+  if (node.kind === "ref" || node.kind === "deref") {
+    return evalRefOrDeref(node, env);
+  }
   const left = evalAst(node.left, env);
   if (!left.ok) {
     return left;
@@ -62,6 +85,9 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   const right = evalAst(node.right, env);
   if (!right.ok) {
     return right;
+  }
+  if (typeof left.value !== "number" || typeof right.value !== "number") {
+    return { ok: false, kind: "deref-non-ref", name: "" };
   }
   switch (node.op) {
     case "+":
@@ -78,13 +104,42 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
 }
 
 /**
+ * Evaluate a reference or dereference node.
+ * @param {RefNode | DerefNode} node - The node to evaluate.
+ * @param {Env} env - The variable environment.
+ * @returns {EvalOutcome} The evaluated value, or a structured error.
+ */
+function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
+  if (node.kind === "ref") {
+    const target = node.target;
+    if (target.kind !== "ident") {
+      return { ok: false, kind: "deref-non-ref", name: "" };
+    }
+    return { ok: true, value: { name: target.name } };
+  }
+  const out = evalAst(node.target, env);
+  if (!out.ok) {
+    return out;
+  }
+  if (typeof out.value !== "number" && "name" in out.value) {
+    const ref = out.value as Ref;
+    const val = env.get(ref.name);
+    if (val === undefined) {
+      return { ok: false, kind: "unknown-variable", name: ref.name };
+    }
+    return { ok: true, value: val };
+  }
+  return { ok: false, kind: "deref-non-ref", name: "" };
+}
+
+/**
  * Evaluate a block node, resolving its statements eagerly in a child env.
  * @param {BlockNode} node - The block node to evaluate.
  * @param {Env} env - The enclosing variable environment.
  * @returns {EvalOutcome} The evaluated body, or a structured error.
  */
 function evalBlock(node: BlockNode, env: Env): EvalOutcome {
-  const values: Record<string, number> = {};
+  const values: Record<string, Value> = {};
   const mutable: Record<string, boolean> = {};
   const child: Env = {
     get: (name: string) => {

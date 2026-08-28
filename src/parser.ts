@@ -132,6 +132,22 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "ident", name: tok.text } };
   }
+  if (tok.type === "amp") {
+    cursor.index += 1;
+    const target = parseFactor(cursor, input);
+    if (!target.ok) {
+      return target;
+    }
+    return { ok: true, value: { kind: "ref", target: target.value } };
+  }
+  if (tok.type === "deref") {
+    cursor.index += 1;
+    const target = parseFactor(cursor, input);
+    if (!target.ok) {
+      return target;
+    }
+    return { ok: true, value: { kind: "deref", target: target.value } };
+  }
   if (tok.type === "lparen" || tok.type === "lbrace") {
     cursor.index += 1;
     const closeType = tok.type === "lparen" ? "rparen" : "rbrace";
