@@ -9,6 +9,10 @@ test('evaluate("1") => 1', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("let x = true; x") => 1', () => {
+  expect(evaluate("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
@@ -91,7 +95,9 @@ test('evaluate("let mut x = 0; let y = &mut x; *y = 1; x") => 1', () => {
 });
 
 test('evaluate("let mut x = 0; let y = &mut x; let x = 2; *y = 1; x") => 1', () => {
-  expect(evaluate("let mut x = 0; let y = &mut x; let x = 2; *y = 1; x")).toEqual({
+  expect(
+    evaluate("let mut x = 0; let y = &mut x; let x = 2; *y = 1; x"),
+  ).toEqual({
     ok: true,
     value: 1,
   });

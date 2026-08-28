@@ -15,6 +15,8 @@ export interface Token {
     | "ident"
     | "kw-let"
     | "kw-mut"
+    | "kw-true"
+    | "kw-false"
     | "assign"
     | "semi"
     | "amp"
@@ -77,7 +79,15 @@ function readToken(input: string, i: number): ReadToken {
     }
     const text = input.slice(i, j);
     const type =
-      text === "let" ? "kw-let" : text === "mut" ? "kw-mut" : "ident";
+      text === "let"
+        ? "kw-let"
+        : text === "mut"
+          ? "kw-mut"
+          : text === "true"
+            ? "kw-true"
+            : text === "false"
+              ? "kw-false"
+              : "ident";
     return {
       token: { type, text, position: i },
       next: j,

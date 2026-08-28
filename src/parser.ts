@@ -113,30 +113,17 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "num", value: Number(tok.text) } };
   }
+  if (tok.type === "kw-true" || tok.type === "kw-false") {
+    cursor.index += 1;
+    const val = tok.type === "kw-true" ? 1 : 0;
+    return { ok: true, value: { kind: "num", value: val } };
+  }
   if (tok.type === "ident") {
     cursor.index += 1;
     return { ok: true, value: { kind: "ident", name: tok.text } };
   }
-  if (tok.type === "amp") {
-    cursor.index += 1;
-    let mutable = false;
-    if (peek(cursor).type === "kw-mut") {
-      mutable = true;
-      cursor.index += 1;
-    }
-    const target = parseFactor(cursor, input);
-    if (!target.ok) {
-      return target;
-    }
-    return { ok: true, value: { kind: "ref", mutable, target: target.value } };
-  }
-  if (tok.type === "op" && tok.text === "*") {
-    cursor.index += 1;
-    const target = parseFactor(cursor, input);
-    if (!target.ok) {
-      return target;
-    }
-    return { ok: true, value: { kind: "deref", target: target.value } };
+  if (tok.type === "amp" || (tok.type === "op" && tok.text === "*")) {
+    return parseRefOrDeref(cursor, input, tok);
   }
   if (tok.type === "lparen" || tok.type === "lbrace") {
     cursor.index += 1;
@@ -156,6 +143,38 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
+}
+
+/**
+ * Parse a reference (& or &mut) or dereference (*) factor.
+ * @param {Cursor} cursor - The token cursor, positioned at the & or * token.
+ * @param {string} input - The original input.
+ * @param {Token} tok - The current token (amp or op *).
+ * @returns {ParseResult} The parsed ref or deref node, or a structured error.
+ */
+function parseRefOrDeref(
+  cursor: Cursor,
+  input: string,
+  tok: Token,
+): ParseResult {
+  cursor.index += 1;
+  if (tok.type === "amp") {
+    let mutable = false;
+    if (peek(cursor).type === "kw-mut") {
+      mutable = true;
+      cursor.index += 1;
+    }
+    const target = parseFactor(cursor, input);
+    if (!target.ok) {
+      return target;
+    }
+    return { ok: true, value: { kind: "ref", mutable, target: target.value } };
+  }
+  const target = parseFactor(cursor, input);
+  if (!target.ok) {
+    return target;
+  }
+  return { ok: true, value: { kind: "deref", target: target.value } };
 }
 
 /**
