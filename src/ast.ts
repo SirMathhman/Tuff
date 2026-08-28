@@ -1,3 +1,4 @@
+import type { TuffError } from "./errors.ts";
 import type { TuffValue } from "./values.ts";
 
 /** A literal expression node (number or boolean). */
@@ -144,6 +145,15 @@ export interface CallNode {
   args: TuffExpr[];
 }
 
+/**
+ * A braced block expression node: `{ stmt; ... }`. Its value is the value of
+ * its last statement, which the parser desugars to a `return`.
+ */
+export interface BlockExprNode {
+  kind: "BlockExpr";
+  /** The statements, in source order. */
+  statements: TuffStatement[];
+}
 /** A bare kind name in an `is` type-test right operand (e.g. `U8`, `Bool`). */
 export interface KindNameBareNode {
   kind: "KindNameBare";
@@ -204,7 +214,8 @@ export type TuffExpr =
   | IsNode
   | StructLiteralNode
   | FieldAccessNode
-  | CallNode;
+  | CallNode
+  | BlockExprNode;
 
 /** A named, typed parameter of a function declaration. */
 export interface FnParam {
@@ -325,6 +336,30 @@ export type TuffStatement =
   | ForNode
   | BreakNode
   | ContinueNode;
+
+/**
+ * Type guard distinguishing a parsed statement node from an error.
+ * @param value {TuffStatement | TuffError} - The value to test.
+ * @returns {boolean} True if the value is a statement node.
+ */
+export function isStatement(
+  value: TuffStatement | TuffError,
+): value is TuffStatement {
+  return (
+    value.kind === "Let" ||
+    value.kind === "Type" ||
+    value.kind === "Struct" ||
+    value.kind === "Fn" ||
+    value.kind === "Assign" ||
+    value.kind === "Return" ||
+    value.kind === "Block" ||
+    value.kind === "If" ||
+    value.kind === "While" ||
+    value.kind === "For" ||
+    value.kind === "Break" ||
+    value.kind === "Continue"
+  );
+}
 
 /** A mutable parse position over a token list. */
 export interface Pos {

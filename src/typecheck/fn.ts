@@ -11,7 +11,7 @@ import {
   type FnDef,
   type ValueKind,
 } from "./kinds.ts";
-import { resolveDeref } from "./expressions.ts";
+import { exprContext } from "./expressions.ts";
 import { checkKindName, exprSuffix } from "./is-match.ts";
 import { checkReservedName } from "./reserved.ts";
 
@@ -152,12 +152,7 @@ function checkReturnKinds(
   context: CheckContext,
   expectedReturn: ValueKind | undefined,
 ): TuffError | null {
-  const exprCtx: ExprCheckContext = {
-    scopes: context.scopes,
-    structs: context.structs,
-    fns: context.fns,
-    resolveDeref,
-  };
+  const exprCtx = exprContext(context);
   const returns = collectReturns(stmt.body, exprCtx);
   if (returns.count === 0)
     return { kind: "TypeMismatch", name: stmt.name, line };

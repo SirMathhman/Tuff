@@ -2,7 +2,8 @@ import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
 import type { Pos, TuffStatement } from "./ast.ts";
-import { isStatement, parseStatement } from "./statements.ts";
+import { isStatement } from "./ast.ts";
+import { parseStatement } from "./statements.ts";
 
 export type {
   LiteralNode,
@@ -20,6 +21,7 @@ export type {
   ArrayIndexNode,
   RangeNode,
   CallNode,
+  BlockExprNode,
   TuffExpr,
   LetNode,
   FnNode,

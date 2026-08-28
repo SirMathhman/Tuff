@@ -1,5 +1,12 @@
 import type { TuffError } from "../errors.ts";
-import type { KindName, TuffExpr } from "../ast.ts";
+import type {
+  ArrayIndexNode,
+  BlockExprNode,
+  FieldAccessNode,
+  KindName,
+  TuffExpr,
+  TupleIndexNode,
+} from "../ast.ts";
 import { isNumberSuffix } from "./suffixes.ts";
 
 /** The statically known kinds a binding or element can hold. */
@@ -96,6 +103,27 @@ export type ResolveDeref = (
   scopes: Record<string, DeclaredBinding>[],
 ) => ResolvedDeref | TuffError;
 
+/** The outcome of checking a block expression: its error, or its value kind. */
+export interface BlockExprCheck {
+  /** The first semantic error in the block's statements, if any. */
+  error: TuffError | null;
+  /** The kind of the block's value, or null if not statically inferable. */
+  kind: ValueKind | null;
+  /** The number-suffix the block's value carries, if it carries one. */
+  suffix?: string;
+}
+
+/**
+ * Checks a block expression's statements in a fresh scope and infers the kind
+ * of its value. Owned by the statement checker and reached through the check
+ * context, breaking the recursion between the statement and expression checks.
+ */
+export type CheckBlockExpr = (
+  expr: BlockExprNode,
+  line: number,
+  context: CheckContext,
+) => BlockExprCheck;
+
 /**
  * The context threaded through the expression-level checkers: the stacks of
  * declared bindings, structs, and functions, plus the dereference resolver.
@@ -111,6 +139,8 @@ export interface ExprCheckContext {
   fns: Record<string, FnDef>[];
   /** The dereference resolver, for `*` operands. */
   resolveDeref: ResolveDeref;
+  /** The block-expression checker, for `{ ... }` operands. */
+  checkBlockExpr: (expr: BlockExprNode, line: number) => BlockExprCheck;
 }
 
 /**
@@ -130,6 +160,8 @@ export interface CheckContext {
   structs: Record<string, StructDef>[];
   fns: Record<string, FnDef>[];
   inLoop: LoopContext;
+  /** The block-expression checker, owned by the statement checker. */
+  checkBlockExpr: CheckBlockExpr;
 }
 
 /**
@@ -166,26 +198,46 @@ export function inferKind(
     return "kind" in resolved ? null : resolved.binding.kind;
   }
   if (expr.kind === "Tuple") return "tuple";
-  if (expr.kind === "TupleIndex") {
-    const kinds = tupleElementKinds(expr.operand, context);
-    return kinds ? (kinds[expr.index] ?? null) : null;
-  }
   if (expr.kind === "Array") return "array";
   if (expr.kind === "Range") return "range";
   if (expr.kind === "StructLiteral") return "struct";
-  if (expr.kind === "ArrayIndex") {
-    const kinds = arrayElementKinds(expr.operand, context);
-    if (!kinds) return null;
-    const index = literalIndex(expr.index);
-    return index !== null && index < kinds.length
-      ? (kinds[index] ?? null)
-      : null;
+  if (
+    expr.kind === "TupleIndex" ||
+    expr.kind === "ArrayIndex" ||
+    expr.kind === "FieldAccess"
+  ) {
+    return inferElementKind(expr, context);
+  }
+  if (expr.kind === "BlockExpr") {
+    return context.checkBlockExpr(expr, 0).kind;
+  }
+  return null;
+}
+
+/**
+ * Infer the kind an element access reads: a tuple index, an array index, or a
+ * struct field access.
+ * @param expr - The element access to inspect.
+ * @param context - The expression check context.
+ * @returns The element's kind, or null if the container's element kinds are
+ * not statically known or the index is outside them.
+ */
+function inferElementKind(
+  expr: TupleIndexNode | ArrayIndexNode | FieldAccessNode,
+  context: ExprCheckContext,
+): ValueKind | null {
+  if (expr.kind === "TupleIndex") {
+    const kinds = tupleElementKinds(expr.operand, context);
+    return kinds ? (kinds[expr.index] ?? null) : null;
   }
   if (expr.kind === "FieldAccess") {
     const kinds = structFieldKinds(expr.operand, context);
     return kinds ? (kinds[expr.field] ?? null) : null;
   }
-  return null;
+  const kinds = arrayElementKinds(expr.operand, context);
+  if (!kinds) return null;
+  const index = literalIndex(expr.index);
+  return index !== null && index < kinds.length ? (kinds[index] ?? null) : null;
 }
 
 /**

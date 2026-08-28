@@ -2,6 +2,7 @@ import assert from "node:assert";
 import type { TuffResult } from "./errors.ts";
 import type { BinaryNodeKind } from "./expr.ts";
 import type {
+  BlockExprNode,
   CallNode,
   ForNode,
   RefNode,
@@ -478,6 +479,26 @@ function executeCall(node: CallNode, env: Environment): TuffValue {
 }
 
 /**
+ * Evaluate a block expression: run its statements in a fresh scope and take
+ * the value of its last statement, which the parser desugared to a `return`.
+ * @param node {BlockExprNode} - The block expression node.
+ * @param env {Environment} - The evaluation environment.
+ * @returns {TuffValue} The value the block returned.
+ */
+function evalBlockExpr(node: BlockExprNode, env: Environment): TuffValue {
+  env.scopes.push(new Map());
+  try {
+    const result = executeStatements(node.statements, 1, env);
+    if (!isReturn(result)) {
+      assert(false, "block expression must return a value");
+    }
+    return result.value;
+  } finally {
+    env.scopes.pop();
+  }
+}
+
+/**
  * Evaluate a parsed expression to a runtime value.
  * @param node {TuffExpr} - The expression node.
  * @param env {Environment} - The evaluation environment.
@@ -539,6 +560,7 @@ function evalExpr(node: TuffExpr, env: Environment): TuffValue {
     return field;
   }
   if (node.kind === "Call") return executeCall(node, env);
+  if (node.kind === "BlockExpr") return evalBlockExpr(node, env);
   assert(node.kind !== "Is", "is type-test must be folded before execution");
   const rule = BINARY_RULES[node.kind];
   const left = evalExpr(node.left, env);

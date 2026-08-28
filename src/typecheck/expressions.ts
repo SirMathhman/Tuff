@@ -18,12 +18,31 @@ import {
   literalIndex,
   structFieldKinds,
   tupleElementKinds,
+  type CheckContext,
   type DeclaredBinding,
   type ExprCheckContext,
   type ResolvedDeref,
 } from "./kinds.ts";
 import { checkIsOperand } from "./is-match.ts";
 import { isNumberSuffix, suffixSpec } from "./suffixes.ts";
+
+/**
+ * Build the expression-level check context from a statement-level check
+ * context, exposing the binding, struct, and function stacks plus the
+ * dereference resolver and the block-expression checker to the expression
+ * walkers.
+ * @param context - The mutable statement-level check context.
+ * @returns The expression-level check context.
+ */
+export function exprContext(context: CheckContext): ExprCheckContext {
+  return {
+    scopes: context.scopes,
+    structs: context.structs,
+    fns: context.fns,
+    resolveDeref,
+    checkBlockExpr: (expr, line) => context.checkBlockExpr(expr, line, context),
+  };
+}
 
 /**
  * Resolve a dereference operand to the binding it references.
@@ -155,6 +174,12 @@ export function findUndeclared(
   if (expr.kind === "Call") {
     return checkCall(expr, line, context);
   }
+  if (expr.kind === "BlockExpr") {
+    // Every check the statement walk applies reaches the block's statements
+    // through the block-expression checker, including their own suffix,
+    // range, and `is` folding passes.
+    return context.checkBlockExpr(expr, line).error;
+  }
   return null;
 }
 
@@ -198,7 +223,9 @@ function checkCall(
  * Check the type suffixes in an expression: a literal suffix outside the
  * legal set is an InvalidNumberSuffix, a value outside the suffix's range is
  * a NumberOutOfRange, and an `is` right operand that is not a legal suffix
- * name is an InvalidNumberSuffix.
+ * name is an InvalidNumberSuffix. A block expression's statements carry this
+ * check through the statement walk the block-expression checker runs over
+ * them.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
  * @returns An InvalidNumberSuffix or NumberOutOfRange error if a literal
@@ -277,7 +304,8 @@ export function checkNumberSuffixes(
 
 /**
  * Check the bounds of every range literal in an expression: a non-numeric
- * bound is a TypeMismatch.
+ * bound is a TypeMismatch. A block expression's statements carry this check
+ * through the statement walk the block-expression checker runs over them.
  * @param expr - The expression to inspect.
  * @param line - The 1-based line number.
  * @param context - The expression check context.

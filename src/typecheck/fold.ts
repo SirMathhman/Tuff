@@ -29,7 +29,9 @@ export function foldStatement(
 
 /**
  * Fold the `is` type-tests in an expression, returning the (possibly
- * replaced) expression.
+ * replaced) expression. A block expression's statements are folded by the
+ * statement walk the block-expression checker runs over them, so no `Is` node
+ * survives inside one either.
  * @param expr - The expression to fold.
  * @param context - The expression check context.
  * @returns The folded expression: a boolean literal where an `Is` node was,

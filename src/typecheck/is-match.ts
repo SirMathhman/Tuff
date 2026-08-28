@@ -241,6 +241,9 @@ export function exprSuffix(
   if (expr.kind === "Call") {
     return findFn(context.fns, expr.name)?.returnSuffix;
   }
+  if (expr.kind === "BlockExpr") {
+    return context.checkBlockExpr(expr, 0).suffix;
+  }
   if (expr.kind === "Add") {
     const left = exprSuffix(expr.left, context);
     const right = exprSuffix(expr.right, context);

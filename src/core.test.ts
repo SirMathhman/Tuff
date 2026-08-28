@@ -17,6 +17,13 @@ test('evaluateTuff("{ 100 }") => 100', () => {
   expect(evaluateTuff("{ 100 }")).toEqual({ ok: true, value: 100 });
 });
 
+test('evaluateTuff("let x = { let y = 100; y }; x") => 100', () => {
+  expect(evaluateTuff("let x = { let y = 100; y }; x")).toEqual({
+    ok: true,
+    value: 100,
+  });
+});
+
 test('evaluateTuff("return 1;") => 1', () => {
   expect(evaluateTuff("return 1;")).toEqual({ ok: true, value: 1 });
 });

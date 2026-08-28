@@ -2,6 +2,7 @@ import type { TuffError } from "../errors.ts";
 import type {
   ArrayIndexNode,
   AssignNode,
+  BlockExprNode,
   ForNode,
   IfNode,
   KindName,
@@ -21,6 +22,7 @@ import {
   literalIndex,
   resolveKindName,
   structFieldKinds,
+  type BlockExprCheck,
   type CheckContext,
   type DeclaredBinding,
   type ExprCheckContext,
@@ -30,30 +32,15 @@ import {
 import {
   checkNumberSuffixes,
   checkRangeLiterals,
+  exprContext,
   findUndeclared,
   resolveDeref,
   resolveIndex,
 } from "./expressions.ts";
 import { foldStatement } from "./fold.ts";
 import { checkFn } from "./fn.ts";
-import { annotationMatch, checkKindName } from "./is-match.ts";
+import { annotationMatch, checkKindName, exprSuffix } from "./is-match.ts";
 import { checkReservedName } from "./reserved.ts";
-
-/**
- * Build the expression-level check context from a statement-level check
- * context, exposing the binding, struct, and function stacks plus the
- * dereference resolver to the expression walkers.
- * @param context - The mutable statement-level check context.
- * @returns The expression-level check context.
- */
-function exprContext(context: CheckContext): ExprCheckContext {
-  return {
-    scopes: context.scopes,
-    structs: context.structs,
-    fns: context.fns,
-    resolveDeref,
-  };
-}
 
 /**
  * Statically check a parsed program for semantic errors.
@@ -78,6 +65,7 @@ export function typecheckProgram(
     structs: [{}],
     fns: [{}],
     inLoop: false,
+    checkBlockExpr,
   };
   const error = checkStatements(statements, baseLine, context);
   if (error) return error;
@@ -139,18 +127,9 @@ function checkStatementBody(
   context: CheckContext,
 ): TuffError | null {
   if (stmt.kind === "Block") {
-    context.scopes.push({});
-    context.aliases.push({});
-    context.structs.push({});
-    context.fns.push({});
-    try {
-      return checkStatements(stmt.statements, line, context);
-    } finally {
-      context.scopes.pop();
-      context.aliases.pop();
-      context.structs.pop();
-      context.fns.pop();
-    }
+    return inFreshScope(context, () =>
+      checkStatements(stmt.statements, line, context),
+    );
   }
   if (stmt.kind === "Let") return checkLet(stmt, line, context);
   if (stmt.kind === "Type") return checkType(stmt, line, context.aliases);
@@ -200,9 +179,7 @@ function checkLet(
       stmt.value,
       stmt.name,
       line,
-      scopes,
-      context.aliases,
-      context.structs,
+      context,
     );
     if (annotationError) return annotationError;
   }
@@ -252,9 +229,7 @@ function checkLet(
  * @param value - The initializer expression.
  * @param name - The binding name, for error reporting.
  * @param line - The 1-based line number.
- * @param scopes - The stack of declared bindings.
- * @param aliases - The stack of declared type aliases.
- * @param structs - The stack of declared structs.
+ * @param context - The mutable check context.
  * @returns An InvalidNumberSuffix or TypeMismatch error, else null.
  */
 function checkAnnotation(
@@ -262,21 +237,12 @@ function checkAnnotation(
   value: TuffExpr,
   name: string,
   line: number,
-  scopes: Record<string, DeclaredBinding>[],
-  aliases: Record<string, KindName>[],
-  structs: Record<string, StructDef>[],
+  context: CheckContext,
 ): TuffError | null {
-  const resolved = resolveKindName(annotation, aliases);
-  const nameError = checkKindName(resolved, line, structs);
+  const resolved = resolveKindName(annotation, context.aliases);
+  const nameError = checkKindName(resolved, line, context.structs);
   if (nameError) return nameError;
-  if (
-    !annotationMatch(value, resolved, {
-      scopes,
-      structs,
-      fns: [],
-      resolveDeref,
-    })
-  ) {
+  if (!annotationMatch(value, resolved, exprContext(context))) {
     return { kind: "TypeMismatch", name, line };
   }
   return null;
@@ -348,18 +314,88 @@ function checkInScope(
   line: number,
   context: CheckContext,
 ): TuffError | null {
+  return inFreshScope(context, () => checkStatement(stmt, line, context));
+}
+
+/**
+ * Run a check in a fresh scope, always popping it afterwards. Every scope
+ * stack the context carries is pushed and popped together, mirroring the
+ * evaluator's scope semantics.
+ * @param context - The mutable check context.
+ * @param run - The check to run in the fresh scope.
+ * @returns Whatever the check returns.
+ */
+function inFreshScope<T>(context: CheckContext, run: () => T): T {
   context.scopes.push({});
   context.aliases.push({});
   context.structs.push({});
   context.fns.push({});
   try {
-    return checkStatement(stmt, line, context);
+    return run();
   } finally {
     context.scopes.pop();
     context.aliases.pop();
     context.structs.pop();
     context.fns.pop();
   }
+}
+
+/**
+ * Check a block expression: its statements in a fresh scope, then the kind of
+ * its value. Reached from the expression walkers through the check context,
+ * so a block expression is checked exactly like the block statement it is
+ * spelled as.
+ * @param expr - The block expression to check.
+ * @param line - The 1-based line of the block's first statement.
+ * @param context - The mutable check context.
+ * @returns The block's first semantic error, or the kind of its value.
+ */
+function checkBlockExpr(
+  expr: BlockExprNode,
+  line: number,
+  context: CheckContext,
+): BlockExprCheck {
+  return inFreshScope(context, () =>
+    checkBlockValue(expr.statements, line, context),
+  );
+}
+
+/**
+ * Check the statements of a block expression, whose scope is already pushed,
+ * and infer the kind and number-suffix of its value: the value of its last
+ * statement, which must be a `return` (a bare tail expression is one) or a
+ * nested block that itself ends in one. A block that ends in anything else
+ * has no value, which is a TypeMismatch.
+ * @param statements - The block's statements, in source order.
+ * @param line - The 1-based line of the block's first statement.
+ * @param context - The mutable check context.
+ * @returns The block's first semantic error, or the kind of its value.
+ */
+function checkBlockValue(
+  statements: TuffStatement[],
+  line: number,
+  context: CheckContext,
+): BlockExprCheck {
+  const last = statements[statements.length - 1];
+  const lastLine = line + statements.length - 1;
+  const error = checkStatements(statements.slice(0, -1), line, context);
+  if (error) return { error, kind: null };
+  if (last?.kind === "Block") {
+    return inFreshScope(context, () =>
+      checkBlockValue(last.statements, lastLine, context),
+    );
+  }
+  const lastError = last ? checkStatement(last, lastLine, context) : null;
+  if (lastError) return { error: lastError, kind: null };
+  if (last?.kind !== "Return") {
+    return { error: { kind: "TypeMismatch", name: "", line }, kind: null };
+  }
+  const exprCtx = exprContext(context);
+  return {
+    error: null,
+    kind: inferKind(last.value, exprCtx),
+    suffix: exprSuffix(last.value, exprCtx),
+  };
 }
 
 /**

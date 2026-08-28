@@ -1,13 +1,14 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
 import { tokenDetail } from "./tokenizer.ts";
-import type {
-  FnParam,
-  KindName,
-  Pos,
-  StructField,
-  TuffExpr,
-  TuffStatement,
+import {
+  isStatement,
+  type FnParam,
+  type KindName,
+  type Pos,
+  type StructField,
+  type TuffExpr,
+  type TuffStatement,
 } from "./ast.ts";
 import {
   isExpr,
@@ -17,16 +18,20 @@ import {
   parseLevel,
   parseOperand,
   type BinaryNodeKind,
+  type ParseStatement,
 } from "./expr.ts";
 
+export type { ParseStatement } from "./expr.ts";
+
 /**
- * A function that parses one statement from a token list.
- * Passed to the statement parsers to break their mutual recursion.
+ * A function that parses the rest of a keyword statement, with the keyword
+ * itself already consumed. The shape every entry of the keyword table shares.
  */
-export type ParseStatement = (
+type ParseKeyword = (
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ) => TuffStatement | TuffError;
 
 /**
@@ -34,12 +39,15 @@ export type ParseStatement = (
  * @param tokens {TuffToken[]} - The token list; the name already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the value.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The value expression, or a TuffError.
  */
 function parseValue(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   if (tokens[pos.i]?.kind !== "Assign") {
     return {
@@ -49,7 +57,7 @@ function parseValue(
     };
   }
   pos.i++;
-  const value = parseLevel(tokens, pos, line, 0);
+  const value = parseLevel(tokens, pos, line, 0, parseStatement);
   if (!isExpr(value)) return value;
   return value;
 }
@@ -72,6 +80,8 @@ const COMPOUND_OPS: CompoundOp[] = [{ token: "PlusAssign", node: "Add" }];
  * @param pos {Pos} - The mutable parse position, advanced past the assignment.
  * @param line {number} - The 1-based line number.
  * @param target {TuffExpr} - The target expression: an identifier or an array index.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffStatement | TuffError} The Assign node, or a TuffError.
  */
 function parseAssign(
@@ -79,11 +89,12 @@ function parseAssign(
   pos: Pos,
   line: number,
   target: TuffExpr,
+  parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
   for (const op of COMPOUND_OPS) {
     if (tokens[pos.i]?.kind !== op.token) continue;
     pos.i++;
-    const rhs = parseLevel(tokens, pos, line, 0);
+    const rhs = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(rhs)) return rhs;
     return {
       kind: "Assign",
@@ -91,7 +102,7 @@ function parseAssign(
       value: { kind: op.node, left: target, right: rhs },
     };
   }
-  const value = parseValue(tokens, pos, line);
+  const value = parseValue(tokens, pos, line, parseStatement);
   if (!isExpr(value)) return value;
   return { kind: "Assign", target, value };
 }
@@ -101,12 +112,15 @@ function parseAssign(
  * @param tokens {TuffToken[]} - The token list; `let` already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the declaration.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffStatement | TuffError} The Let node, or a TuffError.
  */
 function parseLet(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
   let mut = false;
   const mutTok = tokens[pos.i];
@@ -126,7 +140,7 @@ function parseLet(
     if (!isKindName(parsed)) return parsed;
     annotation = parsed;
   }
-  const value = parseValue(tokens, pos, line);
+  const value = parseValue(tokens, pos, line, parseStatement);
   if (!isExpr(value)) return value;
   return { kind: "Let", mut, name: nameTok.name, annotation, value };
 }
@@ -158,12 +172,15 @@ function parseAndCollect(
  * @param tokens {TuffToken[]} - The token list; the keyword already consumed.
  * @param pos {Pos} - The mutable parse position, advanced past the condition.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The condition expression, or a TuffError.
  */
 function parseCondition(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   if (tokens[pos.i]?.kind !== "LParen") {
     return {
@@ -173,7 +190,7 @@ function parseCondition(
     };
   }
   pos.i++;
-  const condition = parseLevel(tokens, pos, line, 0);
+  const condition = parseLevel(tokens, pos, line, 0, parseStatement);
   if (!isExpr(condition)) return condition;
   if (tokens[pos.i]?.kind !== "RParen") {
     return {
@@ -184,6 +201,26 @@ function parseCondition(
   }
   pos.i++;
   return condition;
+}
+
+/**
+ * Parse a parenthesized condition for an `if` or `while` statement,
+ * narrowing the result to an expression.
+ * @param tokens {TuffToken[]} - The token list; the keyword already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the condition.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
+ * @returns {TuffExpr | TuffError} The condition expression, or a TuffError.
+ */
+function parseConditionExpr(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffExpr | TuffError {
+  const condition = parseCondition(tokens, pos, line, parseStatement);
+  return isExpr(condition) ? condition : condition;
 }
 
 /**
@@ -200,7 +237,7 @@ function parseIf(
   line: number,
   parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
-  const condition = parseCondition(tokens, pos, line);
+  const condition = parseConditionExpr(tokens, pos, line, parseStatement);
   if (!isExpr(condition)) return condition;
   const then = parseStatement(tokens, pos, line);
   if (!isStatement(then)) {
@@ -242,11 +279,11 @@ function parseWhile(
   line: number,
   parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
-  const condition = parseCondition(tokens, pos, line);
-  if (!isExpr(condition)) return condition;
+  const cond = parseConditionExpr(tokens, pos, line, parseStatement);
+  if (!isExpr(cond)) return cond;
   const body = parseLoopBody(tokens, pos, line, parseStatement);
   if (!isStatement(body)) return body;
-  return { kind: "While", condition, body };
+  return { kind: "While", condition: cond, body };
 }
 
 /**
@@ -308,7 +345,7 @@ function parseFor(
     return { kind: "InvalidStatement", token: tokenDetail(inTok), line };
   }
   pos.i++;
-  const range = parseLevel(tokens, pos, line, 0);
+  const range = parseLevel(tokens, pos, line, 0, parseStatement);
   if (!isExpr(range)) return range;
   if (tokens[pos.i]?.kind !== "RParen") {
     return {
@@ -556,48 +593,160 @@ function parseFn(
 }
 
 /**
- * Parse a statement that begins with an identifier: a keyword (`let`,
- * `type`, `struct`, `fn`, `return`, `if`, `while`, `break`, `continue`) or
- * an assignment whose target is an identifier or an array index.
- * @param tokens {TuffToken[]} - The token list; the identifier already consumed.
- * @param pos {Pos} - The mutable parse position, advanced past the statement.
- * @param line {number} - The 1-based line number.
- * @param name {string} - The leading identifier name.
- * @returns {TuffStatement | TuffError} The statement node, or a TuffError.
+ * The statement keywords, mapped to the parser that parses the rest of the
+ * statement. A leading identifier that is not in this table starts an
+ * assignment or a bare expression.
  */
-function parseIdentStatement(
+const KEYWORDS: Record<string, ParseKeyword> = {
+  let: parseLet,
+  type: parseType,
+  struct: parseStruct,
+  fn: parseFn,
+  return: parseReturn,
+  if: parseIf,
+  while: parseWhile,
+  for: parseFor,
+  break: () => ({ kind: "Break" }),
+  continue: () => ({ kind: "Continue" }),
+};
+
+/**
+ * Parse a `return` statement: `return expr`.
+ * @param tokens {TuffToken[]} - The token list; `return` already consumed.
+ * @param pos {Pos} - The mutable parse position, advanced past the value.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
+ * @returns {TuffStatement | TuffError} The Return node, or a TuffError.
+ */
+function parseReturn(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
-  name: string,
+  parseStatement: ParseStatement,
 ): TuffStatement | TuffError {
-  if (name === "let") return parseLet(tokens, pos, line);
-  if (name === "type") return parseType(tokens, pos, line);
-  if (name === "struct") return parseStruct(tokens, pos, line);
-  if (name === "fn") return parseFn(tokens, pos, line);
-  if (name === "return") {
-    const value = parseLevel(tokens, pos, line, 0);
-    if (!isExpr(value)) return value;
-    return { kind: "Return", value };
-  }
-  if (name === "if") return parseIf(tokens, pos, line, parseStatement);
-  if (name === "while") return parseWhile(tokens, pos, line, parseStatement);
-  if (name === "for") return parseFor(tokens, pos, line, parseStatement);
-  if (name === "break") return { kind: "Break" };
-  if (name === "continue") return { kind: "Continue" };
-  let target: TuffExpr = { kind: "Identifier", name };
-  for (;;) {
-    if (tokens[pos.i]?.kind !== "LBracket") break;
-    pos.i++;
-    const index = parseIndexSuffix(tokens, pos, line);
-    if (!isExpr(index)) return index;
-    target = { kind: "ArrayIndex", operand: target, index };
-  }
-  return parseAssign(tokens, pos, line, target);
+  const value = parseLevel(tokens, pos, line, 0, parseStatement);
+  if (!isExpr(value)) return value;
+  return { kind: "Return", value };
 }
 
 /**
- * Parse a single statement: a block, `let`, `return`, `if`, or an assignment.
+ * Parse an assignment target: an identifier followed by any number of
+ * `[index]` suffixes, or a dereference. Returns null when the statement does
+ * not begin with a target, so the caller parses it as an expression instead.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the target.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions in an index.
+ * @returns {TuffExpr | TuffError | null} The target, a TuffError, or null.
+ */
+function parseTarget(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffExpr | TuffError | null {
+  const token = tokens[pos.i];
+  if (token?.kind === "Deref") {
+    return parseOperand(tokens, pos, line, parseStatement);
+  }
+  if (token?.kind !== "Ident") return null;
+  pos.i++;
+  let target: TuffExpr = { kind: "Identifier", name: token.name };
+  while (tokens[pos.i]?.kind === "LBracket") {
+    pos.i++;
+    const index = parseIndexSuffix(tokens, pos, line, parseStatement);
+    if (!isExpr(index)) return index;
+    target = { kind: "ArrayIndex", operand: target, index };
+  }
+  return target;
+}
+
+/**
+ * Whether an assignment tail (`=` or a compound `op=`) starts at a token.
+ * @param token {TuffToken | undefined} - The token to test.
+ * @returns {boolean} True if the token opens an assignment.
+ */
+function startsAssignment(token: TuffToken | undefined): boolean {
+  if (!token) return false;
+  if (token.kind === "Assign") return true;
+  return COMPOUND_OPS.some((op) => op.token === token.kind);
+}
+
+/**
+ * Whether the statement that just ended is in tail position: the value of its
+ * enclosing block or program, so a bare expression there is its value.
+ * @param token {TuffToken | undefined} - The token following the statement.
+ * @returns {boolean} True at a closing brace or the end of the input.
+ */
+function inTailPosition(token: TuffToken | undefined): boolean {
+  return !token || token.kind === "RBrace";
+}
+
+/**
+ * Parse a statement that is an assignment or a bare expression. A statement
+ * that opens with an assignment target (an identifier or a dereference) is an
+ * assignment when an assignment tail follows it, and otherwise is a bare
+ * expression only in tail position — elsewhere the incomplete assignment
+ * stands, and reports its own error. A statement that opens with anything
+ * else is always a bare expression, desugared to a `return`.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the statement.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
+ * @returns {TuffStatement | TuffError} The statement node, or a TuffError.
+ */
+function parseAssignOrExpr(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
+  const start = pos.i;
+  const target = parseTarget(tokens, pos, line, parseStatement);
+  if (target === null) return parseBareExpr(tokens, pos, line, parseStatement);
+  if (!isExpr(target)) return target;
+  if (startsAssignment(tokens[pos.i])) {
+    return parseAssign(tokens, pos, line, target, parseStatement);
+  }
+  const afterTarget = pos.i;
+  pos.i = start;
+  const value = parseLevel(tokens, pos, line, 0, parseStatement);
+  if (isExpr(value) && inTailPosition(tokens[pos.i])) {
+    return { kind: "Return", value };
+  }
+  pos.i = afterTarget;
+  return parseAssign(tokens, pos, line, target, parseStatement);
+}
+
+/**
+ * Parse a bare expression statement, desugaring it to a `return`.
+ * @param tokens {TuffToken[]} - The token list.
+ * @param pos {Pos} - The mutable parse position, advanced past the expression.
+ * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
+ * @returns {TuffStatement | TuffError} The Return node, or a TuffError.
+ */
+function parseBareExpr(
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+  parseStatement: ParseStatement,
+): TuffStatement | TuffError {
+  const token = tokens[pos.i];
+  const value = parseLevel(tokens, pos, line, 0, parseStatement);
+  if (!isExpr(value)) {
+    return { kind: "InvalidStatement", token: tokenDetail(token), line };
+  }
+  return { kind: "Return", value };
+}
+
+/**
+ * Parse a single statement: a block, a keyword statement, an assignment, or a
+ * bare expression.
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the statement.
  * @param line {number} - The 1-based line number.
@@ -615,42 +764,11 @@ export function parseStatement(
     return parseBlock(tokens, pos, line, parseStatement);
   }
   if (token.kind === "Ident") {
-    const name = token.name;
-    pos.i++;
-    return parseIdentStatement(tokens, pos, line, name);
+    const keyword = KEYWORDS[token.name];
+    if (keyword) {
+      pos.i++;
+      return keyword(tokens, pos, line, parseStatement);
+    }
   }
-  if (token.kind === "Deref") {
-    const target = parseOperand(tokens, pos, line);
-    if (!isExpr(target)) return target;
-    const value = parseValue(tokens, pos, line);
-    if (!isExpr(value)) return value;
-    return { kind: "Assign", target, value };
-  }
-  const value = parseLevel(tokens, pos, line, 0);
-  if (isExpr(value)) return { kind: "Return", value };
-  return { kind: "InvalidStatement", token: tokenDetail(token), line };
-}
-
-/**
- * Type guard distinguishing a parsed statement node from an error.
- * @param value {TuffStatement | TuffError} - The value to test.
- * @returns {boolean} True if the value is a statement node.
- */
-export function isStatement(
-  value: TuffStatement | TuffError,
-): value is TuffStatement {
-  return (
-    value.kind === "Let" ||
-    value.kind === "Type" ||
-    value.kind === "Struct" ||
-    value.kind === "Fn" ||
-    value.kind === "Assign" ||
-    value.kind === "Return" ||
-    value.kind === "Block" ||
-    value.kind === "If" ||
-    value.kind === "While" ||
-    value.kind === "For" ||
-    value.kind === "Break" ||
-    value.kind === "Continue"
-  );
+  return parseAssignOrExpr(tokens, pos, line, parseStatement);
 }

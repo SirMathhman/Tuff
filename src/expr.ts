@@ -1,7 +1,25 @@
 import type { TuffError } from "./errors.ts";
 import type { TuffToken } from "./tokenizer.ts";
-import type { KindName, Pos, StructLiteralField, TuffExpr } from "./ast.ts";
+import {
+  isStatement,
+  type KindName,
+  type Pos,
+  type StructLiteralField,
+  type TuffExpr,
+  type TuffStatement,
+} from "./ast.ts";
 import { bool, num } from "./values.ts";
+
+/**
+ * A function that parses one statement from a token list. Passed to the
+ * expression parsers so a block expression can parse its statements, breaking
+ * the mutual recursion between the expression and statement grammars.
+ */
+export type ParseStatement = (
+  tokens: TuffToken[],
+  pos: Pos,
+  line: number,
+) => TuffStatement | TuffError;
 
 /** The node kinds of the binary operators, shared with the evaluator's rule table. */
 export type BinaryNodeKind = "Or" | "And" | "Add" | "Equal" | "Less" | "Range";
@@ -104,7 +122,8 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
     value.kind === "ArrayIndex" ||
     value.kind === "StructLiteral" ||
     value.kind === "FieldAccess" ||
-    value.kind === "Call"
+    value.kind === "Call" ||
+    value.kind === "BlockExpr"
   ) {
     return true;
   }
@@ -120,6 +139,8 @@ export function isExpr(value: TuffExpr | TuffError): value is TuffExpr {
  * @param first {TuffExpr} - The already-parsed first element.
  * @param close {"RParen" | "RBracket"} - The expected closing token kind.
  * @param node {"Tuple" | "Array"} - The node kind to build.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions in the element list.
  * @returns {TuffExpr | TuffError} The Tuple or Array node, or a TuffError.
  */
 function parseElementList(
@@ -129,11 +150,12 @@ function parseElementList(
   first: TuffExpr,
   close: "RParen" | "RBracket",
   node: "Tuple" | "Array",
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   const elements: TuffExpr[] = [first];
   while (tokens[pos.i]?.kind === "Comma") {
     pos.i++;
-    const element = parseLevel(tokens, pos, line, 0);
+    const element = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(element)) return element;
     elements.push(element);
   }
@@ -152,14 +174,17 @@ function parseElementList(
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the operand.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
  */
 export function parseOperand(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
-  const operand = parsePrimary(tokens, pos, line);
+  const operand = parsePrimary(tokens, pos, line, parseStatement);
   if (!isExpr(operand)) return operand;
   let left: TuffExpr = operand;
   for (;;) {
@@ -180,7 +205,7 @@ export function parseOperand(
     }
     if (tokens[pos.i]?.kind === "LBracket") {
       pos.i++;
-      const index = parseIndexSuffix(tokens, pos, line);
+      const index = parseIndexSuffix(tokens, pos, line, parseStatement);
       if (!isExpr(index)) return index;
       left = { kind: "ArrayIndex", operand: left, index };
       continue;
@@ -195,14 +220,17 @@ export function parseOperand(
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the suffix.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions in the index.
  * @returns {TuffExpr | TuffError} The index expression, or a TuffError.
  */
 export function parseIndexSuffix(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
-  const index = parseLevel(tokens, pos, line, 0);
+  const index = parseLevel(tokens, pos, line, 0, parseStatement);
   if (!isExpr(index)) return index;
   const close = tokens[pos.i];
   if (close?.kind !== "RBracket") {
@@ -217,12 +245,15 @@ export function parseIndexSuffix(
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the reference.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The Ref node, or a TuffError.
  */
 function parseRef(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   let mut = false;
   const mutTok = tokens[pos.i];
@@ -230,7 +261,7 @@ function parseRef(
     mut = true;
     pos.i++;
   }
-  const operand = parseOperand(tokens, pos, line);
+  const operand = parseOperand(tokens, pos, line, parseStatement);
   if (!isExpr(operand)) return operand;
   return { kind: "Ref", mut, operand };
 }
@@ -242,6 +273,8 @@ function parseRef(
  * @param pos {Pos} - The mutable parse position, advanced past the literal.
  * @param line {number} - The 1-based line number.
  * @param name {string} - The struct name the literal constructs.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions in field initializers.
  * @returns {TuffExpr | TuffError} The StructLiteral node, or a TuffError.
  */
 function parseStructLiteral(
@@ -249,6 +282,7 @@ function parseStructLiteral(
   pos: Pos,
   line: number,
   name: string,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   const fields: StructLiteralField[] = [];
   for (;;) {
@@ -262,7 +296,7 @@ function parseStructLiteral(
       return { kind: "InvalidExpression", expression: "", line };
     }
     pos.i++;
-    const value = parseLevel(tokens, pos, line, 0);
+    const value = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(value)) return value;
     fields.push({ name: fieldTok.name, value });
     if (tokens[pos.i]?.kind === "Comma") {
@@ -283,6 +317,8 @@ function parseStructLiteral(
  * @param pos {Pos} - The mutable parse position, advanced past the call.
  * @param line {number} - The 1-based line number.
  * @param name {string} - The function name being called.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions in the arguments.
  * @returns {TuffExpr | TuffError} The Call node, or a TuffError.
  */
 function parseCall(
@@ -290,6 +326,7 @@ function parseCall(
   pos: Pos,
   line: number,
   name: string,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   pos.i++;
   const args: TuffExpr[] = [];
@@ -298,7 +335,7 @@ function parseCall(
     return { kind: "Call", name, args };
   }
   for (;;) {
-    const arg = parseLevel(tokens, pos, line, 0);
+    const arg = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(arg)) return arg;
     args.push(arg);
     if (tokens[pos.i]?.kind === "Comma") {
@@ -315,16 +352,19 @@ function parseCall(
 
 /**
  * Parse a primary operand: a literal, an identifier, a parenthesized
- * expression, or a tuple literal.
+ * expression, a tuple literal, an array literal, or a block expression.
  * @param tokens {TuffToken[]} - The token list.
  * @param pos {Pos} - The mutable parse position, advanced past the operand.
  * @param line {number} - The 1-based line number.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The operand node, or a TuffError.
  */
 function parsePrimary(
   tokens: TuffToken[],
   pos: Pos,
   line: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   const token = tokens[pos.i];
   if (!token) return { kind: "InvalidExpression", expression: "", line };
@@ -340,11 +380,11 @@ function parsePrimary(
   }
   if (token.kind === "Ref") {
     pos.i++;
-    return parseRef(tokens, pos, line);
+    return parseRef(tokens, pos, line, parseStatement);
   }
   if (token.kind === "Deref") {
     pos.i++;
-    const operand = parseOperand(tokens, pos, line);
+    const operand = parseOperand(tokens, pos, line, parseStatement);
     if (!isExpr(operand)) return operand;
     return { kind: "Deref", operand };
   }
@@ -352,19 +392,38 @@ function parsePrimary(
     pos.i++;
     if (tokens[pos.i]?.kind === "LBrace") {
       pos.i++;
-      return parseStructLiteral(tokens, pos, line, token.name);
+      return parseStructLiteral(tokens, pos, line, token.name, parseStatement);
     }
     if (tokens[pos.i]?.kind === "LParen") {
-      return parseCall(tokens, pos, line, token.name);
+      return parseCall(tokens, pos, line, token.name, parseStatement);
     }
     return { kind: "Identifier", name: token.name };
   }
+  if (token.kind === "LBrace") {
+    // A block in operand position is a block expression: the statement parser
+    // parses the braces, and its last statement (desugared to a `return`) is
+    // the block's value.
+    const block = parseStatement(tokens, pos, line);
+    if (!isStatement(block)) return block;
+    if (block.kind !== "Block") {
+      return { kind: "InvalidExpression", expression: "", line };
+    }
+    return { kind: "BlockExpr", statements: block.statements };
+  }
   if (token.kind === "LParen") {
     pos.i++;
-    const first = parseLevel(tokens, pos, line, 0);
+    const first = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(first)) return first;
     if (tokens[pos.i]?.kind === "Comma") {
-      return parseElementList(tokens, pos, line, first, "RParen", "Tuple");
+      return parseElementList(
+        tokens,
+        pos,
+        line,
+        first,
+        "RParen",
+        "Tuple",
+        parseStatement,
+      );
     }
     const close = tokens[pos.i];
     if (close?.kind !== "RParen") {
@@ -379,13 +438,21 @@ function parsePrimary(
       pos.i++;
       return { kind: "Array", elements: [] };
     }
-    const first = parseLevel(tokens, pos, line, 0);
+    const first = parseLevel(tokens, pos, line, 0, parseStatement);
     if (!isExpr(first)) return first;
     if (tokens[pos.i]?.kind === "RBracket") {
       pos.i++;
       return { kind: "Array", elements: [first] };
     }
-    return parseElementList(tokens, pos, line, first, "RBracket", "Array");
+    return parseElementList(
+      tokens,
+      pos,
+      line,
+      first,
+      "RBracket",
+      "Array",
+      parseStatement,
+    );
   }
   return { kind: "InvalidExpression", expression: "", line };
 }
@@ -396,6 +463,8 @@ function parsePrimary(
  * @param pos {Pos} - The mutable parse position, advanced past the expression.
  * @param line {number} - The 1-based line number.
  * @param level {number} - The index into BINARY_OPS; the next level binds tighter.
+ * @param parseStatement {ParseStatement} - The statement parser, for block
+ * expressions.
  * @returns {TuffExpr | TuffError} The expression node, or a TuffError.
  */
 export function parseLevel(
@@ -403,10 +472,11 @@ export function parseLevel(
   pos: Pos,
   line: number,
   level: number,
+  parseStatement: ParseStatement,
 ): TuffExpr | TuffError {
   const op = BINARY_OPS[level];
-  if (!op) return parseOperand(tokens, pos, line);
-  const first = parseLevel(tokens, pos, line, level + 1);
+  if (!op) return parseOperand(tokens, pos, line, parseStatement);
+  const first = parseLevel(tokens, pos, line, level + 1, parseStatement);
   if (!isExpr(first)) return first;
   let left: TuffExpr = first;
   while (op.startsAt(tokens, pos.i)) {
@@ -419,8 +489,8 @@ export function parseLevel(
     }
     const right =
       op.assoc === "right"
-        ? parseLevel(tokens, pos, line, level)
-        : parseLevel(tokens, pos, line, level + 1);
+        ? parseLevel(tokens, pos, line, level, parseStatement)
+        : parseLevel(tokens, pos, line, level + 1, parseStatement);
     if (!isExpr(right)) return right;
     left = { kind: op.node, left, right };
   }
