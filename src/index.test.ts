@@ -41,6 +41,13 @@ test('evaluate("{ let x = 2 + 3; x } * 4") => 20', () => {
   expect(evaluate("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test('evaluate("{ let x = y; x }") => error naming y', () => {
+  expect(evaluate("{ let x = y; x }")).toEqual({
+    ok: false,
+    error: { kind: "unknown-variable", input: "{ let x = y; x }", name: "y" },
+  });
+});
+
 test('evaluate("abc") => error', () => {
   expect(evaluate("abc")).toEqual({
     ok: false,

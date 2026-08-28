@@ -51,17 +51,20 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
     return { ok: true, value };
   }
   if (node.kind === "block") {
+    const values: Record<string, number> = {};
     const child: Env = {
       get: (name: string) => {
-        for (const binding of node.bindings) {
-          if (binding.name === name) {
-            const out = evalAst(binding.value, child);
-            return out.ok ? out.value : undefined;
-          }
-        }
-        return env.get(name);
+        const value = values[name];
+        return value === undefined ? env.get(name) : value;
       },
     };
+    for (const binding of node.bindings) {
+      const out = evalAst(binding.value, child);
+      if (!out.ok) {
+        return out;
+      }
+      values[binding.name] = out.value;
+    }
     return evalAst(node.body, child);
   }
   const left = evalAst(node.left, env);
