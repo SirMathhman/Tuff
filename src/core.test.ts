@@ -466,3 +466,12 @@ test('evaluateTuff("let x = 1;\nlet y = @") => Err', () => {
     });
   }
 });
+
+test('evaluateTuff("let a = 0; let mut b = &a; { let c = 0; b = &c; }") => Err', () => {
+  expect(
+    evaluateTuff("let a = 0; let mut b = &a; { let c = 0; b = &c; }"),
+  ).toEqual({
+    ok: false,
+    error: { kind: "DanglingReference", name: "c", line: 4 },
+  });
+});

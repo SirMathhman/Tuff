@@ -72,6 +72,8 @@ export interface DeclaredBinding {
   structKinds?: Record<string, ValueKind>;
   /** The number-suffix, if the binding holds a suffixed number literal. */
   suffix?: string;
+  /** The scope index the binding was declared in (0 is the outermost). */
+  depth: number;
 }
 
 /** A successfully resolved dereference target. */
@@ -296,6 +298,7 @@ export function declareBinding(
       arrayKinds,
       structKinds,
       suffix,
+      depth: scopes.length - 1,
     };
 }
 

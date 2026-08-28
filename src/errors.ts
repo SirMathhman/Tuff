@@ -120,6 +120,14 @@ export interface ReservedIdentifierError {
   line: number;
 }
 
+/** An error for re-pointing a reference at a binding that does not outlive it. */
+export interface DanglingReferenceError {
+  kind: "DanglingReference";
+  /** The name of the binding the reference is re-pointed at. */
+  name: string;
+  line: number;
+}
+
 /** The structured errors an evaluation can produce. */
 export type TuffError =
   | UnidentifiedIdentifierError
@@ -137,7 +145,8 @@ export type TuffError =
   | InvalidArrayIndexAssignError
   | InvalidNumberSuffixError
   | NumberOutOfRangeError
-  | ReservedIdentifierError;
+  | ReservedIdentifierError
+  | DanglingReferenceError;
 
 /** A successful evaluation result. */
 export interface TuffOk {
