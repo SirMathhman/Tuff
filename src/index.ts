@@ -4,6 +4,5 @@
  * @returns {number} The evaluated result.
  */
 export function evaluate(expression: string): number {
-  void expression;
-  return 0;
+  return Number(expression);
 }
