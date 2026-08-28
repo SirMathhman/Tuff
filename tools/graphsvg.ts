@@ -90,7 +90,7 @@ interface DotEdge {
 /** Graphviz JSON, cut down to what placing children and edges needs. */
 interface DotJson {
   bb: string;
-  objects: DotObject[];
+  objects?: DotObject[];
   edges?: DotEdge[];
 }
 
@@ -351,7 +351,9 @@ function drawEdges(
   flipY: (y: number) => number,
   colorOf: (tail: string, head: string) => string,
 ): string[] {
-  const byGvid = new Map(json.objects.map((o) => [o._gvid, o.name] as const));
+  const byGvid = new Map(
+    (json.objects ?? []).map((o) => [o._gvid, o.name] as const),
+  );
   const parts: string[] = [];
   for (const edge of json.edges ?? []) {
     const stroke = colorOf(byGvid.get(edge.tail)!, byGvid.get(edge.head)!);
@@ -402,7 +404,7 @@ function renderGroupContent(box: GroupBox): DrawingResult {
   for (const child of box.children) {
     const drawing = sizes.get(child.id)!;
     const name = names.get(child.id);
-    const object = json.objects.find((entry) => entry.name === name)!;
+    const object = (json.objects ?? []).find((entry) => entry.name === name)!;
     const [cx, cy] = object.pos.split(",").map(Number);
     const x = (cx! - drawing.width / 2).toFixed(2);
     const y = (flipY(cy!) - drawing.height / 2).toFixed(2);
