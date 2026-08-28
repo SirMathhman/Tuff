@@ -90,6 +90,13 @@ test('evaluate("let mut x = 0; let y = &mut x; *y = 1; x") => 1', () => {
   });
 });
 
+test('evaluate("let mut x = 0; let y = &mut x; let x = 2; *y = 1; x") => 1', () => {
+  expect(evaluate("let mut x = 0; let y = &mut x; let x = 2; *y = 1; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluate("let mut x = 0; x = 1; x") => 1', () => {
   expect(evaluate("let mut x = 0; x = 1; x")).toEqual({
     ok: true,
