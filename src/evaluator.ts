@@ -2,6 +2,7 @@ import type {
   AstNode,
   Binding,
   BlockNode,
+  DerefAssign,
   DerefNode,
   RefNode,
   Statement,
@@ -13,6 +14,8 @@ import type {
 export interface Ref {
   /** The referenced variable name. */
   name: string;
+  /** Whether the reference allows mutation. */
+  mutable: boolean;
 }
 
 /**
@@ -115,7 +118,7 @@ function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
     if (target.kind !== "ident") {
       return { ok: false, kind: "deref-non-ref", name: "" };
     }
-    return { ok: true, value: { name: target.name } };
+    return { ok: true, value: { name: target.name, mutable: node.mutable } };
   }
   const out = evalAst(node.target, env);
   if (!out.ok) {
@@ -148,16 +151,35 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
     },
   };
   for (const statement of node.statements) {
-    const out = evalAst(statement.value, child);
-    if (!out.ok) {
-      return out;
+    if (isDerefAssign(statement)) {
+      const targetOut = evalAst(statement.target, child);
+      if (!targetOut.ok) {
+        return targetOut;
+      }
+      if (typeof targetOut.value === "number") {
+        return { ok: false, kind: "deref-non-ref", name: "" };
+      }
+      const ref = targetOut.value as Ref;
+      if (!ref.mutable) {
+        return { ok: false, kind: "immutable-assignment", name: ref.name };
+      }
+      const valOut = evalAst(statement.value, child);
+      if (!valOut.ok) {
+        return valOut;
+      }
+      values[ref.name] = valOut.value;
+    } else {
+      const out = evalAst(statement.value, child);
+      if (!out.ok) {
+        return out;
+      }
+      if (isBinding(statement)) {
+        mutable[statement.name] = statement.mutable;
+      } else if (!isMutable(mutable, statement.name)) {
+        return { ok: false, kind: "immutable-assignment", name: statement.name };
+      }
+      values[statement.name] = out.value;
     }
-    if (isBinding(statement)) {
-      mutable[statement.name] = statement.mutable;
-    } else if (!isMutable(mutable, statement.name)) {
-      return { ok: false, kind: "immutable-assignment", name: statement.name };
-    }
-    values[statement.name] = out.value;
   }
   return evalAst(node.body, child);
 }
@@ -169,6 +191,15 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
  */
 function isBinding(statement: Statement): statement is Binding {
   return "mutable" in statement;
+}
+
+/**
+ * Whether a statement is a dereference assignment.
+ * @param {Statement} statement - The statement to test.
+ * @returns {boolean} True when the statement is a deref assignment.
+ */
+function isDerefAssign(statement: Statement): statement is DerefAssign {
+  return "target" in statement;
 }
 
 /**

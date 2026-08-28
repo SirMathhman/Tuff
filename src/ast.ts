@@ -69,9 +69,19 @@ export interface Assign {
 }
 
 /**
+ * An assignment through a dereference in a block.
+ */
+export interface DerefAssign {
+  /** The target expression (a dereference). */
+  target: AstNode;
+  /** The value expression. */
+  value: AstNode;
+}
+
+/**
  * A statement in a block body.
  */
-export type Statement = Binding | Assign;
+export type Statement = Binding | Assign | DerefAssign;
 
 /**
  * A block node with statements and a body expression.
@@ -91,6 +101,8 @@ export interface BlockNode {
 export interface RefNode {
   /** The node kind. */
   kind: "ref";
+  /** Whether the reference allows mutation through it. */
+  mutable: boolean;
   /** The target expression (must be an identifier). */
   target: AstNode;
 }

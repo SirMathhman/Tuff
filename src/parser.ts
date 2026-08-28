@@ -1,5 +1,10 @@
 import { OPERATOR_PRECEDENCE } from "./ast.ts";
-import type { AstNode, Binding, Operator, Statement } from "./ast.ts";
+import type {
+  Assign,
+  AstNode,
+  Operator,
+  Statement,
+} from "./ast.ts";
 import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
 
@@ -39,21 +44,6 @@ export interface ParseFailure {
  * The outcome of parsing an expression.
  */
 export type ParseResult = ParseSuccess | ParseFailure;
-
-/**
- * A successful binding outcome.
- */
-interface BindingSuccess {
-  /** Marks the outcome as successful. */
-  ok: true;
-  /** The parsed binding. */
-  value: Binding;
-}
-
-/**
- * The outcome of parsing a binding.
- */
-type BindingResult = BindingSuccess | ParseFailure;
 
 /**
  * A successful statement outcome.
@@ -134,11 +124,16 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   if (tok.type === "amp") {
     cursor.index += 1;
+    let mutable = false;
+    if (peek(cursor).type === "kw-mut") {
+      mutable = true;
+      cursor.index += 1;
+    }
     const target = parseFactor(cursor, input);
     if (!target.ok) {
       return target;
     }
-    return { ok: true, value: { kind: "ref", target: target.value } };
+    return { ok: true, value: { kind: "ref", mutable, target: target.value } };
   }
   if (tok.type === "op" && tok.text === "*") {
     cursor.index += 1;
@@ -187,7 +182,7 @@ function isBlockStart(cursor: Cursor): boolean {
  * @param {string} input - The original input.
  * @returns {ParseResult} The binding, or a structured error.
  */
-function parseBinding(cursor: Cursor, input: string): BindingResult {
+function parseBinding(cursor: Cursor, input: string): StatementResult {
   let mutable = false;
   if (peek(cursor).type === "kw-mut") {
     mutable = true;
@@ -197,58 +192,39 @@ function parseBinding(cursor: Cursor, input: string): BindingResult {
   if (!nv.ok) {
     return nv;
   }
+  const assign = nv.value as Assign;
   return {
     ok: true,
-    value: { name: nv.value.name, mutable, value: nv.value.value },
+    value: { name: assign.name, mutable, value: assign.value },
   };
 }
 
 /**
- * Parse a single assignment statement (the variable name has not been consumed).
- * @param {Cursor} cursor - The token cursor.
+ * Parse a `*target = expr ;` assignment-through-dereference statement.
+ * @param {Cursor} cursor - The token cursor, positioned at the * token.
  * @param {string} input - The original input.
- * @returns {ParseResult} The assignment, or a structured error.
+ * @returns {StatementResult} The deref assignment, or a structured error.
  */
-function parseAssign(cursor: Cursor, input: string): StatementResult {
-  const nv = parseNameEqualsExpr(cursor, input);
-  if (!nv.ok) {
-    return nv;
+function parseDerefAssign(cursor: Cursor, input: string): StatementResult {
+  cursor.index += 1;
+  const target = parseFactor(cursor, input);
+  if (!target.ok) {
+    return target;
   }
-  return { ok: true, value: { name: nv.value.name, value: nv.value.value } };
+  const value = parseEqualsSemi(cursor, input);
+  if (!value.ok) {
+    return value;
+  }
+  return { ok: true, value: { target: target.value, value: value.value } };
 }
-
-/**
- * A parsed name and value pair.
- */
-interface NameValue {
-  /** The variable name. */
-  name: string;
-  /** The value expression. */
-  value: AstNode;
-}
-
-/**
- * A successful name-value outcome.
- */
-interface NameValueSuccess {
-  /** Marks the outcome as successful. */
-  ok: true;
-  /** The parsed name and value. */
-  value: NameValue;
-}
-
-/**
- * The outcome of parsing a name-equals-expression.
- */
-type NameValueResult = NameValueSuccess | ParseFailure;
 
 /**
  * Parse a `name = expr ;` sequence.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
- * @returns {NameValueResult} The name and value, or a structured error.
+ * @returns {StatementResult} The assignment statement, or a structured error.
  */
-function parseNameEqualsExpr(cursor: Cursor, input: string): NameValueResult {
+function parseNameEqualsExpr(cursor: Cursor, input: string): StatementResult {
   const nameTok = peek(cursor);
   if (nameTok.type !== "ident") {
     return {
@@ -257,6 +233,20 @@ function parseNameEqualsExpr(cursor: Cursor, input: string): NameValueResult {
     };
   }
   cursor.index += 1;
+  const value = parseEqualsSemi(cursor, input);
+  if (!value.ok) {
+    return value;
+  }
+  return { ok: true, value: { name: nameTok.text, value: value.value } };
+}
+
+/**
+ * Parse an `= expr ;` sequence (the name or target has been consumed).
+ * @param {Cursor} cursor - The token cursor, positioned at the = token.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed value expression, or a structured error.
+ */
+function parseEqualsSemi(cursor: Cursor, input: string): ParseResult {
   const eq = peek(cursor);
   if (eq.type !== "assign") {
     return {
@@ -277,7 +267,7 @@ function parseNameEqualsExpr(cursor: Cursor, input: string): NameValueResult {
     };
   }
   cursor.index += 1;
-  return { ok: true, value: { name: nameTok.text, value: value.value } };
+  return value;
 }
 
 /**
@@ -289,31 +279,48 @@ function parseNameEqualsExpr(cursor: Cursor, input: string): NameValueResult {
 function parseBlockBody(cursor: Cursor, input: string): ParseResult {
   const statements: Statement[] = [];
   for (;;) {
-    const kw = peek(cursor);
-    if (kw.type === "kw-let") {
-      cursor.index += 1;
-      const binding = parseBinding(cursor, input);
-      if (!binding.ok) {
-        return binding;
-      }
-      statements.push(binding.value);
-      continue;
+    const stmt = parseStatement(cursor, input);
+    if (stmt === null) {
+      break;
     }
-    if (kw.type === "ident" && peekAt(cursor, 1).type === "assign") {
-      const assign = parseAssign(cursor, input);
-      if (!assign.ok) {
-        return assign;
-      }
-      statements.push(assign.value);
-      continue;
+    if (!stmt.ok) {
+      return stmt;
     }
-    break;
+    statements.push(stmt.value);
   }
   const body = parseExpr(cursor, input);
   if (!body.ok) {
     return body;
   }
   return { ok: true, value: { kind: "block", statements, body: body.value } };
+}
+
+/**
+ * Attempt to parse a single statement at the cursor position.
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {StatementResult | null} The parsed statement, or null if no statement starts here.
+ */
+function parseStatement(
+  cursor: Cursor,
+  input: string,
+): StatementResult | null {
+  const kw = peek(cursor);
+  if (kw.type === "kw-let") {
+    cursor.index += 1;
+    return parseBinding(cursor, input);
+  }
+  if (kw.type === "ident" && peekAt(cursor, 1).type === "assign") {
+    return parseNameEqualsExpr(cursor, input);
+  }
+  if (
+    kw.type === "op" &&
+    kw.text === "*" &&
+    peekAt(cursor, 2).type === "assign"
+  ) {
+    return parseDerefAssign(cursor, input);
+  }
+  return null;
 }
 
 /**
