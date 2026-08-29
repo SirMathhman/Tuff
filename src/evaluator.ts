@@ -173,7 +173,15 @@ function evalIf(node: IfNode, env: Env): EvalOutcome {
   if (!cond.ok) {
     return cond;
   }
-  return evalAst(truthy(cond.value) ? node.then : node.else, env);
+  const then = evalAst(node.then, env);
+  if (!then.ok) {
+    return then;
+  }
+  const elseBranch = evalAst(node.else, env);
+  if (!elseBranch.ok) {
+    return elseBranch;
+  }
+  return truthy(cond.value) ? then : elseBranch;
 }
 
 /**
