@@ -6,9 +6,12 @@ pub fn evaluate(input: &str) -> Result<i64, String> {
     trimmed
         .split('+')
         .map(|part| {
-            part.trim()
-                .parse::<i64>()
-                .map_err(|_| format!("failed to parse '{}' as an integer: expected a whole number", part.trim()))
+            part.trim().parse::<i64>().map_err(|_| {
+                format!(
+                    "failed to parse '{}' as an integer: expected a whole number",
+                    part.trim()
+                )
+            })
         })
         .collect::<Result<Vec<i64>, _>>()
         .map(|parts| parts.iter().sum())
@@ -31,6 +34,11 @@ mod tests {
     #[test]
     fn test_evaluate_addition() {
         assert_eq!(evaluate("1 + 2"), Ok(3));
+    }
+
+    #[test]
+    fn test_evaluate_chained_addition() {
+        assert_eq!(evaluate("1 + 2 + 3"), Ok(6));
     }
 
     #[test]
