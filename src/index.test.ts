@@ -85,6 +85,10 @@ test('evaluate("let x = 1;") => 0', () => {
   expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
 });
 
+test('evaluate("let mut x = 0; x = 1;") => 0', () => {
+  expect(evaluate("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
