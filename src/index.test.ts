@@ -113,6 +113,30 @@ test('evaluate("let y = if (true) { let mut x = 0; x = false; x } else false; y"
   });
 });
 
+test('evaluate("let y = if (false) { let x = 0; x = 1; x } else false; y") => immutable-assignment error', () => {
+  expect(
+    evaluate("let y = if (false) { let x = 0; x = 1; x } else false; y"),
+  ).toEqual({
+    ok: false,
+    error: {
+      kind: "immutable-assignment",
+      input: "let y = if (false) { let x = 0; x = 1; x } else false; y",
+      name: "x",
+    },
+  });
+});
+
+test('evaluate("let mut sum = 1; let y = if (false) { sum = sum * 2; sum } else { sum = sum * 3; sum }; sum") => 3', () => {
+  expect(
+    evaluate(
+      "let mut sum = 1; let y = if (false) { sum = sum * 2; sum } else { sum = sum * 3; sum }; sum",
+    ),
+  ).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
 test('evaluate("{ let x = 1; }") => syntax error', () => {
   expect(evaluate("{ let x = 1; }")).toEqual({
     ok: false,

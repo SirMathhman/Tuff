@@ -172,7 +172,46 @@ function evalEq(left: Value, right: Value): EvalOutcome {
 }
 
 /**
- * Evaluate a conditional (if) expression, taking the truthy branch.
+ * A snapshot of a single scope's bindings.
+ */
+interface ScopeSnapshot {
+  /** The values bound in the scope. */
+  values: Record<string, Value>;
+  /** Whether each bound name is mutable. */
+  mutable: Record<string, boolean>;
+}
+
+/**
+ * Snapshot every scope in the chain, innermost first.
+ * @param {Scope} scope - The innermost scope.
+ * @returns {ScopeSnapshot[]} A snapshot per scope, innermost first.
+ */
+function snapshotChain(scope: Scope): ScopeSnapshot[] {
+  const snaps: ScopeSnapshot[] = [];
+  for (let cur: Scope | null = scope; cur !== null; cur = cur.parent) {
+    snaps.push({ values: { ...cur.values }, mutable: { ...cur.mutable } });
+  }
+  return snaps;
+}
+
+/**
+ * Restore a scope chain from snapshots taken by snapshotChain.
+ * @param {Scope} scope - The innermost scope.
+ * @param {ScopeSnapshot[]} snaps - The snapshots, innermost first.
+ * @returns {void} Nothing.
+ */
+function restoreChain(scope: Scope, snaps: ScopeSnapshot[]): void {
+  for (let cur: Scope | null = scope, i = 0; cur !== null; cur = cur.parent, i += 1) {
+    const snap = snaps[i]!;
+    cur.values = snap.values;
+    cur.mutable = snap.mutable;
+  }
+}
+
+/**
+ * Evaluate a conditional (if) expression. Both branches are evaluated so an
+ * error in either surfaces, but only the taken branch's side effects persist:
+ * the untaken branch runs against a snapshot that is restored afterwards.
  * @param {IfNode} node - The if node to evaluate.
  * @param {Env} env - The variable environment.
  * @returns {EvalOutcome} The value of the taken branch, or a structured error.
@@ -182,7 +221,15 @@ function evalIf(node: IfNode, env: Env): EvalOutcome {
   if (!cond.ok) {
     return cond;
   }
-  return evalAst(truthy(cond.value) ? node.then : node.else, env);
+  const taken = truthy(cond.value) ? node.then : node.else;
+  const untaken = truthy(cond.value) ? node.else : node.then;
+  const snaps = snapshotChain(env.scope);
+  const untakenOut = evalAst(untaken, env);
+  restoreChain(env.scope, snaps);
+  if (!untakenOut.ok) {
+    return untakenOut;
+  }
+  return evalAst(taken, env);
 }
 
 /**
