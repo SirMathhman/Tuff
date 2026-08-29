@@ -87,6 +87,11 @@ export interface IdentNode {
 }
 
 /**
+ * A named type that can annotate a binding.
+ */
+export type TypeName = "Num" | "Bool";
+
+/**
  * A variable binding in a block.
  */
 export interface Binding {
@@ -94,6 +99,8 @@ export interface Binding {
   name: string;
   /** Whether the binding can be reassigned. */
   mutable: boolean;
+  /** The declared type, when the binding is annotated. */
+  type?: TypeName;
   /** The initializer expression. */
   value: AstNode;
 }

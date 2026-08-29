@@ -22,6 +22,7 @@ export interface Token {
     | "assign"
     | "semi"
     | "amp"
+    | "colon"
     | "invalid"
     | "eof";
   /** The token text. */
@@ -37,6 +38,7 @@ const PUNCT: Record<string, Token["type"]> = {
   "=": "assign",
   "&": "amp",
   ";": "semi",
+  ":": "colon",
   "(": "lparen",
   "{": "lbrace",
   ")": "rparen",

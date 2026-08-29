@@ -10,6 +10,7 @@ import type {
   IfNode,
   RefNode,
   Statement,
+  TypeName,
 } from "./ast.ts";
 
 /**
@@ -409,6 +410,12 @@ function evalStatement(
     return out;
   }
   if (isBinding(statement)) {
+    if (
+      statement.type !== undefined &&
+      !annotationMatches(statement.type, out.value)
+    ) {
+      return { ok: false, kind: "type-mismatch", name: statement.name };
+    }
     scope.mutable[statement.name] = statement.mutable;
     scope.values[statement.name] = out.value;
     return { ok: true, value: out.value };
@@ -459,6 +466,16 @@ function isMutable(mutable: Record<string, boolean>, name: string): boolean {
  */
 function valueType(value: Value): "number" | "boolean" {
   return typeof value === "number" ? "number" : "boolean";
+}
+
+/**
+ * Whether a value's type matches a declared type annotation.
+ * @param {TypeName} type - The declared type.
+ * @param {Value} value - The value to check.
+ * @returns {boolean} True when the value's type matches the annotation.
+ */
+function annotationMatches(type: TypeName, value: Value): boolean {
+  return valueType(value) === (type === "Num" ? "number" : "boolean");
 }
 
 /**

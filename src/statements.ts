@@ -1,6 +1,14 @@
-import type { Assign, AstNode, EvalError, Statement } from "./ast.ts";
+import type { AstNode, EvalError, Statement, TypeName } from "./ast.ts";
 import { peek, peekAt } from "./cursor.ts";
 import type { Cursor } from "./cursor.ts";
+
+/**
+ * The identifiers that name a declared type.
+ */
+const TYPE_NAMES: Record<string, TypeName> = {
+  Num: "Num",
+  Bool: "Bool",
+};
 
 /**
  * A successful parse outcome.
@@ -71,6 +79,21 @@ interface CloseSuccess {
 type CloseResult = CloseSuccess | ParseFailure;
 
 /**
+ * A successful type-annotation outcome.
+ */
+interface TypeAnnotationSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The declared type, or undefined when no annotation is present. */
+  value: TypeName | undefined;
+}
+
+/**
+ * The outcome of parsing a type annotation.
+ */
+type TypeAnnotationResult = TypeAnnotationSuccess | ParseFailure;
+
+/**
  * Parse a single let-binding (the let keyword has been consumed).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
@@ -87,15 +110,56 @@ function parseBinding(
     mutable = true;
     cursor.index += 1;
   }
-  const nv = parseNameEqualsExpr(cursor, input, parseExpr);
-  if (!nv.ok) {
-    return nv;
+  const nameTok = peek(cursor);
+  if (nameTok.type !== "ident") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: nameTok.position },
+    };
   }
-  const assign = nv.value as Assign;
+  cursor.index += 1;
+  const type = parseTypeAnnotation(cursor, input);
+  if (!type.ok) {
+    return type;
+  }
+  const value = parseEqualsSemi(cursor, input, parseExpr);
+  if (!value.ok) {
+    return value;
+  }
   return {
     ok: true,
-    value: { name: assign.name, mutable, value: assign.value },
+    value: {
+      name: nameTok.text,
+      mutable,
+      type: type.value,
+      value: value.value,
+    },
   };
+}
+
+/**
+ * Parse an optional `: TypeName` annotation after a binding name.
+ * @param {Cursor} cursor - The token cursor, positioned after the name.
+ * @param {string} input - The original input.
+ * @returns {TypeAnnotationResult} The declared type (or undefined when absent), or a structured error.
+ */
+function parseTypeAnnotation(
+  cursor: Cursor,
+  input: string,
+): TypeAnnotationResult {
+  if (peek(cursor).type !== "colon") {
+    return { ok: true, value: undefined };
+  }
+  cursor.index += 1;
+  const nameTok = peek(cursor);
+  if (nameTok.type !== "ident" || !(nameTok.text in TYPE_NAMES)) {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: nameTok.position },
+    };
+  }
+  cursor.index += 1;
+  return { ok: true, value: TYPE_NAMES[nameTok.text] };
 }
 
 /**
