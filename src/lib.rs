@@ -158,6 +158,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_addition_before_multiplication() {
+        assert_eq!(evaluate("2 + 3 * 4"), Ok(14));
+    }
+
+    #[test]
     fn test_evaluate_invalid_input() {
         match evaluate("1 + x") {
             Err(Error::UnexpectedChar { span, ch }) => {
