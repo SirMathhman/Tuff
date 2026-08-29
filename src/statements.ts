@@ -7,6 +7,7 @@ import type { Cursor } from "./cursor.ts";
  */
 const TYPE_NAMES: Record<string, TypeName> = {
   Num: "Num",
+  Int: "Int",
   Bool: "Bool",
 };
 

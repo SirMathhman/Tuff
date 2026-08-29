@@ -89,7 +89,7 @@ export interface IdentNode {
 /**
  * A named type that can annotate a binding.
  */
-export type TypeName = "Num" | "Bool";
+export type TypeName = "Num" | "Int" | "Bool";
 
 /**
  * A variable binding in a block.

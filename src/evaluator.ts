@@ -475,7 +475,8 @@ function valueType(value: Value): "number" | "boolean" {
  * @returns {boolean} True when the value's type matches the annotation.
  */
 function annotationMatches(type: TypeName, value: Value): boolean {
-  return valueType(value) === (type === "Num" ? "number" : "boolean");
+  const declared = type === "Bool" ? "boolean" : "number";
+  return valueType(value) === declared;
 }
 
 /**
