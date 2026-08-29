@@ -1,6 +1,6 @@
 pub mod ast;
-pub mod eval;
 pub mod errors;
+pub mod eval;
 pub mod lexer;
 pub mod parser;
 
@@ -11,7 +11,7 @@ pub use errors::Error;
 /// Pipeline: lex → parse → fold.
 pub fn evaluate(input: &str) -> Result<i64, Error> {
     let tokens = lexer::lex(input)?;
-    let terms = parser::parse(&tokens)?;
+    let terms = parser::parse(&tokens);
     Ok(eval::fold_terms(&terms))
 }
 
