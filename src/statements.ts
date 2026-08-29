@@ -208,6 +208,12 @@ export function parseBlockBody(
     }
     statements.push(stmt.value);
   }
+  if (peek(cursor).type === "eof") {
+    return {
+      ok: true,
+      value: { kind: "block", statements, body: { kind: "num", value: 0 } },
+    };
+  }
   const body = parseExpr(cursor, input);
   if (!body.ok) {
     return body;

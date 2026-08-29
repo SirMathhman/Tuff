@@ -63,7 +63,10 @@ function parseIf(cursor: Cursor, input: string): ParseResult {
   cursor.index += 1;
   const open = peek(cursor);
   if (open.type !== "lparen") {
-    return { ok: false, error: { kind: "syntax", input, position: open.position } };
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: open.position },
+    };
   }
   cursor.index += 1;
   const condition = parseExpr(cursor, input);
@@ -80,7 +83,10 @@ function parseIf(cursor: Cursor, input: string): ParseResult {
   }
   const elseKw = peek(cursor);
   if (elseKw.type !== "kw-else") {
-    return { ok: false, error: { kind: "syntax", input, position: elseKw.position } };
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: elseKw.position },
+    };
   }
   cursor.index += 1;
   const alt = parseExpr(cursor, input);

@@ -81,6 +81,10 @@ test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
   });
 });
 
+test('evaluate("let x = 1;") => 0', () => {
+  expect(evaluate("let x = 1;")).toEqual({ ok: true, value: 0 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
