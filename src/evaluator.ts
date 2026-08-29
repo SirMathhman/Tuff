@@ -276,6 +276,9 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
       if (!valOut.ok) {
         return valOut;
       }
+      if (!typeMatches(child, ref.name, valOut.value)) {
+        return { ok: false, kind: "type-mismatch", name: ref.name };
+      }
       values[ref.name] = valOut.value;
     } else {
       const out = evalAst(statement.value, child);
@@ -284,12 +287,17 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
       }
       if (isBinding(statement)) {
         mutable[statement.name] = statement.mutable;
-      } else if (!isMutable(mutable, statement.name)) {
-        return {
-          ok: false,
-          kind: "immutable-assignment",
-          name: statement.name,
-        };
+      } else {
+        if (!isMutable(mutable, statement.name)) {
+          return {
+            ok: false,
+            kind: "immutable-assignment",
+            name: statement.name,
+          };
+        }
+        if (!typeMatches(child, statement.name, out.value)) {
+          return { ok: false, kind: "type-mismatch", name: statement.name };
+        }
       }
       values[statement.name] = out.value;
     }
@@ -323,4 +331,28 @@ function isDerefAssign(statement: Statement): statement is DerefAssign {
  */
 function isMutable(mutable: Record<string, boolean>, name: string): boolean {
   return mutable[name] === true;
+}
+
+/**
+ * The primitive type of a value (references have no type for this purpose).
+ * @param {Value} value - The value to classify.
+ * @returns {"number" | "boolean"} The value's primitive type.
+ */
+function valueType(value: Value): "number" | "boolean" {
+  return typeof value === "number" ? "number" : "boolean";
+}
+
+/**
+ * Whether a value's type matches the type a name is currently bound to.
+ * @param {Env} env - The environment the name is bound in.
+ * @param {string} name - The name being assigned.
+ * @param {Value} value - The value being assigned.
+ * @returns {boolean} True when the value's type matches the bound type.
+ */
+function typeMatches(env: Env, name: string, value: Value): boolean {
+  const bound = env.get(name);
+  if (bound === undefined) {
+    return true;
+  }
+  return valueType(bound) === valueType(value);
 }

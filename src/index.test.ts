@@ -89,6 +89,17 @@ test('evaluate("let mut x = 0; x = 1;") => 0', () => {
   expect(evaluate("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
 });
 
+test('evaluate("let mut x = 0; x = false;") => type-mismatch error', () => {
+  expect(evaluate("let mut x = 0; x = false;")).toEqual({
+    ok: false,
+    error: {
+      kind: "type-mismatch",
+      input: "let mut x = 0; x = false;",
+      name: "x",
+    },
+  });
+});
+
 test('evaluate("{ let x = 1; }") => syntax error', () => {
   expect(evaluate("{ let x = 1; }")).toEqual({
     ok: false,
