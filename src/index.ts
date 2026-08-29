@@ -1,6 +1,7 @@
 import type { EvalError } from "./ast.ts";
 import { parse } from "./parser.ts";
 import { evalAst } from "./evaluator.ts";
+import type { Scope } from "./evaluator.ts";
 
 /**
  * A structured error produced by parsing or evaluation.
@@ -43,7 +44,11 @@ export function evaluate(expression: string): EvalResult {
   if (!parsed.ok) {
     return { ok: false, error: parsed.error };
   }
-  const outcome = evalAst(parsed.value, { get: () => undefined });
+  const rootScope: Scope = { values: {}, mutable: {}, parent: null };
+  const outcome = evalAst(parsed.value, {
+    scope: rootScope,
+    get: () => undefined,
+  });
   if (!outcome.ok) {
     return {
       ok: false,
