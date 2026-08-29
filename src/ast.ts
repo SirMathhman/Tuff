@@ -1,7 +1,7 @@
 /**
  * A binary operator.
  */
-export type Operator = "+" | "-" | "*" | "||";
+export type Operator = "+" | "-" | "*" | "||" | "&&";
 
 /**
  * The precedence of each operator (higher binds tighter).
@@ -11,6 +11,7 @@ export const OPERATOR_PRECEDENCE: Record<Operator, number> = {
   "+": 1,
   "-": 1,
   "||": 0,
+  "&&": 0,
 };
 
 /**

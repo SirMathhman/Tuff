@@ -20,6 +20,13 @@ test('evaluate("let x = true; let y = false; x || y") => 1', () => {
   });
 });
 
+test('evaluate("let x = true; let y = false; x && y") => 0', () => {
+  expect(evaluate("let x = true; let y = false; x && y")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
