@@ -12,7 +12,8 @@ export interface EvalError {
     | "unknown-variable"
     | "immutable-assignment"
     | "deref-non-ref"
-    | "type-mismatch";
+    | "type-mismatch"
+    | "ref-as-result";
   /** The input that caused the failure. */
   input: string;
   /** The position where the failure was found, when known. */
@@ -73,7 +74,7 @@ export function evaluate(expression: string): EvalResult {
   if (typeof outcome.value !== "number") {
     return {
       ok: false,
-      error: { kind: "deref-non-ref", input: expression, name: "" },
+      error: { kind: "ref-as-result", input: expression, name: "" },
     };
   }
   return { ok: true, value: outcome.value };

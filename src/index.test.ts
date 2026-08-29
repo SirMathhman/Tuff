@@ -225,9 +225,9 @@ test('evaluate("abc") => error', () => {
   });
 });
 
-test('evaluate("let x = 0; &x") => error', () => {
+test('evaluate("let x = 0; &x") => ref-as-result error', () => {
   expect(evaluate("let x = 0; &x")).toEqual({
     ok: false,
-    error: { kind: "deref-non-ref", input: "let x = 0; &x", name: "" },
+    error: { kind: "ref-as-result", input: "let x = 0; &x", name: "" },
   });
 });
