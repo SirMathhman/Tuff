@@ -154,7 +154,12 @@ function parseAddSub(cursor: Cursor, input: string): ParseResult {
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseExpr(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["||"], parseAddSub);
+  return parseBinaryLevel(
+    cursor,
+    input,
+    OPERATOR_PRECEDENCE["||"],
+    parseAddSub,
+  );
 }
 
 /**
@@ -173,7 +178,10 @@ export function parse(expression: string): ParseResult {
   }
   const tok = peek(cursor);
   if (tok.type !== "eof") {
-    return { ok: false, error: { kind: "syntax", input: expression, position: tok.position } };
+    return {
+      ok: false,
+      error: { kind: "syntax", input: expression, position: tok.position },
+    };
   }
   return result;
 }

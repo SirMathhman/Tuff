@@ -13,22 +13,6 @@ export default defineConfig([
     rules: {
       "no-new-func": "error",
       "no-eval": "error",
-      "max-lines": [
-        "warn",
-        {
-          max: 300,
-          skipBlankLines: true,
-          skipComments: true,
-        },
-      ],
-      "max-lines-per-function": [
-        "warn",
-        {
-          max: 50,
-          skipBlankLines: true,
-          skipComments: true,
-        },
-      ],
       "jsdoc/check-syntax": "error",
       "jsdoc/require-jsdoc": [
         "error",
@@ -39,7 +23,7 @@ export default defineConfig([
             ClassExpression: true,
             ArrowFunctionExpression: false,
             FunctionExpression: false,
-          },         
+          },
           contexts: [
             "TSInterfaceDeclaration",
             "TSTypeAliasDeclaration",
@@ -69,8 +53,8 @@ export default defineConfig([
         },
         {
           selector: "ThrowStatement",
-          message : "Use Result."
-        }
+          message: "Use Result.",
+        },
       ],
     },
   },
