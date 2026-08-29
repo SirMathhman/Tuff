@@ -130,6 +130,8 @@ function evalBinOp(node: BinOpNode, env: Env): EvalOutcome {
       return { ok: true, value: leftNum - rightNum };
     case "*":
       return { ok: true, value: leftNum * rightNum };
+    case "<":
+      return { ok: true, value: leftNum < rightNum ? 1 : 0 };
     default: {
       const exhaustive: never = node.op;
       return exhaustive;

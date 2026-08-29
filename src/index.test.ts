@@ -67,6 +67,13 @@ test('evaluate("true == true") => 1', () => {
   expect(evaluate("true == true")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("let x = 0; let y = 1; x < y") => 1', () => {
+  expect(evaluate("let x = 0; let y = 1; x < y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

@@ -24,15 +24,20 @@ Dependency direction is strictly one-way: `index.ts` → `parser.ts` / `evaluato
 
 The tokenizer is **context-free** — it emits one token kind per character sequence with no lookaround. Position-ambiguous operators (e.g. `*` as multiplication vs. dereference) are disambiguated by the **parser**, which knows the grammar position. Keep it that way.
 
-## Conventions (enforced by `eslint.config.ts` — do not fight them)
+## Conventions
+
+**Enforced by `eslint.config.ts` — do not fight them:**
 
 - **Result-style errors, never throw.** `ThrowStatement` is a lint error. Every fallible function returns a `{ ok: true, value } | { ok: false, error }` union. The public `evaluate` returns `EvalResult`; failures are structured `EvalError`s (what/where/why), never exceptions.
 - **No classes.** `ClassDeclaration` is a lint error — use plain functions and interfaces.
 - **No anonymous type literals.** `TSTypeLiteral` is a lint error — always use a named `interface`.
 - **JSDoc is mandatory** on every function declaration, method, class expression, and on all `interface` / `type` / `enum` declarations (including each member). `@param` and `@returns` with descriptions are required.
-- **Size limits:** ≤ 300 lines per file, ≤ 50 lines per function (blank/comment lines excluded). Split before you exceed them.
 - **No dynamic code execution:** `no-eval` and `no-new-func` are errors.
 - **Type-only imports use `import type`** (`verbatimModuleSyntax` is on). **Relative imports include the `.ts` extension** (`allowImportingTsExtensions` is on).
+
+**Style (not lint-enforced, but keep it):**
+
+- **Size limits:** ≤ 300 lines per file, ≤ 50 lines per function (blank/comment lines excluded). Split before you exceed them.
 
 ## Testing
 
