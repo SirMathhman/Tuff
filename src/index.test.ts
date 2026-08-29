@@ -231,3 +231,10 @@ test('evaluate("let x = 0; &x") => ref-as-result error', () => {
     error: { kind: "ref-as-result", input: "let x = 0; &x", name: "" },
   });
 });
+
+test('evaluate("let mut = 1;") => syntax error', () => {
+  expect(evaluate("let mut = 1;")).toEqual({
+    ok: false,
+    error: { kind: "syntax", input: "let mut = 1;", position: 8 },
+  });
+});
