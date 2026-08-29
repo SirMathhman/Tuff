@@ -45,10 +45,7 @@ export function evaluate(expression: string): EvalResult {
     return { ok: false, error: parsed.error };
   }
   const rootScope: Scope = { values: {}, mutable: {}, parent: null };
-  const outcome = evalAst(parsed.value, {
-    scope: rootScope,
-    get: () => undefined,
-  });
+  const outcome = evalAst(parsed.value, { scope: rootScope });
   if (!outcome.ok) {
     return {
       ok: false,

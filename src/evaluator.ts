@@ -47,8 +47,6 @@ export interface Scope {
 export interface Env {
   /** The innermost scope. */
   scope: Scope;
-  /** Look up a variable by name, walking the scope chain. */
-  get(name: string): Value | undefined;
 }
 
 /**
@@ -299,7 +297,7 @@ function findScope(scope: Scope, name: string): Scope | null {
  */
 function evalBlock(node: BlockNode, env: Env): EvalOutcome {
   const scope: Scope = { values: {}, mutable: {}, parent: env.scope };
-  const child: Env = { scope, get: (name: string) => lookup(scope, name) };
+  const child: Env = { scope };
   for (const statement of node.statements) {
     const out = isDerefAssign(statement)
       ? evalDerefAssignStatement(statement, child, scope)
