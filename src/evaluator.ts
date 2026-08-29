@@ -201,10 +201,11 @@ function snapshotChain(scope: Scope): ScopeSnapshot[] {
  * @returns {void} Nothing.
  */
 function restoreChain(scope: Scope, snaps: ScopeSnapshot[]): void {
-  for (let cur: Scope | null = scope, i = 0; cur !== null; cur = cur.parent, i += 1) {
-    const snap = snaps[i]!;
-    cur.values = snap.values;
-    cur.mutable = snap.mutable;
+  let cur: Scope | null = scope;
+  for (const snap of snaps) {
+    cur!.values = snap.values;
+    cur!.mutable = snap.mutable;
+    cur = cur!.parent;
   }
 }
 
