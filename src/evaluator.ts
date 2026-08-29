@@ -15,6 +15,7 @@ import type {
   Statement,
   TypeName,
   Value,
+  ValueKind,
 } from "./ast.ts";
 import { TYPE_VALUE_KINDS } from "./ast.ts";
 import {
@@ -399,10 +400,16 @@ function isDerefAssign(statement: Statement): statement is DerefAssign {
 /**
  * The primitive type of a value (references have no type for this purpose).
  * @param {Value} value - The value to classify.
- * @returns {"number" | "boolean"} The value's primitive type.
+ * @returns {ValueKind} The value's primitive type.
  */
-function valueType(value: Value): "number" | "boolean" {
-  return typeof value === "number" ? "number" : "boolean";
+function valueType(value: Value): ValueKind {
+  if (typeof value === "number") {
+    return "number";
+  }
+  if (typeof value === "object" && "body" in value) {
+    return "function";
+  }
+  return "boolean";
 }
 
 /**

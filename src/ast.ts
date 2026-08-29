@@ -92,9 +92,9 @@ export interface IdentNode {
 export type TypeName = "Num" | "Int" | "Bool";
 
 /**
- * The primitive value kind a type name denotes.
+ * The primitive value kind a value has.
  */
-export type ValueKind = "number" | "boolean";
+export type ValueKind = "number" | "boolean" | "function";
 
 /**
  * The value kind each type name denotes (Num and Int both name numbers).
