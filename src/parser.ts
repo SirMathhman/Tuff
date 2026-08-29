@@ -125,58 +125,40 @@ function parseBinaryLevel(
 }
 
 /**
- * Parse a term (factors joined by *).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed AST, or a structured error.
+ * The distinct precedence levels, tightest first, derived from the operator table.
  */
-function parseTerm(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["*"], parseFactor);
-}
+const PRECEDENCE_LEVELS: number[] = [
+  ...new Set(Object.values(OPERATOR_PRECEDENCE)),
+].sort((a, b) => b - a);
+
 /**
- * Parse an additive expression (terms joined by + or -).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed AST, or a structured error.
+ * A parser for one precedence level.
  */
-function parseAddSub(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["+"], parseTerm);
-}
+type LevelParser = (cursor: Cursor, input: string) => ParseResult;
+
 /**
- * Parse a relational expression (additive terms joined by <).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed AST, or a structured error.
+ * The chain of level parsers, tightest first. The tightest level parses factors;
+ * each looser level parses the level above it as its operand.
  */
-function parseRel(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["<"], parseAddSub);
-}
+const LEVEL_PARSERS: LevelParser[] = PRECEDENCE_LEVELS.reduce<LevelParser[]>(
+  (chain, level) => {
+    const operand = chain.length === 0 ? parseFactor : chain[chain.length - 1]!;
+    chain.push((cursor, input) =>
+      parseBinaryLevel(cursor, input, level, operand),
+    );
+    return chain;
+  },
+  [],
+);
+
 /**
- * Parse an equality expression (relational terms joined by ==).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed AST, or a structured error.
- */
-function parseEq(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["=="], parseRel);
-}
-/**
- * Parse a logical-and expression (equality terms joined by &&).
- * @param {Cursor} cursor - The token cursor.
- * @param {string} input - The original input.
- * @returns {ParseResult} The parsed AST, or a structured error.
- */
-function parseAnd(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["&&"], parseEq);
-}
-/**
- * Parse an expression (and-expressions joined by ||).
+ * Parse a full expression (the loosest precedence level).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseExpr(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["||"], parseAnd);
+  return LEVEL_PARSERS[LEVEL_PARSERS.length - 1]!(cursor, input);
 }
 
 /**
