@@ -25,6 +25,14 @@ test('evaluate("fn get() => 100; get()") => 100', () => {
   expect(evaluate("fn get() => 100; get()")).toEqual({ ok: true, value: 100 });
 });
 
+test('evaluate("fn add(first : Int, second : Int) : Int => first + second; add(3, 4)") => 7', () => {
+  expect(
+    evaluate(
+      "fn add(first : Int, second : Int) : Int => first + second; add(3, 4)",
+    ),
+  ).toEqual({ ok: true, value: 7 });
+});
+
 test('evaluate("let x = true; let y = false; x || y") => 1', () => {
   expect(evaluate("let x = true; let y = false; x || y")).toEqual({
     ok: true,

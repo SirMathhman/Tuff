@@ -1,5 +1,5 @@
 import { OPERATOR_PRECEDENCE } from "./ast.ts";
-import type { AstNode, Operator } from "./ast.ts";
+import type { AstNode, EvalError, Operator } from "./ast.ts";
 import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
 import { isBlockStart, peek } from "./cursor.ts";
@@ -30,11 +30,14 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     if (peek(cursor).type === "lparen") {
       cursor.index += 1;
-      const close = expectClose(cursor, input, "rparen");
-      if (!close.ok) {
-        return close;
+      const args = parseCallArgs(cursor, input);
+      if (!args.ok) {
+        return args;
       }
-      return { ok: true, value: { kind: "call", name: tok.text } };
+      return {
+        ok: true,
+        value: { kind: "call", name: tok.text, args: args.value },
+      };
     }
     return { ok: true, value: { kind: "ident", name: tok.text } };
   }
@@ -59,6 +62,65 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
+}
+
+/**
+ * A successful call-argument outcome.
+ */
+interface CallArgsSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed argument expressions, in order. */
+  value: AstNode[];
+}
+
+/**
+ * A failed call-argument outcome.
+ */
+interface CallArgsFailure {
+  /** Marks the outcome as failed. */
+  ok: false;
+  /** The structured error. */
+  error: EvalError;
+}
+
+/**
+ * The outcome of parsing a call argument list.
+ */
+type CallArgsResult = CallArgsSuccess | CallArgsFailure;
+
+/**
+ * Parse a call argument list: `expr, expr, ...` (the opening paren is consumed).
+ * @param {Cursor} cursor - The token cursor, positioned after the opening paren.
+ * @param {string} input - The original input.
+ * @returns {CallArgsResult} The argument expressions, or a structured error.
+ */
+function parseCallArgs(cursor: Cursor, input: string): CallArgsResult {
+  const args: AstNode[] = [];
+  if (peek(cursor).type !== "rparen") {
+    for (;;) {
+      const arg = parseExpr(cursor, input);
+      if (!arg.ok) {
+        return arg;
+      }
+      args.push(arg.value);
+      const next = peek(cursor);
+      if (next.type === "comma") {
+        cursor.index += 1;
+        continue;
+      }
+      if (next.type === "rparen") {
+        cursor.index += 1;
+        return { ok: true, value: args };
+      }
+      return {
+        ok: false,
+        error: { kind: "syntax", input, position: next.position },
+      };
+    }
+  }
+  cursor.index += 1;
+  return { ok: true, value: args };
 }
 
 /**

@@ -9,6 +9,7 @@ import type {
   DerefNode,
   EvalErrorKind,
   FnDef,
+  FnValue,
   IfNode,
   Ref,
   RefNode,
@@ -348,13 +349,19 @@ function evalStatement(
  * @returns {EvalOutcome} A success, or a structured error.
  */
 function evalFnDef(statement: FnDef, child: Env, scope: Scope): EvalOutcome {
+  const fn: FnValue = {
+    body: statement.body,
+    params: statement.params.map((p) => p.name),
+    retType: statement.retType,
+  };
   scope.mutable[statement.name] = false;
-  scope.values[statement.name] = { body: statement.body };
-  return { ok: true, value: { body: statement.body } };
+  scope.values[statement.name] = fn;
+  return { ok: true, value: fn };
 }
 
 /**
- * Evaluate a function call: look up the name and run its body in the current env.
+ * Evaluate a function call: look up the name, bind its parameters to the
+ * evaluated arguments in a child scope, and run its body there.
  * @param {CallNode} node - The call node to evaluate.
  * @param {Env} env - The variable environment.
  * @returns {EvalOutcome} The value of the function body, or a structured error.
@@ -367,7 +374,21 @@ function evalCall(node: CallNode, env: Env): EvalOutcome {
   if (typeof value !== "object" || !("body" in value)) {
     return { ok: false, kind: "type-mismatch", name: node.name };
   }
-  return evalAst(value.body, env);
+  const fn = value as FnValue;
+  if (fn.params.length !== node.args.length) {
+    return { ok: false, kind: "type-mismatch", name: node.name };
+  }
+  const scope: Scope = { values: {}, mutable: {}, parent: env.scope };
+  for (let i = 0; i < fn.params.length; i += 1) {
+    const argOut = evalAst(node.args[i]!, env);
+    if (!argOut.ok) {
+      return argOut;
+    }
+    const paramName = fn.params[i]!;
+    scope.mutable[paramName] = false;
+    scope.values[paramName] = argOut.value;
+  }
+  return evalAst(fn.body, { scope });
 }
 
 /**

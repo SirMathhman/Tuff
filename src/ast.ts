@@ -118,11 +118,25 @@ export interface Ref {
 }
 
 /**
- * A function value: a zero-argument body expression.
+ * A function parameter: a name and a declared type.
+ */
+export interface Param {
+  /** The parameter name. */
+  name: string;
+  /** The declared parameter type. */
+  type: TypeName;
+}
+
+/**
+ * A function value: a body expression with named, typed parameters.
  */
 export interface FnValue {
   /** The function body expression. */
   body: AstNode;
+  /** The parameter names, in order. */
+  params: string[];
+  /** The declared return type, when annotated. */
+  retType?: TypeName;
 }
 
 /**
@@ -172,6 +186,10 @@ export interface FnDef {
   name: string;
   /** The function body expression. */
   body: AstNode;
+  /** The declared parameters, in order. */
+  params: Param[];
+  /** The declared return type, when annotated. */
+  retType?: TypeName;
 }
 
 /**
@@ -235,6 +253,8 @@ export interface CallNode {
   kind: "call";
   /** The name of the function to call. */
   name: string;
+  /** The argument expressions, in order. */
+  args: AstNode[];
 }
 
 /**

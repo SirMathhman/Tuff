@@ -1,4 +1,4 @@
-import type { AstNode, EvalError, Statement, TypeName } from "./ast.ts";
+import type { AstNode, EvalError, Param, Statement, TypeName } from "./ast.ts";
 import { peek, peekAt } from "./cursor.ts";
 import type { Cursor } from "./cursor.ts";
 
@@ -164,7 +164,116 @@ function parseTypeAnnotation(
 }
 
 /**
- * Parse a function definition: `fn name() => expr ;` (the fn keyword is consumed).
+ * A successful parameter outcome.
+ */
+interface ParamSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed parameter. */
+  value: Param;
+}
+
+/**
+ * The outcome of parsing a parameter.
+ */
+type ParamResult = ParamSuccess | ParseFailure;
+
+/**
+ * A successful parameter-list outcome.
+ */
+interface ParamListSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed parameters, in order. */
+  value: Param[];
+}
+
+/**
+ * The outcome of parsing a parameter list.
+ */
+type ParamListResult = ParamListSuccess | ParseFailure;
+
+/**
+ * Parse a single parameter: `name : TypeName`.
+ * @param {Cursor} cursor - The token cursor, positioned at the parameter name.
+ * @param {string} input - The original input.
+ * @returns {ParamResult} The parameter, or a structured error.
+ */
+function parseParam(cursor: Cursor, input: string): ParamResult {
+  const nameTok = peek(cursor);
+  if (nameTok.type !== "ident") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: nameTok.position },
+    };
+  }
+  cursor.index += 1;
+  const colon = peek(cursor);
+  if (colon.type !== "colon") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: colon.position },
+    };
+  }
+  cursor.index += 1;
+  const typeTok = peek(cursor);
+  if (typeTok.type !== "ident" || !(typeTok.text in TYPE_NAMES)) {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: typeTok.position },
+    };
+  }
+  cursor.index += 1;
+  return {
+    ok: true,
+    value: { name: nameTok.text, type: TYPE_NAMES[typeTok.text]! },
+  };
+}
+
+/**
+ * Parse a parameter list: `(name : TypeName, ...)` (the opening paren is consumed).
+ * @param {Cursor} cursor - The token cursor, positioned at the opening paren.
+ * @param {string} input - The original input.
+ * @returns {ParamListResult} The parameters, or a structured error.
+ */
+function parseParamList(cursor: Cursor, input: string): ParamListResult {
+  const open = peek(cursor);
+  if (open.type !== "lparen") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: open.position },
+    };
+  }
+  cursor.index += 1;
+  const params: Param[] = [];
+  if (peek(cursor).type !== "rparen") {
+    for (;;) {
+      const param = parseParam(cursor, input);
+      if (!param.ok) {
+        return param;
+      }
+      params.push(param.value);
+      const next = peek(cursor);
+      if (next.type === "comma") {
+        cursor.index += 1;
+        continue;
+      }
+      if (next.type === "rparen") {
+        cursor.index += 1;
+        return { ok: true, value: params };
+      }
+      return {
+        ok: false,
+        error: { kind: "syntax", input, position: next.position },
+      };
+    }
+  }
+  cursor.index += 1;
+  return { ok: true, value: params };
+}
+
+/**
+ * Parse a function definition: `fn name(params) : Ret => expr ;` (the fn keyword is consumed).
  * @param {Cursor} cursor - The token cursor, positioned after the fn keyword.
  * @param {string} input - The original input.
  * @param {(c: Cursor, i: string) => ParseResult} parseExpr - Parses a full expression.
@@ -183,22 +292,14 @@ function parseFnDef(
     };
   }
   cursor.index += 1;
-  const open = peek(cursor);
-  if (open.type !== "lparen") {
-    return {
-      ok: false,
-      error: { kind: "syntax", input, position: open.position },
-    };
+  const params = parseParamList(cursor, input);
+  if (!params.ok) {
+    return params;
   }
-  cursor.index += 1;
-  const close = peek(cursor);
-  if (close.type !== "rparen") {
-    return {
-      ok: false,
-      error: { kind: "syntax", input, position: close.position },
-    };
+  const retType = parseTypeAnnotation(cursor, input);
+  if (!retType.ok) {
+    return retType;
   }
-  cursor.index += 1;
   const arrow = peek(cursor);
   if (arrow.type !== "arrow") {
     return {
@@ -219,7 +320,15 @@ function parseFnDef(
     };
   }
   cursor.index += 1;
-  return { ok: true, value: { name: nameTok.text, body: body.value } };
+  return {
+    ok: true,
+    value: {
+      name: nameTok.text,
+      body: body.value,
+      params: params.value,
+      retType: retType.value,
+    },
+  };
 }
 
 /**

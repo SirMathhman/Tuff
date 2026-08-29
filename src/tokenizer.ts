@@ -24,6 +24,7 @@ export interface Token {
     | "semi"
     | "amp"
     | "colon"
+    | "comma"
     | "arrow"
     | "invalid"
     | "eof";
@@ -41,6 +42,7 @@ const PUNCT: Record<string, Token["type"]> = {
   "&": "amp",
   ";": "semi",
   ":": "colon",
+  ",": "comma",
   "(": "lparen",
   "{": "lbrace",
   ")": "rparen",
