@@ -1,7 +1,7 @@
 import type { EvalError } from "./ast.ts";
 import { parse } from "./parser.ts";
 import { evalAst } from "./evaluator.ts";
-import type { Scope } from "./evaluator.ts";
+import type { Scope } from "./env.ts";
 
 /**
  * A structured error produced by parsing or evaluation.

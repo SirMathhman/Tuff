@@ -8,47 +8,21 @@ import type {
   DerefNode,
   EvalErrorKind,
   IfNode,
+  Ref,
   RefNode,
   Statement,
   TypeName,
+  Value,
 } from "./ast.ts";
-
-/**
- * A reference to a variable by name.
- */
-export interface Ref {
-  /** The referenced variable name. */
-  name: string;
-  /** Whether the reference allows mutation. */
-  mutable: boolean;
-  /** The captured value (immutable refs only). */
-  value?: number;
-}
-
-/**
- * A value produced by evaluation: a number, a boolean, or a reference.
- */
-export type Value = number | boolean | Ref;
-
-/**
- * A single lexical scope holding bindings.
- */
-export interface Scope {
-  /** The values bound in this scope. */
-  values: Record<string, Value>;
-  /** Whether each bound name is mutable. */
-  mutable: Record<string, boolean>;
-  /** The enclosing scope, or null at the root. */
-  parent: Scope | null;
-}
-
-/**
- * A variable environment: a chain of lexical scopes, innermost first.
- */
-export interface Env {
-  /** The innermost scope. */
-  scope: Scope;
-}
+import { TYPE_VALUE_KINDS } from "./ast.ts";
+import {
+  findScope,
+  isMutable,
+  lookup,
+  restoreChain,
+  snapshotChain,
+} from "./env.ts";
+import type { Env, Scope } from "./env.ts";
 
 /**
  * A successful evaluation outcome.
@@ -173,44 +147,6 @@ function evalEq(left: Value, right: Value): EvalOutcome {
 }
 
 /**
- * A snapshot of a single scope's bindings.
- */
-interface ScopeSnapshot {
-  /** The values bound in the scope. */
-  values: Record<string, Value>;
-  /** Whether each bound name is mutable. */
-  mutable: Record<string, boolean>;
-}
-
-/**
- * Snapshot every scope in the chain, innermost first.
- * @param {Scope} scope - The innermost scope.
- * @returns {ScopeSnapshot[]} A snapshot per scope, innermost first.
- */
-function snapshotChain(scope: Scope): ScopeSnapshot[] {
-  const snaps: ScopeSnapshot[] = [];
-  for (let cur: Scope | null = scope; cur !== null; cur = cur.parent) {
-    snaps.push({ values: { ...cur.values }, mutable: { ...cur.mutable } });
-  }
-  return snaps;
-}
-
-/**
- * Restore a scope chain from snapshots taken by snapshotChain.
- * @param {Scope} scope - The innermost scope.
- * @param {ScopeSnapshot[]} snaps - The snapshots, innermost first.
- * @returns {void} Nothing.
- */
-function restoreChain(scope: Scope, snaps: ScopeSnapshot[]): void {
-  let cur: Scope | null = scope;
-  for (const snap of snaps) {
-    cur!.values = snap.values;
-    cur!.mutable = snap.mutable;
-    cur = cur!.parent;
-  }
-}
-
-/**
  * Evaluate a conditional (if) expression. Both branches are evaluated so an
  * error in either surfaces, but only the taken branch's side effects persist:
  * the untaken branch runs against a snapshot that is restored afterwards.
@@ -301,41 +237,6 @@ function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
     return { ok: true, value: val };
   }
   return { ok: false, kind: "deref-non-ref", name: "" };
-}
-
-/**
- * Look up a name in the scope chain, innermost first.
- * @param {Scope} scope - The innermost scope to start from.
- * @param {string} name - The name to look up.
- * @returns {Value | undefined} The bound value, or undefined when unbound.
- */
-function lookup(scope: Scope, name: string): Value | undefined {
-  let cur: Scope | null = scope;
-  while (cur !== null) {
-    const value = cur.values[name];
-    if (value !== undefined) {
-      return value;
-    }
-    cur = cur.parent;
-  }
-  return undefined;
-}
-
-/**
- * Find the nearest scope in the chain that binds a name.
- * @param {Scope} scope - The innermost scope to start from.
- * @param {string} name - The name to locate.
- * @returns {Scope | null} The binding scope, or null when unbound.
- */
-function findScope(scope: Scope, name: string): Scope | null {
-  let cur: Scope | null = scope;
-  while (cur !== null) {
-    if (cur.values[name] !== undefined) {
-      return cur;
-    }
-    cur = cur.parent;
-  }
-  return null;
 }
 
 /**
@@ -450,16 +351,6 @@ function isDerefAssign(statement: Statement): statement is DerefAssign {
 }
 
 /**
- * Whether a name is bound mutable in a block's local scope.
- * @param {Record<string, boolean>} mutable - The block's mutability map.
- * @param {string} name - The name to test.
- * @returns {boolean} True when the name is bound and mutable.
- */
-function isMutable(mutable: Record<string, boolean>, name: string): boolean {
-  return mutable[name] === true;
-}
-
-/**
  * The primitive type of a value (references have no type for this purpose).
  * @param {Value} value - The value to classify.
  * @returns {"number" | "boolean"} The value's primitive type.
@@ -475,8 +366,7 @@ function valueType(value: Value): "number" | "boolean" {
  * @returns {boolean} True when the value's type matches the annotation.
  */
 function annotationMatches(type: TypeName, value: Value): boolean {
-  const declared = type === "Bool" ? "boolean" : "number";
-  return valueType(value) === declared;
+  return valueType(value) === TYPE_VALUE_KINDS[type];
 }
 
 /**

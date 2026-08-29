@@ -92,6 +92,37 @@ export interface IdentNode {
 export type TypeName = "Num" | "Int" | "Bool";
 
 /**
+ * The primitive value kind a type name denotes.
+ */
+export type ValueKind = "number" | "boolean";
+
+/**
+ * The value kind each type name denotes (Num and Int both name numbers).
+ */
+export const TYPE_VALUE_KINDS: Record<TypeName, ValueKind> = {
+  Num: "number",
+  Int: "number",
+  Bool: "boolean",
+};
+
+/**
+ * A reference to a variable by name.
+ */
+export interface Ref {
+  /** The referenced variable name. */
+  name: string;
+  /** Whether the reference allows mutation. */
+  mutable: boolean;
+  /** The captured value (immutable refs only). */
+  value?: number;
+}
+
+/**
+ * A value produced by evaluation: a number, a boolean, or a reference.
+ */
+export type Value = number | boolean | Ref;
+
+/**
  * A variable binding in a block.
  */
 export interface Binding {
