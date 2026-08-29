@@ -2,14 +2,10 @@ import { OPERATOR_PRECEDENCE } from "./ast.ts";
 import type { AstNode, Operator } from "./ast.ts";
 import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
-import {
-  expectClose,
-  isBlockStart,
-  parseBlock,
-  parseBlockBody,
-  peek,
-} from "./statements.ts";
-import type { Cursor, ParseResult } from "./statements.ts";
+import { isBlockStart, peek } from "./cursor.ts";
+import type { Cursor } from "./cursor.ts";
+import { expectClose, parseBlock, parseBlockBody } from "./statements.ts";
+import type { ParseResult } from "./statements.ts";
 
 /**
  * Parse a factor (a single number).
