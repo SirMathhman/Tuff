@@ -23,6 +23,9 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
     cursor.index += 1;
     return { ok: true, value: { kind: "bool", value: tok.type === "kw-true" } };
   }
+  if (tok.type === "kw-if") {
+    return parseIf(cursor, input);
+  }
   if (tok.type === "ident") {
     cursor.index += 1;
     return { ok: true, value: { kind: "ident", name: tok.text } };
@@ -48,6 +51,51 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   const kind = tok.type === "invalid" ? "invalid-number" : "syntax";
   return { ok: false, error: { kind, input, position: tok.position } };
+}
+
+/**
+ * Parse an if expression: `if (cond) then else alt`.
+ * @param {Cursor} cursor - The token cursor, positioned at the if keyword.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed if node, or a structured error.
+ */
+function parseIf(cursor: Cursor, input: string): ParseResult {
+  cursor.index += 1;
+  const open = peek(cursor);
+  if (open.type !== "lparen") {
+    return { ok: false, error: { kind: "syntax", input, position: open.position } };
+  }
+  cursor.index += 1;
+  const condition = parseExpr(cursor, input);
+  if (!condition.ok) {
+    return condition;
+  }
+  const close = expectClose(cursor, input, "rparen");
+  if (!close.ok) {
+    return close;
+  }
+  const then = parseExpr(cursor, input);
+  if (!then.ok) {
+    return then;
+  }
+  const elseKw = peek(cursor);
+  if (elseKw.type !== "kw-else") {
+    return { ok: false, error: { kind: "syntax", input, position: elseKw.position } };
+  }
+  cursor.index += 1;
+  const alt = parseExpr(cursor, input);
+  if (!alt.ok) {
+    return alt;
+  }
+  return {
+    ok: true,
+    value: {
+      kind: "if",
+      condition: condition.value,
+      then: then.value,
+      else: alt.value,
+    },
+  };
 }
 
 /**

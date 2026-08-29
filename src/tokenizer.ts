@@ -17,6 +17,8 @@ export interface Token {
     | "kw-mut"
     | "kw-true"
     | "kw-false"
+    | "kw-if"
+    | "kw-else"
     | "assign"
     | "semi"
     | "amp"
@@ -91,7 +93,11 @@ function readToken(input: string, i: number): ReadToken {
             ? "kw-true"
             : text === "false"
               ? "kw-false"
-              : "ident";
+              : text === "if"
+                ? "kw-if"
+                : text === "else"
+                  ? "kw-else"
+                  : "ident";
     return {
       token: { type, text, position: i },
       next: j,

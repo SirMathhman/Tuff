@@ -5,6 +5,7 @@ import type {
   BlockNode,
   DerefAssign,
   DerefNode,
+  IfNode,
   RefNode,
   Statement,
 } from "./ast.ts";
@@ -91,6 +92,9 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   if (node.kind === "ref" || node.kind === "deref") {
     return evalRefOrDeref(node, env);
   }
+  if (node.kind === "if") {
+    return evalIf(node, env);
+  }
   return evalBinOp(node, env);
 }
 
@@ -155,6 +159,20 @@ function evalEq(left: Value, right: Value): EvalOutcome {
     ? (left as number) === (right as number)
     : (left as boolean) === (right as boolean);
   return { ok: true, value: equal ? 1 : 0 };
+}
+
+/**
+ * Evaluate a conditional (if) expression, taking the truthy branch.
+ * @param {IfNode} node - The if node to evaluate.
+ * @param {Env} env - The variable environment.
+ * @returns {EvalOutcome} The value of the taken branch, or a structured error.
+ */
+function evalIf(node: IfNode, env: Env): EvalOutcome {
+  const cond = evalAst(node.condition, env);
+  if (!cond.ok) {
+    return cond;
+  }
+  return evalAst(truthy(cond.value) ? node.then : node.else, env);
 }
 
 /**

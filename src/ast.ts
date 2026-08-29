@@ -132,6 +132,20 @@ export interface DerefNode {
 }
 
 /**
+ * A conditional (if) expression node.
+ */
+export interface IfNode {
+  /** The node kind. */
+  kind: "if";
+  /** The condition expression. */
+  condition: AstNode;
+  /** The branch taken when the condition is truthy. */
+  then: AstNode;
+  /** The branch taken when the condition is falsy. */
+  else: AstNode;
+}
+
+/**
  * A node in the expression AST.
  */
 export type AstNode =
@@ -141,4 +155,5 @@ export type AstNode =
   | IdentNode
   | BlockNode
   | RefNode
-  | DerefNode;
+  | DerefNode
+  | IfNode;
