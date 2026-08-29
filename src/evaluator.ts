@@ -1,4 +1,5 @@
 import type {
+  Assign,
   AstNode,
   Binding,
   BinOpNode,
@@ -260,49 +261,80 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
     },
   };
   for (const statement of node.statements) {
-    if (isDerefAssign(statement)) {
-      const targetOut = evalAst(statement.target, child);
-      if (!targetOut.ok) {
-        return targetOut;
-      }
-      if (typeof targetOut.value !== "object" || !("name" in targetOut.value)) {
-        return { ok: false, kind: "deref-non-ref", name: "" };
-      }
-      const ref = targetOut.value as Ref;
-      if (!ref.mutable) {
-        return { ok: false, kind: "immutable-assignment", name: ref.name };
-      }
-      const valOut = evalAst(statement.value, child);
-      if (!valOut.ok) {
-        return valOut;
-      }
-      if (!typeMatches(child, ref.name, valOut.value)) {
-        return { ok: false, kind: "type-mismatch", name: ref.name };
-      }
-      values[ref.name] = valOut.value;
-    } else {
-      const out = evalAst(statement.value, child);
-      if (!out.ok) {
-        return out;
-      }
-      if (isBinding(statement)) {
-        mutable[statement.name] = statement.mutable;
-      } else {
-        if (!isMutable(mutable, statement.name)) {
-          return {
-            ok: false,
-            kind: "immutable-assignment",
-            name: statement.name,
-          };
-        }
-        if (!typeMatches(child, statement.name, out.value)) {
-          return { ok: false, kind: "type-mismatch", name: statement.name };
-        }
-      }
-      values[statement.name] = out.value;
+    const out = isDerefAssign(statement)
+      ? evalDerefAssignStatement(statement, child, values)
+      : evalStatement(statement, child, values, mutable);
+    if (!out.ok) {
+      return out;
     }
   }
   return evalAst(node.body, child);
+}
+
+/**
+ * Evaluate a dereference assignment statement in a block's child env.
+ * @param {DerefAssign} statement - The dereference assignment statement.
+ * @param {Env} child - The block's child environment.
+ * @param {Record<string, Value>} values - The block's local value map.
+ * @returns {EvalOutcome} A success, or a structured error.
+ */
+function evalDerefAssignStatement(
+  statement: DerefAssign,
+  child: Env,
+  values: Record<string, Value>,
+): EvalOutcome {
+  const targetOut = evalAst(statement.target, child);
+  if (!targetOut.ok) {
+    return targetOut;
+  }
+  if (typeof targetOut.value !== "object" || !("name" in targetOut.value)) {
+    return { ok: false, kind: "deref-non-ref", name: "" };
+  }
+  const ref = targetOut.value as Ref;
+  if (!ref.mutable) {
+    return { ok: false, kind: "immutable-assignment", name: ref.name };
+  }
+  const valOut = evalAst(statement.value, child);
+  if (!valOut.ok) {
+    return valOut;
+  }
+  if (!typeMatches(child, ref.name, valOut.value)) {
+    return { ok: false, kind: "type-mismatch", name: ref.name };
+  }
+  values[ref.name] = valOut.value;
+  return { ok: true, value: valOut.value };
+}
+
+/**
+ * Evaluate a binding or assignment statement in a block's child env.
+ * @param {Binding | Assign} statement - The binding or assignment statement.
+ * @param {Env} child - The block's child environment.
+ * @param {Record<string, Value>} values - The block's local value map.
+ * @param {Record<string, boolean>} mutable - The block's mutability map.
+ * @returns {EvalOutcome} A success, or a structured error.
+ */
+function evalStatement(
+  statement: Binding | Assign,
+  child: Env,
+  values: Record<string, Value>,
+  mutable: Record<string, boolean>,
+): EvalOutcome {
+  const out = evalAst(statement.value, child);
+  if (!out.ok) {
+    return out;
+  }
+  if (isBinding(statement)) {
+    mutable[statement.name] = statement.mutable;
+  } else {
+    if (!isMutable(mutable, statement.name)) {
+      return { ok: false, kind: "immutable-assignment", name: statement.name };
+    }
+    if (!typeMatches(child, statement.name, out.value)) {
+      return { ok: false, kind: "type-mismatch", name: statement.name };
+    }
+  }
+  values[statement.name] = out.value;
+  return { ok: true, value: out.value };
 }
 
 /**
