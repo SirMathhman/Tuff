@@ -1,20 +1,31 @@
-pub fn evaluate(input: &str) -> Result<i64, String> {
+mod errors;
+pub use errors::Error;
+
+pub fn evaluate(input: &str) -> Result<i64, Error> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok(0);
     }
-    trimmed
-        .split('+')
-        .map(|part| {
-            part.trim().parse::<i64>().map_err(|_| {
-                format!(
-                    "failed to parse '{}' as an integer: expected a whole number",
-                    part.trim()
-                )
-            })
-        })
-        .collect::<Result<Vec<i64>, _>>()
-        .map(|parts| parts.iter().sum())
+    let mut offset = 0;
+    let mut total: i64 = 0;
+    for part in trimmed.split('+') {
+        let leading_ws = part.len() - part.trim_start().len();
+        let part_trimmed = part.trim();
+        let start = offset + leading_ws;
+        let end = start + part_trimmed.len();
+        match part_trimmed.parse::<i64>() {
+            Ok(val) => total += val,
+            Err(_) => {
+                return Err(Error::Parse {
+                    span: errors::Span { start, end },
+                    text: part_trimmed.to_string(),
+                    message: "not a whole number".to_string(),
+                })
+            }
+        }
+        offset += part.len() + 1;
+    }
+    Ok(total)
 }
 
 #[cfg(test)]
