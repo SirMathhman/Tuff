@@ -38,6 +38,20 @@ test('evaluate("1 || 0 && 0") => 1', () => {
   expect(evaluate("1 || 0 && 0")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("let x = 1; let y = 2; x == y") => 0', () => {
+  expect(evaluate("let x = 1; let y = 2; x == y")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test('evaluate("let x = 1; let y = 1; x == y") => 1', () => {
+  expect(evaluate("let x = 1; let y = 1; x == y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

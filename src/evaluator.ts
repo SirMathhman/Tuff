@@ -111,6 +111,8 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
         ok: true,
         value: left.value !== 0 && right.value !== 0 ? 1 : 0,
       };
+    case "==":
+      return { ok: true, value: left.value === right.value ? 1 : 0 };
     default: {
       const exhaustive: never = node.op;
       return exhaustive;

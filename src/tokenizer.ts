@@ -75,6 +75,9 @@ function readToken(input: string, i: number): ReadToken {
   if (ch === "&" && input[i + 1] === "&") {
     return { token: { type: "op", text: "&&", position: i }, next: i + 2 };
   }
+  if (ch === "=" && input[i + 1] === "=") {
+    return { token: { type: "op", text: "==", position: i }, next: i + 2 };
+  }
   if (ch in OPERATOR_PRECEDENCE) {
     return { token: { type: "op", text: ch, position: i }, next: i + 1 };
   }
