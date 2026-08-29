@@ -33,6 +33,28 @@ test('evaluate("fn add(first : Int, second : Int) : Int => first + second; add(3
   ).toEqual({ ok: true, value: 7 });
 });
 
+test('evaluate("fn id(x : Bool) => x; id(1)") => type-mismatch error', () => {
+  expect(evaluate("fn id(x : Bool) => x; id(1)")).toEqual({
+    ok: false,
+    error: {
+      kind: "type-mismatch",
+      input: "fn id(x : Bool) => x; id(1)",
+      name: "x",
+    },
+  });
+});
+
+test('evaluate("fn id(x : Int) : Bool => x; id(1)") => type-mismatch error', () => {
+  expect(evaluate("fn id(x : Int) : Bool => x; id(1)")).toEqual({
+    ok: false,
+    error: {
+      kind: "type-mismatch",
+      input: "fn id(x : Int) : Bool => x; id(1)",
+      name: "id",
+    },
+  });
+});
+
 test('evaluate("let x = true; let y = false; x || y") => 1', () => {
   expect(evaluate("let x = true; let y = false; x || y")).toEqual({
     ok: true,

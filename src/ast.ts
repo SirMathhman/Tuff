@@ -133,8 +133,8 @@ export interface Param {
 export interface FnValue {
   /** The function body expression. */
   body: AstNode;
-  /** The parameter names, in order. */
-  params: string[];
+  /** The declared parameters, in order. */
+  params: Param[];
   /** The declared return type, when annotated. */
   retType?: TypeName;
 }

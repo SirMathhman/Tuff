@@ -351,7 +351,7 @@ function evalStatement(
 function evalFnDef(statement: FnDef, child: Env, scope: Scope): EvalOutcome {
   const fn: FnValue = {
     body: statement.body,
-    params: statement.params.map((p) => p.name),
+    params: statement.params,
     retType: statement.retType,
   };
   scope.mutable[statement.name] = false;
@@ -380,15 +380,28 @@ function evalCall(node: CallNode, env: Env): EvalOutcome {
   }
   const scope: Scope = { values: {}, mutable: {}, parent: env.scope };
   for (let i = 0; i < fn.params.length; i += 1) {
+    const param = fn.params[i]!;
     const argOut = evalAst(node.args[i]!, env);
     if (!argOut.ok) {
       return argOut;
     }
-    const paramName = fn.params[i]!;
-    scope.mutable[paramName] = false;
-    scope.values[paramName] = argOut.value;
+    if (!annotationMatches(param.type, argOut.value)) {
+      return { ok: false, kind: "type-mismatch", name: param.name };
+    }
+    scope.mutable[param.name] = false;
+    scope.values[param.name] = argOut.value;
   }
-  return evalAst(fn.body, { scope });
+  const bodyOut = evalAst(fn.body, { scope });
+  if (!bodyOut.ok) {
+    return bodyOut;
+  }
+  if (
+    fn.retType !== undefined &&
+    !annotationMatches(fn.retType, bodyOut.value)
+  ) {
+    return { ok: false, kind: "type-mismatch", name: node.name };
+  }
+  return bodyOut;
 }
 
 /**
