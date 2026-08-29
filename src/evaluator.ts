@@ -1,6 +1,7 @@
 import type {
   AstNode,
   Binding,
+  BinOpNode,
   BlockNode,
   DerefAssign,
   DerefNode,
@@ -83,6 +84,16 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   if (node.kind === "ref" || node.kind === "deref") {
     return evalRefOrDeref(node, env);
   }
+  return evalBinOp(node, env);
+}
+
+/**
+ * Evaluate a binary operation node in an environment.
+ * @param {BinOpNode} node - The binary operation node to evaluate.
+ * @param {Env} env - The variable environment.
+ * @returns {EvalOutcome} The evaluated value, or a structured error.
+ */
+function evalBinOp(node: BinOpNode, env: Env): EvalOutcome {
   const left = evalAst(node.left, env);
   if (!left.ok) {
     return left;

@@ -52,6 +52,10 @@ test('evaluate("let x = 1; let y = 1; x == y") => 1', () => {
   });
 });
 
+test('evaluate("1 + 2 == 3 && 1") => 1', () => {
+  expect(evaluate("1 + 2 == 3 && 1")).toEqual({ ok: true, value: 1 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

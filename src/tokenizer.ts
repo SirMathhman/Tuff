@@ -69,14 +69,9 @@ function readToken(input: string, i: number): ReadToken {
       next: j,
     };
   }
-  if (ch === "|" && input[i + 1] === "|") {
-    return { token: { type: "op", text: "||", position: i }, next: i + 2 };
-  }
-  if (ch === "&" && input[i + 1] === "&") {
-    return { token: { type: "op", text: "&&", position: i }, next: i + 2 };
-  }
-  if (ch === "=" && input[i + 1] === "=") {
-    return { token: { type: "op", text: "==", position: i }, next: i + 2 };
+  const multi = readMultiCharOp(input, i);
+  if (multi !== null) {
+    return multi;
   }
   if (ch in OPERATOR_PRECEDENCE) {
     return { token: { type: "op", text: ch, position: i }, next: i + 1 };
@@ -107,6 +102,20 @@ function readToken(input: string, i: number): ReadToken {
     return { token: { type: punct, text: ch, position: i }, next: i + 1 };
   }
   return { token: { type: "invalid", text: ch, position: i }, next: i + 1 };
+}
+
+/**
+ * Read a multi-character operator (||, &&, ==) starting at an index.
+ * @param {string} input - The input string.
+ * @param {number} i - The index to start reading at.
+ * @returns {ReadToken | null} The operator token, or null if no multi-char operator starts here.
+ */
+function readMultiCharOp(input: string, i: number): ReadToken | null {
+  const pair = input.slice(i, i + 2);
+  if (pair === "||" || pair === "&&" || pair === "==") {
+    return { token: { type: "op", text: pair, position: i }, next: i + 2 };
+  }
+  return null;
 }
 
 /**

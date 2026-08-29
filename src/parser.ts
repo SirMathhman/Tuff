@@ -168,12 +168,7 @@ function parseEq(cursor: Cursor, input: string): ParseResult {
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseAnd(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(
-    cursor,
-    input,
-    OPERATOR_PRECEDENCE["&&"],
-    parseEq,
-  );
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["&&"], parseEq);
 }
 /**
  * Parse an expression (and-expressions joined by ||).
