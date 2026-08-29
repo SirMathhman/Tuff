@@ -6,6 +6,8 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     if trimmed.is_empty() {
         return Ok(0);
     }
+    // Offset to convert trimmed-relative positions to source-relative
+    let base = input.len() - input.trim_start().len();
     let chars: Vec<char> = trimmed.chars().collect();
     let mut pos = 0;
     let mut total: i64 = 0;
@@ -34,17 +36,31 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             num_str.push(chars[pos]);
             pos += 1;
         }
-        if num_str.is_empty() || num_str == "-" {
-            return Err(Error::Parse {
-                span: errors::Span { start, end: pos },
-                text: num_str,
-                message: "not a whole number".to_string(),
+        if num_str.is_empty() {
+            // No digits and no minus: unexpected character
+            return Err(Error::UnexpectedChar {
+                span: errors::Span {
+                    start: base + start,
+                    end: base + start + 1,
+                },
+                ch: chars[start],
             });
         }
-        let val: i64 = num_str.parse().map_err(|_| Error::Parse {
-            span: errors::Span { start, end: pos },
+        if num_str == "-" {
+            return Err(Error::InvalidNumber {
+                span: errors::Span {
+                    start: base + start,
+                    end: base + pos,
+                },
+                text: num_str,
+            });
+        }
+        let val: i64 = num_str.parse().map_err(|_| Error::InvalidNumber {
+            span: errors::Span {
+                start: base + start,
+                end: base + pos,
+            },
             text: num_str,
-            message: "not a whole number".to_string(),
         })?;
         let op = pending_op.unwrap_or('+');
         total = match op {
@@ -66,13 +82,12 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             pending_op = Some(chars[pos]);
             pos += 1;
         } else {
-            return Err(Error::Parse {
+            return Err(Error::UnexpectedChar {
                 span: errors::Span {
-                    start: pos,
-                    end: pos + 1,
+                    start: base + pos,
+                    end: base + pos + 1,
                 },
-                text: chars[pos].to_string(),
-                message: "unexpected character".to_string(),
+                ch: chars[pos],
             });
         }
     }
@@ -110,6 +125,23 @@ mod tests {
 
     #[test]
     fn test_evaluate_invalid_input() {
-        assert!(evaluate("1 + x").is_err());
+        match evaluate("1 + x") {
+            Err(Error::UnexpectedChar { span, ch }) => {
+                assert_eq!(ch, 'x');
+                assert_eq!(span, errors::Span { start: 4, end: 5 });
+            }
+            other => panic!("expected UnexpectedChar, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_evaluate_span_with_leading_whitespace() {
+        match evaluate("  1 + x") {
+            Err(Error::UnexpectedChar { span, ch }) => {
+                assert_eq!(ch, 'x');
+                assert_eq!(span, errors::Span { start: 6, end: 7 });
+            }
+            other => panic!("expected UnexpectedChar, got {:?}", other),
+        }
     }
 }
