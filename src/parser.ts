@@ -4,7 +4,7 @@ import { tokenize } from "./tokenizer.ts";
 import type { Token } from "./tokenizer.ts";
 import { isBlockStart, peek } from "./cursor.ts";
 import type { Cursor } from "./cursor.ts";
-import { expectClose, parseBlock, parseBlockBody } from "./statements.ts";
+import { expectClose, parseBlock, parseStatements } from "./statements.ts";
 import type { ParseResult } from "./statements.ts";
 
 /**
@@ -221,13 +221,24 @@ function parseExpr(cursor: Cursor, input: string): ParseResult {
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 export function parse(expression: string): ParseResult {
-  if (expression === "") {
-    return { ok: true, value: { kind: "num", value: 0 } };
-  }
   const cursor: Cursor = { tokens: tokenize(expression), index: 0 };
-  const result = parseBlockBody(cursor, expression, parseExpr, parseFactor);
-  if (!result.ok) {
-    return result;
+  const stmts = parseStatements(cursor, expression, parseExpr, parseFactor);
+  if (!stmts.ok) {
+    return stmts;
+  }
+  if (peek(cursor).type === "eof") {
+    return {
+      ok: true,
+      value: {
+        kind: "block",
+        statements: stmts.value,
+        body: { kind: "num", value: 0 },
+      },
+    };
+  }
+  const body = parseExpr(cursor, expression);
+  if (!body.ok) {
+    return body;
   }
   const tok = peek(cursor);
   if (tok.type !== "eof") {
@@ -236,5 +247,8 @@ export function parse(expression: string): ParseResult {
       error: { kind: "syntax", input: expression, position: tok.position },
     };
   }
-  return result;
+  return {
+    ok: true,
+    value: { kind: "block", statements: stmts.value, body: body.value },
+  };
 }

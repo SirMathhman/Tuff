@@ -40,6 +40,21 @@ export interface ParseFailure {
 export type ParseResult = ParseSuccess | ParseFailure;
 
 /**
+ * A successful statements outcome.
+ */
+export interface StatementsSuccess {
+  /** Marks the outcome as successful. */
+  ok: true;
+  /** The parsed statements. */
+  value: Statement[];
+}
+
+/**
+ * The outcome of parsing a sequence of statements.
+ */
+export type StatementsResult = StatementsSuccess | ParseFailure;
+
+/**
  * A successful statement outcome.
  */
 interface StatementSuccess {
@@ -184,7 +199,35 @@ function parseEqualsSemi(
 }
 
 /**
- * Parse a sequence of statements followed by a body expression.
+ * Parse a sequence of statements (the body expression is not consumed).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @param {(c: Cursor, i: string) => ParseResult} parseExpr - Parses a full expression.
+ * @param {(c: Cursor, i: string) => ParseResult} parseFactor - Parses a factor.
+ * @returns {ParseResult} The parsed statements, or a structured error.
+ */
+export function parseStatements(
+  cursor: Cursor,
+  input: string,
+  parseExpr: (c: Cursor, i: string) => ParseResult,
+  parseFactor: (c: Cursor, i: string) => ParseResult,
+): StatementsResult {
+  const statements: Statement[] = [];
+  for (;;) {
+    const stmt = parseStatement(cursor, input, parseExpr, parseFactor);
+    if (stmt === null) {
+      break;
+    }
+    if (!stmt.ok) {
+      return stmt;
+    }
+    statements.push(stmt.value);
+  }
+  return { ok: true, value: statements };
+}
+
+/**
+ * Parse a sequence of statements followed by a required body expression.
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @param {(c: Cursor, i: string) => ParseResult} parseExpr - Parses a full expression.
@@ -197,28 +240,18 @@ export function parseBlockBody(
   parseExpr: (c: Cursor, i: string) => ParseResult,
   parseFactor: (c: Cursor, i: string) => ParseResult,
 ): ParseResult {
-  const statements: Statement[] = [];
-  for (;;) {
-    const stmt = parseStatement(cursor, input, parseExpr, parseFactor);
-    if (stmt === null) {
-      break;
-    }
-    if (!stmt.ok) {
-      return stmt;
-    }
-    statements.push(stmt.value);
-  }
-  if (peek(cursor).type === "eof") {
-    return {
-      ok: true,
-      value: { kind: "block", statements, body: { kind: "num", value: 0 } },
-    };
+  const stmts = parseStatements(cursor, input, parseExpr, parseFactor);
+  if (!stmts.ok) {
+    return stmts;
   }
   const body = parseExpr(cursor, input);
   if (!body.ok) {
     return body;
   }
-  return { ok: true, value: { kind: "block", statements, body: body.value } };
+  return {
+    ok: true,
+    value: { kind: "block", statements: stmts.value, body: body.value },
+  };
 }
 
 /**

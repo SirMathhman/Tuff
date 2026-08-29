@@ -89,6 +89,13 @@ test('evaluate("let mut x = 0; x = 1;") => 0', () => {
   expect(evaluate("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
 });
 
+test('evaluate("{ let x = 1; }") => syntax error', () => {
+  expect(evaluate("{ let x = 1; }")).toEqual({
+    ok: false,
+    error: { kind: "syntax", input: "{ let x = 1; }", position: 13 },
+  });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
