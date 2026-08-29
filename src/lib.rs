@@ -6,77 +6,88 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     if trimmed.is_empty() {
         return Ok(0);
     }
-    // Offset to convert trimmed-relative positions to source-relative
     let base = input.len() - input.trim_start().len();
     let chars: Vec<char> = trimmed.chars().collect();
-    let mut pos = 0;
-    let mut terms: Vec<(char, i64)> = Vec::new(); // (operator, value)
-    let mut pending_op: Option<char> = None;
+    let terms = parse_terms(&chars, base)?;
+    Ok(fold_terms(&terms))
+}
 
-    while pos < chars.len() {
-        // Skip whitespace
-        while pos < chars.len() && chars[pos].is_whitespace() {
-            pos += 1;
-        }
-        if pos >= chars.len() {
-            break;
-        }
+fn skip_whitespace(chars: &[char], pos: usize) -> usize {
+    let mut p = pos;
+    while p < chars.len() && chars[p].is_whitespace() {
+        p += 1;
+    }
+    p
+}
 
-        // Parse a number
-        let start = pos;
-        let mut num_str = String::new();
-        // Optional negative sign (only at start or after an operator)
-        if chars[pos] == '-'
-            && (pending_op.is_none()
-                || pending_op == Some('+')
-                || pending_op == Some('-')
-                || pending_op == Some('*'))
-        {
-            num_str.push('-');
-            pos += 1;
-        }
-        while pos < chars.len() && chars[pos].is_ascii_digit() {
-            num_str.push(chars[pos]);
-            pos += 1;
-        }
-        if num_str.is_empty() {
-            return Err(Error::UnexpectedChar {
-                span: errors::Span {
-                    start: base + start,
-                    end: base + start + 1,
-                },
-                ch: chars[start],
-            });
-        }
-        if num_str == "-" {
-            return Err(Error::InvalidNumber {
-                span: errors::Span {
-                    start: base + start,
-                    end: base + pos,
-                },
-                text: num_str,
-            });
-        }
-        let val: i64 = num_str.parse().map_err(|_| Error::InvalidNumber {
+fn parse_number(
+    chars: &[char],
+    mut pos: usize,
+    allow_negative: bool,
+    base: usize,
+) -> Result<(i64, usize), Error> {
+    let start = pos;
+    let mut num_str = String::new();
+    if allow_negative && chars[pos] == '-' {
+        num_str.push('-');
+        pos += 1;
+    }
+    while pos < chars.len() && chars[pos].is_ascii_digit() {
+        num_str.push(chars[pos]);
+        pos += 1;
+    }
+    if num_str.is_empty() {
+        return Err(Error::UnexpectedChar {
+            span: errors::Span {
+                start: base + start,
+                end: base + start + 1,
+            },
+            ch: chars[start],
+        });
+    }
+    if num_str == "-" {
+        return Err(Error::InvalidNumber {
             span: errors::Span {
                 start: base + start,
                 end: base + pos,
             },
             text: num_str,
-        })?;
-        let op = pending_op.take().unwrap_or('+');
-        terms.push((op, val));
+        });
+    }
+    let val: i64 = num_str.parse().map_err(|_| Error::InvalidNumber {
+        span: errors::Span {
+            start: base + start,
+            end: base + pos,
+        },
+        text: num_str,
+    })?;
+    Ok((val, pos))
+}
 
-        // Skip whitespace
-        while pos < chars.len() && chars[pos].is_whitespace() {
-            pos += 1;
-        }
+fn parse_terms(chars: &[char], base: usize) -> Result<Vec<(char, i64)>, Error> {
+    let mut pos = 0;
+    let mut terms: Vec<(char, i64)> = Vec::new();
+    let mut pending_op: Option<char> = None;
+
+    while pos < chars.len() {
+        pos = skip_whitespace(chars, pos);
         if pos >= chars.len() {
             break;
         }
 
-        // Expect an operator
-        if chars[pos] == '+' || chars[pos] == '-' || chars[pos] == '*' {
+        let allow_neg =
+            pending_op.is_none() || matches!(pending_op, Some('+') | Some('-') | Some('*'));
+        let (val, new_pos) = parse_number(chars, pos, allow_neg, base)?;
+        let op = pending_op.take().unwrap_or('+');
+        terms.push((op, val));
+        pos = new_pos;
+
+        pos = skip_whitespace(chars, pos);
+        if pos >= chars.len() {
+            break;
+        }
+
+        if matches!(chars[pos], '+' | '-' | '*') {
             pending_op = Some(chars[pos]);
             pos += 1;
         } else {
@@ -89,33 +100,27 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             });
         }
     }
+    Ok(terms)
+}
 
-    // Two-pass evaluation: multiplication first, then addition/subtraction
+fn fold_terms(terms: &[(char, i64)]) -> i64 {
     // Pass 1: fold * into terms
     let mut folded: Vec<(char, i64)> = Vec::new();
-    let mut i = 0;
-    while i < terms.len() {
-        let (op, val) = terms[i];
+    for &(op, val) in terms {
         if op == '*' {
-            // Multiply with previous term
             if let Some((_, prev_val)) = folded.last_mut() {
                 *prev_val *= val;
             }
         } else {
             folded.push((op, val));
         }
-        i += 1;
     }
     // Pass 2: fold + and -
-    let mut total: i64 = 0;
-    for (op, val) in &folded {
-        total = match op {
-            '+' => total + val,
-            '-' => total - val,
-            _ => unreachable!(),
-        };
-    }
-    Ok(total)
+    folded.iter().fold(0i64, |total, &(op, val)| match op {
+        '+' => total + val,
+        '-' => total - val,
+        _ => unreachable!(),
+    })
 }
 
 #[cfg(test)]

@@ -8,14 +8,8 @@ pub struct Span {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    InvalidNumber {
-        span: Span,
-        text: String,
-    },
-    UnexpectedChar {
-        span: Span,
-        ch: char,
-    },
+    InvalidNumber { span: Span, text: String },
+    UnexpectedChar { span: Span, ch: char },
 }
 
 impl fmt::Display for Error {
