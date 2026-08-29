@@ -5,8 +5,9 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "lint": "tsc --noEmit && eslint .",
-    "lint:review": "tsc --noEmit && eslint --config eslint.review.config.ts .",
+    "typecheck": "tsc --noEmit",
+    "lint": "npm run typecheck && eslint .",
+    "lint:review-only": "echo 'Do not run this command if you are not a reviewer agent.' 1>&2 && npm run typecheck && eslint --config eslint.review.config.ts .",
     "callgraph": "bun tools/callgraph.ts",
     "callgraph:watch": "nodemon",
     "pmd:cpd": "pmd cpd src --language typescript --minimum-tokens 100 --ignore-identifiers --ignore-literals",
