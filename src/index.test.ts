@@ -115,7 +115,9 @@ test('evaluate("let y = if (true) { let mut x = 0; x = false; x } else false; y"
 
 test('evaluate("let y = if (false) { let mut x = 0; x = false; x } else false; y") => type-mismatch error', () => {
   expect(
-    evaluate("let y = if (false) { let mut x = 0; x = false; x } else false; y"),
+    evaluate(
+      "let y = if (false) { let mut x = 0; x = false; x } else false; y",
+    ),
   ).toEqual({
     ok: false,
     error: {

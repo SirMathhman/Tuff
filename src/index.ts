@@ -1,26 +1,12 @@
+import type { EvalError } from "./ast.ts";
 import { parse } from "./parser.ts";
 import { evalAst } from "./evaluator.ts";
 
 /**
- * A structured evaluation failure.
+ * A structured error produced by parsing or evaluation.
+ * Re-exported from `ast.ts`, the single source of truth for the error shape.
  */
-export interface EvalError {
-  /** What kind of failure this is. */
-  kind:
-    | "syntax"
-    | "invalid-number"
-    | "unknown-variable"
-    | "immutable-assignment"
-    | "deref-non-ref"
-    | "type-mismatch"
-    | "ref-as-result";
-  /** The input that caused the failure. */
-  input: string;
-  /** The position where the failure was found, when known. */
-  position?: number;
-  /** The name of the unknown variable, when the kind is unknown-variable. */
-  name?: string;
-}
+export type { EvalError };
 
 /**
  * A successful evaluation outcome.

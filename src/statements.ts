@@ -1,18 +1,6 @@
-import type { Assign, AstNode, Statement } from "./ast.ts";
+import type { Assign, AstNode, EvalError, Statement } from "./ast.ts";
 import { peek, peekAt } from "./cursor.ts";
 import type { Cursor } from "./cursor.ts";
-
-/**
- * A structured parse failure.
- */
-export interface ParseError {
-  /** What kind of failure this is. */
-  kind: "syntax" | "invalid-number";
-  /** The input that caused the failure. */
-  input: string;
-  /** The position where the failure was found. */
-  position: number;
-}
 
 /**
  * A successful parse outcome.
@@ -31,7 +19,7 @@ export interface ParseFailure {
   /** Marks the outcome as failed. */
   ok: false;
   /** The structured error. */
-  error: ParseError;
+  error: EvalError;
 }
 
 /**

@@ -6,6 +6,7 @@ import type {
   BlockNode,
   DerefAssign,
   DerefNode,
+  EvalErrorKind,
   IfNode,
   RefNode,
   Statement,
@@ -53,11 +54,7 @@ export interface EvalFailure {
   /** Marks the outcome as failed. */
   ok: false;
   /** What kind of failure this is. */
-  kind:
-    | "unknown-variable"
-    | "immutable-assignment"
-    | "deref-non-ref"
-    | "type-mismatch";
+  kind: EvalErrorKind;
   /** The name of the variable involved. */
   name: string;
 }

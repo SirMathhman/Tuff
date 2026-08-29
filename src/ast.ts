@@ -17,6 +17,32 @@ export const OPERATOR_PRECEDENCE: Record<Operator, number> = {
 };
 
 /**
+ * The kind of a structured error.
+ */
+export type EvalErrorKind =
+  | "syntax"
+  | "invalid-number"
+  | "unknown-variable"
+  | "immutable-assignment"
+  | "deref-non-ref"
+  | "type-mismatch"
+  | "ref-as-result";
+
+/**
+ * A structured error produced by parsing or evaluation.
+ */
+export interface EvalError {
+  /** What kind of failure this is. */
+  kind: EvalErrorKind;
+  /** The input that caused the failure. */
+  input: string;
+  /** The position where the failure was found, when known. */
+  position?: number;
+  /** The name of the variable involved, when relevant. */
+  name?: string;
+}
+
+/**
  * A numeric literal node.
  */
 export interface NumNode {
