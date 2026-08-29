@@ -10,7 +10,7 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     let base = input.len() - input.trim_start().len();
     let chars: Vec<char> = trimmed.chars().collect();
     let mut pos = 0;
-    let mut total: i64 = 0;
+    let mut terms: Vec<(char, i64)> = Vec::new(); // (operator, value)
     let mut pending_op: Option<char> = None;
 
     while pos < chars.len() {
@@ -27,7 +27,10 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
         let mut num_str = String::new();
         // Optional negative sign (only at start or after an operator)
         if chars[pos] == '-'
-            && (pending_op.is_none() || pending_op == Some('+') || pending_op == Some('-'))
+            && (pending_op.is_none()
+                || pending_op == Some('+')
+                || pending_op == Some('-')
+                || pending_op == Some('*'))
         {
             num_str.push('-');
             pos += 1;
@@ -37,7 +40,6 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             pos += 1;
         }
         if num_str.is_empty() {
-            // No digits and no minus: unexpected character
             return Err(Error::UnexpectedChar {
                 span: errors::Span {
                     start: base + start,
@@ -62,12 +64,8 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             },
             text: num_str,
         })?;
-        let op = pending_op.unwrap_or('+');
-        total = match op {
-            '+' => total + val,
-            '-' => total - val,
-            _ => unreachable!(),
-        };
+        let op = pending_op.take().unwrap_or('+');
+        terms.push((op, val));
 
         // Skip whitespace
         while pos < chars.len() && chars[pos].is_whitespace() {
@@ -78,7 +76,7 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
         }
 
         // Expect an operator
-        if chars[pos] == '+' || chars[pos] == '-' {
+        if chars[pos] == '+' || chars[pos] == '-' || chars[pos] == '*' {
             pending_op = Some(chars[pos]);
             pos += 1;
         } else {
@@ -90,6 +88,32 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
                 ch: chars[pos],
             });
         }
+    }
+
+    // Two-pass evaluation: multiplication first, then addition/subtraction
+    // Pass 1: fold * into terms
+    let mut folded: Vec<(char, i64)> = Vec::new();
+    let mut i = 0;
+    while i < terms.len() {
+        let (op, val) = terms[i];
+        if op == '*' {
+            // Multiply with previous term
+            if let Some((_, prev_val)) = folded.last_mut() {
+                *prev_val *= val;
+            }
+        } else {
+            folded.push((op, val));
+        }
+        i += 1;
+    }
+    // Pass 2: fold + and -
+    let mut total: i64 = 0;
+    for (op, val) in &folded {
+        total = match op {
+            '+' => total + val,
+            '-' => total - val,
+            _ => unreachable!(),
+        };
     }
     Ok(total)
 }
@@ -121,6 +145,11 @@ mod tests {
     #[test]
     fn test_evaluate_addition_and_subtraction() {
         assert_eq!(evaluate("2 + 3 - 4"), Ok(1));
+    }
+
+    #[test]
+    fn test_evaluate_multiplication_precedence() {
+        assert_eq!(evaluate("2 * 3 + 4"), Ok(10));
     }
 
     #[test]
