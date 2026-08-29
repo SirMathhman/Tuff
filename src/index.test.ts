@@ -27,6 +27,17 @@ test('evaluate("let x = true; let y = false; x && y") => 0', () => {
   });
 });
 
+test('evaluate("let x = true; let y = true; x && y") => 1', () => {
+  expect(evaluate("let x = true; let y = true; x && y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluate("1 || 0 && 0") => 1', () => {
+  expect(evaluate("1 || 0 && 0")).toEqual({ ok: true, value: 1 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

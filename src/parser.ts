@@ -148,18 +148,22 @@ function parseAddSub(cursor: Cursor, input: string): ParseResult {
   return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["+"], parseTerm);
 }
 /**
- * Parse an expression (additive terms joined by ||).
+ * Parse a logical-and expression (additive terms joined by &&).
+ * @param {Cursor} cursor - The token cursor.
+ * @param {string} input - The original input.
+ * @returns {ParseResult} The parsed AST, or a structured error.
+ */
+function parseAnd(cursor: Cursor, input: string): ParseResult {
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["&&"], parseAddSub);
+}
+/**
+ * Parse an expression (and-expressions joined by ||).
  * @param {Cursor} cursor - The token cursor.
  * @param {string} input - The original input.
  * @returns {ParseResult} The parsed AST, or a structured error.
  */
 function parseExpr(cursor: Cursor, input: string): ParseResult {
-  return parseBinaryLevel(
-    cursor,
-    input,
-    OPERATOR_PRECEDENCE["||"],
-    parseAddSub,
-  );
+  return parseBinaryLevel(cursor, input, OPERATOR_PRECEDENCE["||"], parseAnd);
 }
 
 /**
