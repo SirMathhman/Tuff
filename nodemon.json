@@ -1,5 +1,0 @@
-{
-  "watch": ["src/**/*.ts", "tools/callgraph.ts"],
-  "ext": "ts",
-  "exec": "bun tools/callgraph.ts"
-}

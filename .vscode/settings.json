@@ -1,5 +1,0 @@
-{
-  "js/ts.tsdk.path": "node_modules\\typescript\\lib",
-  "github.copilot.chat.workspace.codeSearchExternalIngest.enabled": false,
-  "chat.copilot.semanticSearch.enabled": true
-}

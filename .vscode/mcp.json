@@ -1,9 +1,0 @@
-{
-  "servers": {
-    "semantic-search": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@sirmathhman/semantic-search"]
-    }
-  }
-}
