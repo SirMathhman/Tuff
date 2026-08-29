@@ -224,3 +224,10 @@ test('evaluate("abc") => error', () => {
     error: { kind: "unknown-variable", input: "abc", name: "abc" },
   });
 });
+
+test('evaluate("let x = 0; &x") => error', () => {
+  expect(evaluate("let x = 0; &x")).toEqual({
+    ok: false,
+    error: { kind: "deref-non-ref", input: "let x = 0; &x", name: "" },
+  });
+});
