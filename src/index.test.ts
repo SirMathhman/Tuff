@@ -56,6 +56,17 @@ test('evaluate("1 + 2 == 3 && 1") => 1', () => {
   expect(evaluate("1 + 2 == 3 && 1")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluate("true == 1") => type-mismatch error', () => {
+  expect(evaluate("true == 1")).toEqual({
+    ok: false,
+    error: { kind: "type-mismatch", input: "true == 1", name: "" },
+  });
+});
+
+test('evaluate("true == true") => 1', () => {
+  expect(evaluate("true == true")).toEqual({ ok: true, value: 1 });
+});
+
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });

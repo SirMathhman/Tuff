@@ -25,8 +25,7 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   if (tok.type === "kw-true" || tok.type === "kw-false") {
     cursor.index += 1;
-    const val = tok.type === "kw-true" ? 1 : 0;
-    return { ok: true, value: { kind: "num", value: val } };
+    return { ok: true, value: { kind: "bool", value: tok.type === "kw-true" } };
   }
   if (tok.type === "ident") {
     cursor.index += 1;

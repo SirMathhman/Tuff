@@ -11,7 +11,8 @@ export interface EvalError {
     | "invalid-number"
     | "unknown-variable"
     | "immutable-assignment"
-    | "deref-non-ref";
+    | "deref-non-ref"
+    | "type-mismatch";
   /** The input that caused the failure. */
   input: string;
   /** The position where the failure was found, when known. */
@@ -65,6 +66,9 @@ export function evaluate(expression: string): EvalResult {
         name: outcome.name,
       },
     };
+  }
+  if (typeof outcome.value === "boolean") {
+    return { ok: true, value: outcome.value ? 1 : 0 };
   }
   if (typeof outcome.value !== "number") {
     return {

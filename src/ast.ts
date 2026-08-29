@@ -26,6 +26,16 @@ export interface NumNode {
 }
 
 /**
+ * A boolean literal node.
+ */
+export interface BoolNode {
+  /** The node kind. */
+  kind: "bool";
+  /** The boolean value. */
+  value: boolean;
+}
+
+/**
  * A binary operation node.
  */
 export interface BinOpNode {
@@ -125,6 +135,7 @@ export interface DerefNode {
  */
 export type AstNode =
   | NumNode
+  | BoolNode
   | BinOpNode
   | IdentNode
   | BlockNode

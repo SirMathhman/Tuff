@@ -22,9 +22,9 @@ export interface Ref {
 }
 
 /**
- * A value produced by evaluation: a number or a reference.
+ * A value produced by evaluation: a number, a boolean, or a reference.
  */
-export type Value = number | Ref;
+export type Value = number | boolean | Ref;
 
 /**
  * A variable environment mapping names to values.
@@ -51,7 +51,11 @@ export interface EvalFailure {
   /** Marks the outcome as failed. */
   ok: false;
   /** What kind of failure this is. */
-  kind: "unknown-variable" | "immutable-assignment" | "deref-non-ref";
+  kind:
+    | "unknown-variable"
+    | "immutable-assignment"
+    | "deref-non-ref"
+    | "type-mismatch";
   /** The name of the variable involved. */
   name: string;
 }
@@ -69,6 +73,9 @@ export type EvalOutcome = EvalSuccess | EvalFailure;
  */
 export function evalAst(node: AstNode, env: Env): EvalOutcome {
   if (node.kind === "num") {
+    return { ok: true, value: node.value };
+  }
+  if (node.kind === "bool") {
     return { ok: true, value: node.value };
   }
   if (node.kind === "ident") {
@@ -102,33 +109,74 @@ function evalBinOp(node: BinOpNode, env: Env): EvalOutcome {
   if (!right.ok) {
     return right;
   }
-  if (typeof left.value !== "number" || typeof right.value !== "number") {
-    return { ok: false, kind: "deref-non-ref", name: "" };
+  if (node.op === "==") {
+    return evalEq(left.value, right.value);
+  }
+  if (node.op === "||" || node.op === "&&") {
+    const l = truthy(left.value);
+    const r = truthy(right.value);
+    const result = node.op === "||" ? l || r : l && r;
+    return { ok: true, value: result ? 1 : 0 };
+  }
+  const leftNum = toNumber(left.value);
+  const rightNum = toNumber(right.value);
+  if (leftNum === null || rightNum === null) {
+    return { ok: false, kind: "type-mismatch", name: "" };
   }
   switch (node.op) {
     case "+":
-      return { ok: true, value: left.value + right.value };
+      return { ok: true, value: leftNum + rightNum };
     case "-":
-      return { ok: true, value: left.value - right.value };
+      return { ok: true, value: leftNum - rightNum };
     case "*":
-      return { ok: true, value: left.value * right.value };
-    case "||":
-      return {
-        ok: true,
-        value: left.value !== 0 || right.value !== 0 ? 1 : 0,
-      };
-    case "&&":
-      return {
-        ok: true,
-        value: left.value !== 0 && right.value !== 0 ? 1 : 0,
-      };
-    case "==":
-      return { ok: true, value: left.value === right.value ? 1 : 0 };
+      return { ok: true, value: leftNum * rightNum };
     default: {
       const exhaustive: never = node.op;
       return exhaustive;
     }
   }
+}
+
+/**
+ * Evaluate an equality comparison between two values.
+ * @param {Value} left - The left operand.
+ * @param {Value} right - The right operand.
+ * @returns {EvalOutcome} 1 when the values are equal, 0 when not, or a type-mismatch error when the operands are of different types.
+ */
+function evalEq(left: Value, right: Value): EvalOutcome {
+  const leftIsNum = typeof left === "number";
+  const rightIsNum = typeof right === "number";
+  if (leftIsNum !== rightIsNum) {
+    return { ok: false, kind: "type-mismatch", name: "" };
+  }
+  const equal = leftIsNum
+    ? (left as number) === (right as number)
+    : (left as boolean) === (right as boolean);
+  return { ok: true, value: equal ? 1 : 0 };
+}
+
+/**
+ * Coerce a value to a number, or null when it is not a number.
+ * @param {Value} value - The value to coerce.
+ * @returns {number | null} The numeric value, or null for non-numbers.
+ */
+function toNumber(value: Value): number | null {
+  return typeof value === "number" ? value : null;
+}
+
+/**
+ * Whether a value is truthy (nonzero number or true).
+ * @param {Value} value - The value to test.
+ * @returns {boolean} True when the value is truthy.
+ */
+function truthy(value: Value): boolean {
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  return false;
 }
 
 /**
@@ -162,7 +210,7 @@ function evalRefOrDeref(node: RefNode | DerefNode, env: Env): EvalOutcome {
   if (!out.ok) {
     return out;
   }
-  if (typeof out.value !== "number" && "name" in out.value) {
+  if (typeof out.value === "object" && "name" in out.value) {
     const ref = out.value as Ref;
     if (!ref.mutable) {
       return { ok: true, value: ref.value! };
@@ -197,7 +245,7 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
       if (!targetOut.ok) {
         return targetOut;
       }
-      if (typeof targetOut.value === "number") {
+      if (typeof targetOut.value !== "object" || !("name" in targetOut.value)) {
         return { ok: false, kind: "deref-non-ref", name: "" };
       }
       const ref = targetOut.value as Ref;
