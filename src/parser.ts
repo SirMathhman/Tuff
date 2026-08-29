@@ -28,6 +28,14 @@ function parseFactor(cursor: Cursor, input: string): ParseResult {
   }
   if (tok.type === "ident") {
     cursor.index += 1;
+    if (peek(cursor).type === "lparen") {
+      cursor.index += 1;
+      const close = expectClose(cursor, input, "rparen");
+      if (!close.ok) {
+        return close;
+      }
+      return { ok: true, value: { kind: "call", name: tok.text } };
+    }
     return { ok: true, value: { kind: "ident", name: tok.text } };
   }
   if (tok.type === "amp" || (tok.type === "op" && tok.text === "*")) {

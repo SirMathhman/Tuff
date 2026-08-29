@@ -164,6 +164,65 @@ function parseTypeAnnotation(
 }
 
 /**
+ * Parse a function definition: `fn name() => expr ;` (the fn keyword is consumed).
+ * @param {Cursor} cursor - The token cursor, positioned after the fn keyword.
+ * @param {string} input - The original input.
+ * @param {(c: Cursor, i: string) => ParseResult} parseExpr - Parses a full expression.
+ * @returns {StatementResult} The function definition, or a structured error.
+ */
+function parseFnDef(
+  cursor: Cursor,
+  input: string,
+  parseExpr: (c: Cursor, i: string) => ParseResult,
+): StatementResult {
+  const nameTok = peek(cursor);
+  if (nameTok.type !== "ident") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: nameTok.position },
+    };
+  }
+  cursor.index += 1;
+  const open = peek(cursor);
+  if (open.type !== "lparen") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: open.position },
+    };
+  }
+  cursor.index += 1;
+  const close = peek(cursor);
+  if (close.type !== "rparen") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: close.position },
+    };
+  }
+  cursor.index += 1;
+  const arrow = peek(cursor);
+  if (arrow.type !== "arrow") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: arrow.position },
+    };
+  }
+  cursor.index += 1;
+  const body = parseExpr(cursor, input);
+  if (!body.ok) {
+    return body;
+  }
+  const semi = peek(cursor);
+  if (semi.type !== "semi") {
+    return {
+      ok: false,
+      error: { kind: "syntax", input, position: semi.position },
+    };
+  }
+  cursor.index += 1;
+  return { ok: true, value: { name: nameTok.text, body: body.value } };
+}
+
+/**
  * Parse a `*target = expr ;` assignment-through-dereference statement.
  * @param {Cursor} cursor - The token cursor, positioned at the * token.
  * @param {string} input - The original input.
@@ -325,6 +384,10 @@ function parseStatement(
   if (kw.type === "kw-let") {
     cursor.index += 1;
     return parseBinding(cursor, input, parseExpr);
+  }
+  if (kw.type === "kw-fn") {
+    cursor.index += 1;
+    return parseFnDef(cursor, input, parseExpr);
   }
   if (kw.type === "ident" && peekAt(cursor, 1).type === "assign") {
     return parseNameEqualsExpr(cursor, input, parseExpr);

@@ -118,9 +118,17 @@ export interface Ref {
 }
 
 /**
- * A value produced by evaluation: a number, a boolean, or a reference.
+ * A function value: a zero-argument body expression.
  */
-export type Value = number | boolean | Ref;
+export interface FnValue {
+  /** The function body expression. */
+  body: AstNode;
+}
+
+/**
+ * A value produced by evaluation: a number, a boolean, a reference, or a function.
+ */
+export type Value = number | boolean | Ref | FnValue;
 
 /**
  * A variable binding in a block.
@@ -157,9 +165,19 @@ export interface DerefAssign {
 }
 
 /**
+ * A function definition statement in a block body.
+ */
+export interface FnDef {
+  /** The function name. */
+  name: string;
+  /** The function body expression. */
+  body: AstNode;
+}
+
+/**
  * A statement in a block body.
  */
-export type Statement = Binding | Assign | DerefAssign;
+export type Statement = Binding | Assign | DerefAssign | FnDef;
 
 /**
  * A block node with statements and a body expression.
@@ -210,6 +228,16 @@ export interface IfNode {
 }
 
 /**
+ * A function call node.
+ */
+export interface CallNode {
+  /** The node kind. */
+  kind: "call";
+  /** The name of the function to call. */
+  name: string;
+}
+
+/**
  * A node in the expression AST.
  */
 export type AstNode =
@@ -220,4 +248,5 @@ export type AstNode =
   | BlockNode
   | RefNode
   | DerefNode
-  | IfNode;
+  | IfNode
+  | CallNode;

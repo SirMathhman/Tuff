@@ -19,10 +19,12 @@ export interface Token {
     | "kw-false"
     | "kw-if"
     | "kw-else"
+    | "kw-fn"
     | "assign"
     | "semi"
     | "amp"
     | "colon"
+    | "arrow"
     | "invalid"
     | "eof";
   /** The token text. */
@@ -99,7 +101,9 @@ function readToken(input: string, i: number): ReadToken {
                 ? "kw-if"
                 : text === "else"
                   ? "kw-else"
-                  : "ident";
+                  : text === "fn"
+                    ? "kw-fn"
+                    : "ident";
     return {
       token: { type, text, position: i },
       next: j,
@@ -122,6 +126,9 @@ function readMultiCharOp(input: string, i: number): ReadToken | null {
   const pair = input.slice(i, i + 2);
   if (pair === "||" || pair === "&&" || pair === "==") {
     return { token: { type: "op", text: pair, position: i }, next: i + 2 };
+  }
+  if (pair === "=>") {
+    return { token: { type: "arrow", text: pair, position: i }, next: i + 2 };
   }
   return null;
 }

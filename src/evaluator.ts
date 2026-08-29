@@ -4,9 +4,11 @@ import type {
   Binding,
   BinOpNode,
   BlockNode,
+  CallNode,
   DerefAssign,
   DerefNode,
   EvalErrorKind,
+  FnDef,
   IfNode,
   Ref,
   RefNode,
@@ -79,6 +81,9 @@ export function evalAst(node: AstNode, env: Env): EvalOutcome {
   }
   if (node.kind === "if") {
     return evalIf(node, env);
+  }
+  if (node.kind === "call") {
+    return evalCall(node, env);
   }
   return evalBinOp(node, env);
 }
@@ -251,7 +256,9 @@ function evalBlock(node: BlockNode, env: Env): EvalOutcome {
   for (const statement of node.statements) {
     const out = isDerefAssign(statement)
       ? evalDerefAssignStatement(statement, child, scope)
-      : evalStatement(statement, child, scope);
+      : isFnDef(statement)
+        ? evalFnDef(statement, child, scope)
+        : evalStatement(statement, child, scope);
     if (!out.ok) {
       return out;
     }
@@ -333,12 +340,51 @@ function evalStatement(
 }
 
 /**
+ * Evaluate a function definition statement: bind the name to a function value.
+ * @param {FnDef} statement - The function definition statement.
+ * @param {Env} child - The block's child environment.
+ * @param {Scope} scope - The block's innermost scope.
+ * @returns {EvalOutcome} A success, or a structured error.
+ */
+function evalFnDef(statement: FnDef, child: Env, scope: Scope): EvalOutcome {
+  scope.mutable[statement.name] = false;
+  scope.values[statement.name] = { body: statement.body };
+  return { ok: true, value: { body: statement.body } };
+}
+
+/**
+ * Evaluate a function call: look up the name and run its body in the current env.
+ * @param {CallNode} node - The call node to evaluate.
+ * @param {Env} env - The variable environment.
+ * @returns {EvalOutcome} The value of the function body, or a structured error.
+ */
+function evalCall(node: CallNode, env: Env): EvalOutcome {
+  const value = lookup(env.scope, node.name);
+  if (value === undefined) {
+    return { ok: false, kind: "unknown-variable", name: node.name };
+  }
+  if (typeof value !== "object" || !("body" in value)) {
+    return { ok: false, kind: "type-mismatch", name: node.name };
+  }
+  return evalAst(value.body, env);
+}
+
+/**
  * Whether a statement is a binding (as opposed to an assignment).
  * @param {Statement} statement - The statement to test.
  * @returns {boolean} True when the statement is a binding.
  */
 function isBinding(statement: Statement): statement is Binding {
   return "mutable" in statement;
+}
+
+/**
+ * Whether a statement is a function definition.
+ * @param {Statement} statement - The statement to test.
+ * @returns {boolean} True when the statement is a function definition.
+ */
+function isFnDef(statement: Statement): statement is FnDef {
+  return "body" in statement;
 }
 
 /**
