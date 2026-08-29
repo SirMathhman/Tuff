@@ -239,6 +239,13 @@ test('evaluate("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
   });
 });
 
+test('evaluate("{ let x = 1; x } + { let y = 2; y }") => 3', () => {
+  expect(evaluate("{ let x = 1; x } + { let y = 2; y }")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
 test('evaluate("let x = 1; let y = x; y") => 1', () => {
   expect(evaluate("let x = 1; let y = x; y")).toEqual({
     ok: true,
