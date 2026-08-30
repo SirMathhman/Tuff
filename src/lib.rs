@@ -24,6 +24,7 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     let value = eval::eval(&expr, &mut env)?;
     match value {
         eval::Value::Int(n) => Ok(n),
+        eval::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
         eval::Value::Ref { name, span } => Err(Error::UnexpectedToken {
             span,
             token: format!("reference to '{name}' as final result"),
@@ -190,6 +191,14 @@ mod tests {
     #[test]
     fn test_evaluate_not() {
         assert_eq!(evaluate("let x = true; !x"), Ok(0));
+    }
+
+    #[test]
+    fn test_evaluate_bool_int_equality_rejected() {
+        match evaluate("true == 1") {
+            Err(Error::TypeMismatch { .. }) => {}
+            other => panic!("expected TypeMismatch, got {:?}", other),
+        }
     }
 
     #[test]

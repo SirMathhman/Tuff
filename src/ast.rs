@@ -29,6 +29,7 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Number(i64),
+    Bool(bool),
     Ident {
         name: String,
         span: Span,

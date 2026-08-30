@@ -11,6 +11,7 @@ use crate::span::Span;
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
+    Bool(bool),
     Ref { name: String, span: Span },
     RefMut { name: String, span: Span },
 }
@@ -87,6 +88,7 @@ impl Environment {
 pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
     match expr {
         Expr::Number(n) => Ok(Value::Int(*n)),
+        Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::Ident { name, span } => env.lookup(name).ok_or_else(|| Error::UndefinedVariable {
             span: *span,
             name: name.clone(),
@@ -98,8 +100,24 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             }
             UnaryOp::Not => {
                 let v = eval(operand, env)?;
-                // Logical NOT: 1 if the operand is zero, else 0.
-                Ok(Value::Int(if int_value(&v, *span)? == 0 { 1 } else { 0 }))
+                // Logical NOT: 1 if the operand is falsy, else 0.
+                let t = match &v {
+                    Value::Int(n) => *n != 0,
+                    Value::Bool(b) => *b,
+                    Value::Ref { name, .. } => {
+                        return Err(Error::UnexpectedToken {
+                            span: *span,
+                            token: format!("reference to '{name}' used as boolean"),
+                        })
+                    }
+                    Value::RefMut { name, .. } => {
+                        return Err(Error::UnexpectedToken {
+                            span: *span,
+                            token: format!("mutable reference to '{name}' used as boolean"),
+                        })
+                    }
+                };
+                Ok(Value::Int(if t { 0 } else { 1 }))
             }
             UnaryOp::Ref => match operand.as_ref() {
                 Expr::Ident { name, .. } => Ok(Value::Ref {
@@ -127,7 +145,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                     Value::Ref { name, .. } | Value::RefMut { name, .. } => env
                         .lookup(&name)
                         .ok_or(Error::UndefinedVariable { span: *span, name }),
-                    Value::Int(_) => Err(Error::UnexpectedToken {
+                    Value::Int(_) | Value::Bool(_) => Err(Error::UnexpectedToken {
                         span: *span,
                         token: "non-reference operand of *".to_string(),
                     }),
@@ -135,25 +153,37 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             }
         },
         Expr::Binary { op, span, lhs, rhs } => {
-            let l = int_value(&eval(lhs, env)?, *span)?;
-            let r = int_value(&eval(rhs, env)?, *span)?;
-            Ok(Value::Int(match op {
-                BinaryOp::Add => l + r,
-                BinaryOp::Sub => l - r,
-                BinaryOp::Mul => l * r,
+            let l = eval(lhs, env)?;
+            let r = eval(rhs, env)?;
+            Ok(match op {
+                BinaryOp::Add => Value::Int(int_value(&l, *span)? + int_value(&r, *span)?),
+                BinaryOp::Sub => Value::Int(int_value(&l, *span)? - int_value(&r, *span)?),
+                BinaryOp::Mul => Value::Int(int_value(&l, *span)? * int_value(&r, *span)?),
                 BinaryOp::Eq => {
                     // Equality: 1 if the operands are equal, else 0.
-                    if l == r { 1 } else { 0 }
+                    // Operands must share a type; mixing bool and int is an error.
+                    let eq = match (&l, &r) {
+                        (Value::Int(a), Value::Int(b)) => *a == *b,
+                        (Value::Bool(a), Value::Bool(b)) => *a == *b,
+                        _ => {
+                            return Err(Error::TypeMismatch {
+                                span: *span,
+                                expected: "both operands to be the same type".to_string(),
+                                found: format!("{} and {}", type_name(&l), type_name(&r)),
+                            })
+                        }
+                    };
+                    Value::Int(if eq { 1 } else { 0 })
                 }
                 BinaryOp::Or => {
-                    // Logical OR: truthy is any non-zero value.
-                    if l != 0 || r != 0 { 1 } else { 0 }
+                    // Logical OR: truthy is any non-zero value or true.
+                    Value::Int(if truthy(&l) || truthy(&r) { 1 } else { 0 })
                 }
                 BinaryOp::And => {
-                    // Logical AND: truthy is any non-zero value.
-                    if l != 0 && r != 0 { 1 } else { 0 }
+                    // Logical AND: truthy is any non-zero value or true.
+                    Value::Int(if truthy(&l) && truthy(&r) { 1 } else { 0 })
                 }
-            }))
+            })
         }
         Expr::Let {
             name,
@@ -185,7 +215,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
         } => {
             let name = match eval(target, env)? {
                 Value::Ref { name, .. } | Value::RefMut { name, .. } => name,
-                Value::Int(_) => {
+                Value::Int(_) | Value::Bool(_) => {
                     return Err(Error::UnexpectedToken {
                         span: *span,
                         token: "non-reference target of * =".to_string(),
@@ -199,10 +229,15 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
     }
 }
 
-/// Extract an `i64` from a `Value`, erroring if it is a reference.
+/// Extract an `i64` from a `Value`, erroring if it is a bool or a reference.
 fn int_value(v: &Value, span: Span) -> Result<i64, Error> {
     match v {
         Value::Int(n) => Ok(*n),
+        Value::Bool(_) => Err(Error::TypeMismatch {
+            span,
+            expected: "an integer".to_string(),
+            found: "a boolean".to_string(),
+        }),
         Value::Ref { name, .. } => Err(Error::UnexpectedToken {
             span,
             token: format!("reference to '{name}' used as integer"),
@@ -211,5 +246,24 @@ fn int_value(v: &Value, span: Span) -> Result<i64, Error> {
             span,
             token: format!("mutable reference to '{name}' used as integer"),
         }),
+    }
+}
+
+/// Truthiness: any non-zero integer or `true` is truthy.
+fn truthy(v: &Value) -> bool {
+    match v {
+        Value::Int(n) => *n != 0,
+        Value::Bool(b) => *b,
+        Value::Ref { .. } | Value::RefMut { .. } => false,
+    }
+}
+
+/// A short type name for diagnostics.
+fn type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Int(_) => "integer",
+        Value::Bool(_) => "boolean",
+        Value::Ref { .. } => "reference",
+        Value::RefMut { .. } => "mutable reference",
     }
 }

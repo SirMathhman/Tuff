@@ -178,14 +178,14 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Ident { name, span })
             }
             Some(Token::True) => {
-                // The boolean literal `true` is the integer 1.
+                // The boolean literal `true`.
                 self.pos += 1;
-                Ok(Expr::Number(1))
+                Ok(Expr::Bool(true))
             }
             Some(Token::False) => {
-                // The boolean literal `false` is the integer 0.
+                // The boolean literal `false`.
                 self.pos += 1;
-                Ok(Expr::Number(0))
+                Ok(Expr::Bool(false))
             }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.

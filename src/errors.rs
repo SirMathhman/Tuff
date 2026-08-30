@@ -4,12 +4,34 @@ use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    InvalidNumber { span: Span, text: String },
-    UnexpectedChar { span: Span, ch: char },
-    UnexpectedToken { span: Span, token: String },
-    UnexpectedEnd { span: Span },
-    UndefinedVariable { span: Span, name: String },
-    ImmutableVariable { span: Span, name: String },
+    InvalidNumber {
+        span: Span,
+        text: String,
+    },
+    UnexpectedChar {
+        span: Span,
+        ch: char,
+    },
+    UnexpectedToken {
+        span: Span,
+        token: String,
+    },
+    UnexpectedEnd {
+        span: Span,
+    },
+    UndefinedVariable {
+        span: Span,
+        name: String,
+    },
+    ImmutableVariable {
+        span: Span,
+        name: String,
+    },
+    TypeMismatch {
+        span: Span,
+        expected: String,
+        found: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -54,6 +76,13 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "at {}..{}: cannot assign to immutable variable '{name}'",
+                    span.start, span.end
+                )
+            }
+            Error::TypeMismatch { span, expected, found } => {
+                write!(
+                    f,
+                    "at {}..{}: type mismatch — expected {expected}, found {found}",
                     span.start, span.end
                 )
             }
