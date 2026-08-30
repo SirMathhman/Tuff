@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::Expr;
+use crate::ast::{BinaryOp, Expr, UnaryOp};
 use crate::errors::Error;
 use crate::span::Span;
 
@@ -88,18 +88,18 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             name: name.clone(),
         }),
         Expr::Unary { op, span, operand } => match op {
-            '-' => {
+            UnaryOp::Neg => {
                 let v = eval(operand, env)?;
                 Ok(Value::Int(-int_value(&v, *span)?))
             }
-            '&' => match operand.as_ref() {
+            UnaryOp::Ref => match operand.as_ref() {
                 Expr::Ident { name, .. } => Ok(Value::Ref(name.clone())),
                 _ => Err(Error::UnexpectedToken {
                     span: *span,
                     token: "non-identifier operand of &".to_string(),
                 }),
             },
-            '*' => {
+            UnaryOp::Deref => {
                 let v = eval(operand, env)?;
                 match v {
                     Value::Ref(name) => env
@@ -111,16 +111,14 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                     }),
                 }
             }
-            _ => unreachable!(),
         },
         Expr::Binary { op, span, lhs, rhs } => {
             let l = int_value(&eval(lhs, env)?, *span)?;
             let r = int_value(&eval(rhs, env)?, *span)?;
             Ok(Value::Int(match op {
-                '+' => l + r,
-                '-' => l - r,
-                '*' => l * r,
-                _ => unreachable!(),
+                BinaryOp::Add => l + r,
+                BinaryOp::Sub => l - r,
+                BinaryOp::Mul => l * r,
             }))
         }
         Expr::Let {

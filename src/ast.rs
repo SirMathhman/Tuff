@@ -1,5 +1,21 @@
 use crate::span::Span;
 
+/// A unary operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOp {
+    Neg,
+    Ref,
+    Deref,
+}
+
+/// A binary operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+}
+
 /// An arithmetic expression.
 ///
 /// `Number` is a leaf; `Binary` combines two sub-expressions with an
@@ -13,12 +29,12 @@ pub enum Expr {
         span: Span,
     },
     Unary {
-        op: char,
+        op: UnaryOp,
         span: Span,
         operand: Box<Expr>,
     },
     Binary {
-        op: char,
+        op: BinaryOp,
         span: Span,
         lhs: Box<Expr>,
         rhs: Box<Expr>,

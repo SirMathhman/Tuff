@@ -1,4 +1,4 @@
-use crate::ast::Expr;
+use crate::ast::{BinaryOp, Expr, UnaryOp};
 use crate::errors::Error;
 use crate::lexer::{SpannedToken, Token};
 use crate::span::Span;
@@ -90,8 +90,8 @@ impl<'a> Parser<'a> {
         let mut lhs = self.parse_term()?;
         while matches!(self.peek(), Some(Token::Plus) | Some(Token::Minus)) {
             let op = match self.tokens[self.pos].token {
-                Token::Plus => '+',
-                Token::Minus => '-',
+                Token::Plus => BinaryOp::Add,
+                Token::Minus => BinaryOp::Sub,
                 _ => unreachable!(),
             };
             let span = self.tokens[self.pos].span;
@@ -114,7 +114,7 @@ impl<'a> Parser<'a> {
             self.pos += 1;
             let rhs = self.parse_factor()?;
             lhs = Expr::Binary {
-                op: '*',
+                op: BinaryOp::Mul,
                 span,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
@@ -142,7 +142,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
-                    op: '-',
+                    op: UnaryOp::Neg,
                     span,
                     operand: Box::new(operand),
                 })
@@ -153,7 +153,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
-                    op: '&',
+                    op: UnaryOp::Ref,
                     span,
                     operand: Box::new(operand),
                 })
@@ -164,7 +164,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
-                    op: '*',
+                    op: UnaryOp::Deref,
                     span,
                     operand: Box::new(operand),
                 })
