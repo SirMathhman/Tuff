@@ -93,97 +93,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             span: *span,
             name: name.clone(),
         }),
-        Expr::Unary { op, span, operand } => match op {
-            UnaryOp::Neg => {
-                let v = eval(operand, env)?;
-                Ok(Value::Int(-int_value(&v, *span)?))
-            }
-            UnaryOp::Not => {
-                let v = eval(operand, env)?;
-                // Logical NOT: 1 if the operand is falsy, else 0.
-                let t = match &v {
-                    Value::Int(n) => *n != 0,
-                    Value::Bool(b) => *b,
-                    Value::Ref { name, .. } => {
-                        return Err(Error::UnexpectedToken {
-                            span: *span,
-                            token: format!("reference to '{name}' used as boolean"),
-                        })
-                    }
-                    Value::RefMut { name, .. } => {
-                        return Err(Error::UnexpectedToken {
-                            span: *span,
-                            token: format!("mutable reference to '{name}' used as boolean"),
-                        })
-                    }
-                };
-                Ok(Value::Int(if t { 0 } else { 1 }))
-            }
-            UnaryOp::Ref => match operand.as_ref() {
-                Expr::Ident { name, .. } => Ok(Value::Ref {
-                    name: name.clone(),
-                    span: *span,
-                }),
-                _ => Err(Error::UnexpectedToken {
-                    span: *span,
-                    token: "non-identifier operand of &".to_string(),
-                }),
-            },
-            UnaryOp::RefMut => match operand.as_ref() {
-                Expr::Ident { name, .. } => Ok(Value::RefMut {
-                    name: name.clone(),
-                    span: *span,
-                }),
-                _ => Err(Error::UnexpectedToken {
-                    span: *span,
-                    token: "non-identifier operand of &mut".to_string(),
-                }),
-            },
-            UnaryOp::Deref => {
-                let v = eval(operand, env)?;
-                match v {
-                    Value::Ref { name, .. } | Value::RefMut { name, .. } => env
-                        .lookup(&name)
-                        .ok_or(Error::UndefinedVariable { span: *span, name }),
-                    Value::Int(_) | Value::Bool(_) => Err(Error::UnexpectedToken {
-                        span: *span,
-                        token: "non-reference operand of *".to_string(),
-                    }),
-                }
-            }
-        },
+        Expr::Unary { op, span, operand } => eval_unary(op, *span, operand, env),
         Expr::Binary { op, span, lhs, rhs } => {
             let l = eval(lhs, env)?;
             let r = eval(rhs, env)?;
-            Ok(match op {
-                BinaryOp::Add => Value::Int(int_value(&l, *span)? + int_value(&r, *span)?),
-                BinaryOp::Sub => Value::Int(int_value(&l, *span)? - int_value(&r, *span)?),
-                BinaryOp::Mul => Value::Int(int_value(&l, *span)? * int_value(&r, *span)?),
-                BinaryOp::Eq => {
-                    // Equality: 1 if the operands are equal, else 0.
-                    // Operands must share a type; mixing bool and int is an error.
-                    let eq = match (&l, &r) {
-                        (Value::Int(a), Value::Int(b)) => *a == *b,
-                        (Value::Bool(a), Value::Bool(b)) => *a == *b,
-                        _ => {
-                            return Err(Error::TypeMismatch {
-                                span: *span,
-                                expected: "both operands to be the same type".to_string(),
-                                found: format!("{} and {}", type_name(&l), type_name(&r)),
-                            })
-                        }
-                    };
-                    Value::Int(if eq { 1 } else { 0 })
-                }
-                BinaryOp::Or => {
-                    // Logical OR: truthy is any non-zero value or true.
-                    Value::Int(if truthy(&l) || truthy(&r) { 1 } else { 0 })
-                }
-                BinaryOp::And => {
-                    // Logical AND: truthy is any non-zero value or true.
-                    Value::Int(if truthy(&l) && truthy(&r) { 1 } else { 0 })
-                }
-            })
+            eval_binary(op, *span, l, r)
         }
         Expr::Let {
             name,
@@ -227,6 +141,107 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             eval(body, env)
         }
     }
+}
+
+/// Evaluate a unary expression: negation, logical not, reference, or deref.
+fn eval_unary(
+    op: &UnaryOp,
+    span: Span,
+    operand: &Expr,
+    env: &mut Environment,
+) -> Result<Value, Error> {
+    match op {
+        UnaryOp::Neg => {
+            let v = eval(operand, env)?;
+            Ok(Value::Int(-int_value(&v, span)?))
+        }
+        UnaryOp::Not => {
+            let v = eval(operand, env)?;
+            // Logical NOT: 1 if the operand is falsy, else 0.
+            let t = match &v {
+                Value::Int(n) => *n != 0,
+                Value::Bool(b) => *b,
+                Value::Ref { name, .. } => {
+                    return Err(Error::UnexpectedToken {
+                        span,
+                        token: format!("reference to '{name}' used as boolean"),
+                    });
+                }
+                Value::RefMut { name, .. } => {
+                    return Err(Error::UnexpectedToken {
+                        span,
+                        token: format!("mutable reference to '{name}' used as boolean"),
+                    });
+                }
+            };
+            Ok(Value::Int(if t { 0 } else { 1 }))
+        }
+        UnaryOp::Ref => match operand {
+            Expr::Ident { name, .. } => Ok(Value::Ref {
+                name: name.clone(),
+                span,
+            }),
+            _ => Err(Error::UnexpectedToken {
+                span,
+                token: "non-identifier operand of &".to_string(),
+            }),
+        },
+        UnaryOp::RefMut => match operand {
+            Expr::Ident { name, .. } => Ok(Value::RefMut {
+                name: name.clone(),
+                span,
+            }),
+            _ => Err(Error::UnexpectedToken {
+                span,
+                token: "non-identifier operand of &mut".to_string(),
+            }),
+        },
+        UnaryOp::Deref => {
+            let v = eval(operand, env)?;
+            match v {
+                Value::Ref { name, .. } | Value::RefMut { name, .. } => env
+                    .lookup(&name)
+                    .ok_or(Error::UndefinedVariable { span, name }),
+                Value::Int(_) | Value::Bool(_) => Err(Error::UnexpectedToken {
+                    span,
+                    token: "non-reference operand of *".to_string(),
+                }),
+            }
+        }
+    }
+}
+
+/// Combine two evaluated operands with a binary operator.
+fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, Error> {
+    Ok(match op {
+        BinaryOp::Add => Value::Int(int_value(&l, span)? + int_value(&r, span)?),
+        BinaryOp::Sub => Value::Int(int_value(&l, span)? - int_value(&r, span)?),
+        BinaryOp::Mul => Value::Int(int_value(&l, span)? * int_value(&r, span)?),
+        BinaryOp::Eq => {
+            // Equality: 1 if the operands are equal, else 0.
+            // Operands must share a type; mixing bool and int is an error.
+            let eq = match (&l, &r) {
+                (Value::Int(a), Value::Int(b)) => *a == *b,
+                (Value::Bool(a), Value::Bool(b)) => *a == *b,
+                _ => {
+                    return Err(Error::TypeMismatch {
+                        span,
+                        expected: "both operands to be the same type".to_string(),
+                        found: format!("{} and {}", type_name(&l), type_name(&r)),
+                    });
+                }
+            };
+            Value::Int(if eq { 1 } else { 0 })
+        }
+        BinaryOp::Or => {
+            // Logical OR: truthy is any non-zero value or true.
+            Value::Int(if truthy(&l) || truthy(&r) { 1 } else { 0 })
+        }
+        BinaryOp::And => {
+            // Logical AND: truthy is any non-zero value or true.
+            Value::Int(if truthy(&l) && truthy(&r) { 1 } else { 0 })
+        }
+    })
 }
 
 /// Extract an `i64` from a `Value`, erroring if it is a bool or a reference.

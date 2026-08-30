@@ -79,7 +79,11 @@ impl fmt::Display for Error {
                     span.start, span.end
                 )
             }
-            Error::TypeMismatch { span, expected, found } => {
+            Error::TypeMismatch {
+                span,
+                expected,
+                found,
+            } => {
                 write!(
                     f,
                     "at {}..{}: type mismatch — expected {expected}, found {found}",
