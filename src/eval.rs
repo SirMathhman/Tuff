@@ -140,6 +140,10 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                     // Logical OR: truthy is any non-zero value.
                     if l != 0 || r != 0 { 1 } else { 0 }
                 }
+                BinaryOp::And => {
+                    // Logical AND: truthy is any non-zero value.
+                    if l != 0 && r != 0 { 1 } else { 0 }
+                }
             }))
         }
         Expr::Let {

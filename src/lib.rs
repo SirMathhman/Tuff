@@ -178,6 +178,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_and() {
+        assert_eq!(evaluate("let x = true; let y = false; x && y"), Ok(0));
+    }
+
+    #[test]
     fn test_evaluate_or_inside_parentheses() {
         assert_eq!(evaluate("(true || false) * 2"), Ok(2));
     }

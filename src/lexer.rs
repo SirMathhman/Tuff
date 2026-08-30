@@ -20,6 +20,7 @@ pub enum Token {
     Eq,
     Amp,
     Or,
+    And,
 }
 
 impl Token {
@@ -43,6 +44,7 @@ impl Token {
             Token::Eq => "=".to_string(),
             Token::Amp => "&".to_string(),
             Token::Or => "||".to_string(),
+            Token::And => "&&".to_string(),
         }
     }
 }
@@ -114,8 +116,14 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 pos += 1;
             }
             '&' => {
-                tokens.push(spanned(Token::Amp, base, pos, 1));
-                pos += 1;
+                // '&&' is the logical-and operator; a lone '&' is a reference.
+                if chars.get(pos + 1) == Some(&'&') {
+                    tokens.push(spanned(Token::And, base, pos, 2));
+                    pos += 2;
+                } else {
+                    tokens.push(spanned(Token::Amp, base, pos, 1));
+                    pos += 1;
+                }
             }
             '|' => {
                 // '||' is the logical-or operator; a lone '|' is invalid.

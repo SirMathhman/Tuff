@@ -24,7 +24,8 @@ enum Stmt {
 
 /// Parse a token stream into an expression tree.
 ///
-/// Recursive descent with two precedence levels:
+/// Recursive descent with the following precedence levels (lowest to
+/// highest): `||`, `&&`, `+`/`-`, `*`:
 ///
 /// ```text
 /// program  := stmt* or_expr
@@ -32,7 +33,8 @@ enum Stmt {
 /// let_stmt := 'let' ['mut'] Ident '=' expr ';'
 /// assign_stmt := Ident '=' expr ';'
 /// deref_assign_stmt := '*' Ident '=' expr ';'
-/// or_expr  := expr (('||') expr)*
+/// or_expr  := and_expr (('||') and_expr)*
+/// and_expr := expr (('&&') expr)*
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
 /// factor   := Number | 'true' | 'false' | Ident | '-' factor | '&' ['mut'] factor | '*' factor | '(' or_expr ')' | block
@@ -94,13 +96,29 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_or_expr(&mut self) -> Result<Expr, Error> {
-        let mut lhs = self.parse_expr()?;
+        let mut lhs = self.parse_and_expr()?;
         while matches!(self.peek(), Some(Token::Or)) {
+            let span = self.tokens[self.pos].span;
+            self.pos += 1;
+            let rhs = self.parse_and_expr()?;
+            lhs = Expr::Binary {
+                op: BinaryOp::Or,
+                span,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
+    }
+
+    fn parse_and_expr(&mut self) -> Result<Expr, Error> {
+        let mut lhs = self.parse_expr()?;
+        while matches!(self.peek(), Some(Token::And)) {
             let span = self.tokens[self.pos].span;
             self.pos += 1;
             let rhs = self.parse_expr()?;
             lhs = Expr::Binary {
-                op: BinaryOp::Or,
+                op: BinaryOp::And,
                 span,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
