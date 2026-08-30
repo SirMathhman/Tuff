@@ -97,11 +97,16 @@ impl<'a> Parser<'a> {
                     operand: Box::new(operand),
                 })
             }
-            Some(Token::LParen) => {
+            Some(Token::LParen) | Some(Token::LBrace) => {
+                let closing = match self.tokens[self.pos].token {
+                    Token::LParen => Token::RParen,
+                    Token::LBrace => Token::RBrace,
+                    _ => unreachable!(),
+                };
                 self.pos += 1;
                 let inner = self.parse_expr()?;
                 match self.peek() {
-                    Some(Token::RParen) => {
+                    Some(t) if *t == closing => {
                         self.pos += 1;
                         Ok(inner)
                     }

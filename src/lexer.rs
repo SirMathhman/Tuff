@@ -8,6 +8,8 @@ pub enum Token {
     Star,
     LParen,
     RParen,
+    LBrace,
+    RBrace,
 }
 
 impl Token {
@@ -20,6 +22,8 @@ impl Token {
             Token::Star => "*".to_string(),
             Token::LParen => "(".to_string(),
             Token::RParen => ")".to_string(),
+            Token::LBrace => "{".to_string(),
+            Token::RBrace => "}".to_string(),
         }
     }
 }
@@ -74,6 +78,14 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 tokens.push(spanned(Token::RParen, base, pos, 1));
                 pos += 1;
             }
+            '{' => {
+                tokens.push(spanned(Token::LBrace, base, pos, 1));
+                pos += 1;
+            }
+            '}' => {
+                tokens.push(spanned(Token::RBrace, base, pos, 1));
+                pos += 1;
+            }
             _ => {
                 let (val, new_pos) = parse_number(&chars, pos, base)?;
                 tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
@@ -102,11 +114,7 @@ fn skip_whitespace(chars: &[char], pos: usize) -> usize {
     p
 }
 
-fn parse_number(
-    chars: &[char],
-    mut pos: usize,
-    base: usize,
-) -> Result<(i64, usize), Error> {
+fn parse_number(chars: &[char], mut pos: usize, base: usize) -> Result<(i64, usize), Error> {
     let start = pos;
     let mut num_str = String::new();
     while pos < chars.len() && chars[pos].is_ascii_digit() {

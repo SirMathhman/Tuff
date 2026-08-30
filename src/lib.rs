@@ -71,6 +71,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_braces_override_precedence() {
+        assert_eq!(evaluate("{ 2 + 3 } * 4"), Ok(20));
+    }
+
+    #[test]
     fn test_evaluate_invalid_input() {
         match evaluate("1 + x") {
             Err(Error::UnexpectedChar { span, ch }) => {
