@@ -2,7 +2,8 @@
 
 `tuffc` is a Rust compiler/interpreter for the **Tuff** language — currently an
 arithmetic expression evaluator with `let`/`mut` bindings, assignment, and
-reference (`&`) / dereference (`*`) operators.
+reference (`&` / `&mut`) / dereference (`*`) operators, including
+deref-assignment (`*y = 1;`).
 
 ## Canonical Architecture
 
@@ -52,8 +53,11 @@ with `ast`, `span`, `errors` as shared leaves. No module depends on `main`.
 
 ## Semantics gotchas
 
-- `&` captures a variable _name_ at the `&` site; `*` resolves that name in the
-  current environment at the `*` site. A `Ref` as the final result is an error.
+- `&` / `&mut` capture a variable _name_ at the reference site; `*` resolves
+  that name in the current environment at the `*` site. A `Ref`/`RefMut` as the
+  final result is an error.
+- Deref-assignment (`*y = expr;`) writes through the reference; the referent
+  must be a `let mut` binding (else `ImmutableVariable`).
 - `let`/`mut` are reserved keywords (dedicated `Token::Let`/`Token::Mut`), not
   valid identifiers.
 - Assigning to a non-`mut` binding is an `ImmutableVariable` error.
