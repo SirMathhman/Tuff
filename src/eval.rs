@@ -1,7 +1,7 @@
 use crate::ast::{BinaryOp, Expr, UnaryOp};
 use crate::errors::Error;
 use crate::span::Span;
-use crate::value::{int_value, truthy, type_name, Environment, Value};
+use crate::value::{Environment, Value, int_value, truthy, type_name};
 
 /// Evaluate an expression tree in the given environment.
 ///
@@ -174,11 +174,11 @@ fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, E
         }
         BinaryOp::Or => {
             // Logical OR: truthy is any non-zero value or true.
-            Value::Int(if truthy(&l) || truthy(&r) { 1 } else { 0 })
+            Value::Bool(truthy(&l) || truthy(&r))
         }
         BinaryOp::And => {
             // Logical AND: truthy is any non-zero value or true.
-            Value::Int(if truthy(&l) && truthy(&r) { 1 } else { 0 })
+            Value::Bool(truthy(&l) && truthy(&r))
         }
     })
 }
