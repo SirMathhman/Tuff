@@ -12,6 +12,7 @@ pub enum Error {
     UnexpectedChar { span: Span, ch: char },
     UnexpectedToken { span: Span, token: String },
     UnexpectedEnd { span: Span },
+    UndefinedVariable { name: String },
 }
 
 impl fmt::Display for Error {
@@ -44,6 +45,9 @@ impl fmt::Display for Error {
                     "at {}..{}: unexpected end of input — expected a number, '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end
                 )
+            }
+            Error::UndefinedVariable { name } => {
+                write!(f, "undefined variable '{name}'")
             }
         }
     }

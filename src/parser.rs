@@ -7,9 +7,11 @@ use crate::lexer::{SpannedToken, Token};
 /// Recursive descent with two precedence levels:
 ///
 /// ```text
-/// expr   := term (('+' | '-') term)*
-/// term   := factor (('*') factor)*
-/// factor := Number | '(' expr ')'
+/// expr     := term (('+' | '-') term)*
+/// term     := factor (('*') factor)*
+/// factor   := Number | Ident | '-' factor | '(' expr ')' | block
+/// block    := '{' let_stmt* expr '}'
+/// let_stmt := 'let' Ident '=' expr ';'
 /// ```
 ///
 /// The parser owns all structural validation and reports real spans.
@@ -45,6 +47,24 @@ impl<'a> Parser<'a> {
                 end: st.span.end,
             },
             None => Span { start: 0, end: 0 },
+        }
+    }
+
+    /// Consume the next token if it equals `expected`; otherwise report an
+    /// error at the offending token's span.
+    fn expect_token(&mut self, expected: &Token) -> Result<(), Error> {
+        match self.peek() {
+            Some(t) if t == expected => {
+                self.pos += 1;
+                Ok(())
+            }
+            Some(other) => Err(Error::UnexpectedToken {
+                span: self.tokens[self.pos].span,
+                token: other.describe(),
+            }),
+            None => Err(Error::UnexpectedEnd {
+                span: self.end_span(),
+            }),
         }
     }
 
@@ -88,6 +108,11 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 Ok(Expr::Number(value))
             }
+            Some(Token::Ident(name)) => {
+                let name = name.clone();
+                self.pos += 1;
+                Ok(Expr::Ident(name))
+            }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.
                 self.pos += 1;
@@ -97,28 +122,13 @@ impl<'a> Parser<'a> {
                     operand: Box::new(operand),
                 })
             }
-            Some(Token::LParen) | Some(Token::LBrace) => {
-                let closing = match self.tokens[self.pos].token {
-                    Token::LParen => Token::RParen,
-                    Token::LBrace => Token::RBrace,
-                    _ => unreachable!(),
-                };
+            Some(Token::LParen) => {
                 self.pos += 1;
                 let inner = self.parse_expr()?;
-                match self.peek() {
-                    Some(t) if *t == closing => {
-                        self.pos += 1;
-                        Ok(inner)
-                    }
-                    Some(other) => Err(Error::UnexpectedToken {
-                        span: self.tokens[self.pos].span,
-                        token: other.describe(),
-                    }),
-                    None => Err(Error::UnexpectedEnd {
-                        span: self.end_span(),
-                    }),
-                }
+                self.expect_token(&Token::RParen)?;
+                Ok(inner)
             }
+            Some(Token::LBrace) => self.parse_block(),
             Some(other) => Err(Error::UnexpectedToken {
                 span: self.tokens[self.pos].span,
                 token: other.describe(),
@@ -127,5 +137,52 @@ impl<'a> Parser<'a> {
                 span: self.end_span(),
             }),
         }
+    }
+
+    /// Parse a braced block: zero or more `let` statements followed by a
+    /// tail expression. The block's value is the tail expression, with each
+    /// `let` binding nested around it.
+    fn parse_block(&mut self) -> Result<Expr, Error> {
+        self.expect_token(&Token::LBrace)?;
+        let mut lets: Vec<(String, Expr)> = Vec::new();
+        while let Some(Token::Ident(name)) = self.peek() {
+            if name != "let" {
+                break;
+            }
+            self.pos += 1; // consume 'let'
+            let name = match self.peek() {
+                Some(Token::Ident(name)) => {
+                    let n = name.clone();
+                    self.pos += 1;
+                    n
+                }
+                Some(other) => {
+                    return Err(Error::UnexpectedToken {
+                        span: self.tokens[self.pos].span,
+                        token: other.describe(),
+                    });
+                }
+                None => {
+                    return Err(Error::UnexpectedEnd {
+                        span: self.end_span(),
+                    });
+                }
+            };
+            self.expect_token(&Token::Eq)?;
+            let value = self.parse_expr()?;
+            self.expect_token(&Token::Semicolon)?;
+            lets.push((name, value));
+        }
+        let tail = self.parse_expr()?;
+        self.expect_token(&Token::RBrace)?;
+        let mut body = tail;
+        for (name, value) in lets.into_iter().rev() {
+            body = Expr::Let {
+                name,
+                value: Box::new(value),
+                body: Box::new(body),
+            };
+        }
+        Ok(body)
     }
 }

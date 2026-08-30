@@ -7,7 +7,7 @@ pub mod parser;
 pub use errors::Error;
 
 /// Evaluate an arithmetic expression of integers with `+`, `-`, `*`,
-/// and parentheses for grouping.
+/// parentheses and braces for grouping, and `let` bindings inside braces.
 ///
 /// Pipeline: lex → parse → eval.
 pub fn evaluate(input: &str) -> Result<i64, Error> {
@@ -17,7 +17,8 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
         return Ok(0);
     }
     let expr = parser::parse(&tokens)?;
-    Ok(eval::eval(&expr))
+    let mut env = eval::Environment::new();
+    eval::eval(&expr, &mut env)
 }
 
 #[cfg(test)]
@@ -76,24 +77,27 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_invalid_input() {
+    fn test_evaluate_undefined_variable() {
         match evaluate("1 + x") {
-            Err(Error::UnexpectedChar { span, ch }) => {
-                assert_eq!(ch, 'x');
-                assert_eq!(span, errors::Span { start: 4, end: 5 });
+            Err(Error::UndefinedVariable { name }) => {
+                assert_eq!(name, "x");
             }
-            other => panic!("expected UnexpectedChar, got {:?}", other),
+            other => panic!("expected UndefinedVariable, got {:?}", other),
         }
     }
 
     #[test]
     fn test_evaluate_span_with_leading_whitespace() {
         match evaluate("  1 + x") {
-            Err(Error::UnexpectedChar { span, ch }) => {
-                assert_eq!(ch, 'x');
-                assert_eq!(span, errors::Span { start: 6, end: 7 });
+            Err(Error::UndefinedVariable { name }) => {
+                assert_eq!(name, "x");
             }
-            other => panic!("expected UnexpectedChar, got {:?}", other),
+            other => panic!("expected UndefinedVariable, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_evaluate_let_binding() {
+        assert_eq!(evaluate("{ let x = 2 + 3; x } * 4"), Ok(20));
     }
 }

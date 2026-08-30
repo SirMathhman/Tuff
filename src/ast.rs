@@ -6,6 +6,7 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Number(i64),
+    Ident(String),
     Unary {
         op: char,
         operand: Box<Expr>,
@@ -14,5 +15,10 @@ pub enum Expr {
         op: char,
         lhs: Box<Expr>,
         rhs: Box<Expr>,
+    },
+    Let {
+        name: String,
+        value: Box<Expr>,
+        body: Box<Expr>,
     },
 }

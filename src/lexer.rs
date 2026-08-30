@@ -3,6 +3,7 @@ use crate::errors::{Error, Span};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
     Number(i64),
+    Ident(String),
     Plus,
     Minus,
     Star,
@@ -10,6 +11,8 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    Semicolon,
+    Eq,
 }
 
 impl Token {
@@ -17,6 +20,7 @@ impl Token {
     pub fn describe(&self) -> String {
         match self {
             Token::Number(n) => n.to_string(),
+            Token::Ident(s) => s.clone(),
             Token::Plus => "+".to_string(),
             Token::Minus => "-".to_string(),
             Token::Star => "*".to_string(),
@@ -24,6 +28,8 @@ impl Token {
             Token::RParen => ")".to_string(),
             Token::LBrace => "{".to_string(),
             Token::RBrace => "}".to_string(),
+            Token::Semicolon => ";".to_string(),
+            Token::Eq => "=".to_string(),
         }
     }
 }
@@ -86,10 +92,24 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 tokens.push(spanned(Token::RBrace, base, pos, 1));
                 pos += 1;
             }
+            ';' => {
+                tokens.push(spanned(Token::Semicolon, base, pos, 1));
+                pos += 1;
+            }
+            '=' => {
+                tokens.push(spanned(Token::Eq, base, pos, 1));
+                pos += 1;
+            }
             _ => {
-                let (val, new_pos) = parse_number(&chars, pos, base)?;
-                tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
-                pos = new_pos;
+                if chars[pos].is_ascii_alphabetic() {
+                    let (ident, new_pos) = parse_ident(&chars, pos);
+                    tokens.push(spanned(Token::Ident(ident), base, pos, new_pos - pos));
+                    pos = new_pos;
+                } else {
+                    let (val, new_pos) = parse_number(&chars, pos, base)?;
+                    tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
+                    pos = new_pos;
+                }
             }
         }
     }
@@ -112,6 +132,15 @@ fn skip_whitespace(chars: &[char], pos: usize) -> usize {
         p += 1;
     }
     p
+}
+
+fn parse_ident(chars: &[char], mut pos: usize) -> (String, usize) {
+    let start = pos;
+    while pos < chars.len() && (chars[pos].is_ascii_alphanumeric() || chars[pos] == '_') {
+        pos += 1;
+    }
+    let ident: String = chars[start..pos].iter().collect();
+    (ident, pos)
 }
 
 fn parse_number(chars: &[char], mut pos: usize, base: usize) -> Result<(i64, usize), Error> {
