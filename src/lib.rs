@@ -102,6 +102,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_chained_let_bindings() {
+        assert_eq!(evaluate("{ let x = 2 + 3; let y = x; y } * 4"), Ok(20));
+    }
+
+    #[test]
     fn test_evaluate_top_level_let_error_mentions_identifiers() {
         let err = evaluate("let x = 1").unwrap_err();
         let msg = err.to_string();
