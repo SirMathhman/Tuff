@@ -161,7 +161,11 @@ impl<'a> Parser<'a> {
                     self.pos += 1; // consume 'mut'
                 }
                 let operand = self.parse_factor()?;
-                let op = if mutable { UnaryOp::RefMut } else { UnaryOp::Ref };
+                let op = if mutable {
+                    UnaryOp::RefMut
+                } else {
+                    UnaryOp::Ref
+                };
                 Ok(Expr::Unary {
                     op,
                     span,
@@ -254,8 +258,15 @@ impl<'a> Parser<'a> {
                     self.expect_token(&Token::Eq)?;
                     let value = self.parse_expr()?;
                     self.expect_token(&Token::Semicolon)?;
-                    let target = Expr::Ident { name, span: ident_span };
-                    stmts.push(Stmt::DerefAssign { target, span, value });
+                    let target = Expr::Ident {
+                        name,
+                        span: ident_span,
+                    };
+                    stmts.push(Stmt::DerefAssign {
+                        target,
+                        span,
+                        value,
+                    });
                 }
                 _ => break,
             }
@@ -279,12 +290,18 @@ impl<'a> Parser<'a> {
                     span,
                     value: Box::new(value),
                     body: Box::new(body),
-                },                Stmt::DerefAssign { target, span, value } => Expr::DerefAssign {
+                },
+                Stmt::DerefAssign {
+                    target,
+                    span,
+                    value,
+                } => Expr::DerefAssign {
                     target: Box::new(target),
                     span,
                     value: Box::new(value),
                     body: Box::new(body),
-                },            };
+                },
+            };
         }
         Ok(body)
     }

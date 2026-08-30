@@ -164,10 +164,7 @@ mod tests {
 
     #[test]
     fn test_evaluate_mut_reference_and_deref_assign() {
-        assert_eq!(
-            evaluate("let mut x = 0; let y = &mut x; *y = 1; x"),
-            Ok(1)
-        );
+        assert_eq!(evaluate("let mut x = 0; let y = &mut x; *y = 1; x"), Ok(1));
     }
 
     #[test]
