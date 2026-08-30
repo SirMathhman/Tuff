@@ -27,21 +27,21 @@ impl fmt::Display for Error {
             Error::UnexpectedChar { span, ch } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected character '{}' — expected a digit, '+', '-', '*', or a parenthesis",
+                    "at {}..{}: unexpected character '{}' — expected a digit, '+', '-', '*', '(', ')', '{{', or '}}'",
                     span.start, span.end, ch
                 )
             }
             Error::UnexpectedToken { span, token } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected '{}' — expected a number or '(', or a matching ')'",
+                    "at {}..{}: unexpected '{}' — expected a number, '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end, token
                 )
             }
             Error::UnexpectedEnd { span } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected end of input — expected a number or '(', or a matching ')'",
+                    "at {}..{}: unexpected end of input — expected a number, '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end
                 )
             }
