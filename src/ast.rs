@@ -1,4 +1,4 @@
-use crate::errors::Span;
+use crate::span::Span;
 
 /// An arithmetic expression.
 ///

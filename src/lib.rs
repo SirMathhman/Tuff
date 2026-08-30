@@ -3,8 +3,10 @@ pub mod errors;
 pub mod eval;
 pub mod lexer;
 pub mod parser;
+pub mod span;
 
 pub use errors::Error;
+pub use span::Span;
 
 /// Evaluate an arithmetic expression of integers with `+`, `-`, `*`,
 /// parentheses and braces for grouping, and `let` bindings at the top
@@ -82,7 +84,7 @@ mod tests {
         match evaluate("1 + x") {
             Err(Error::UndefinedVariable { span, name }) => {
                 assert_eq!(name, "x");
-                assert_eq!(span, errors::Span { start: 4, end: 5 });
+                assert_eq!(span, span::Span { start: 4, end: 5 });
             }
             other => panic!("expected UndefinedVariable, got {:?}", other),
         }
@@ -93,7 +95,7 @@ mod tests {
         match evaluate("  1 + x") {
             Err(Error::UndefinedVariable { span, name }) => {
                 assert_eq!(name, "x");
-                assert_eq!(span, errors::Span { start: 6, end: 7 });
+                assert_eq!(span, span::Span { start: 6, end: 7 });
             }
             other => panic!("expected UndefinedVariable, got {:?}", other),
         }
@@ -133,7 +135,7 @@ mod tests {
         match evaluate("let x = 0; x = 1; x") {
             Err(Error::ImmutableVariable { span, name }) => {
                 assert_eq!(name, "x");
-                assert_eq!(span, errors::Span { start: 11, end: 12 });
+                assert_eq!(span, span::Span { start: 11, end: 12 });
             }
             other => panic!("expected ImmutableVariable, got {:?}", other),
         }

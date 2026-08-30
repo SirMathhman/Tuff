@@ -1,10 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
+use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {

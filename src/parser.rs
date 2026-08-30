@@ -1,6 +1,7 @@
 use crate::ast::Expr;
-use crate::errors::{Error, Span};
+use crate::errors::Error;
 use crate::lexer::{SpannedToken, Token};
+use crate::span::Span;
 
 /// A parsed statement (before nesting into the expression tree).
 enum Stmt {

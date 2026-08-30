@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::Expr;
-use crate::errors::{Error, Span};
+use crate::errors::Error;
+use crate::span::Span;
 
 /// A variable binding with its value and mutability flag.
 #[derive(Debug, Clone)]

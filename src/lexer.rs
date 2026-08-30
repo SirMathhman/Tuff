@@ -1,4 +1,5 @@
-use crate::errors::{Error, Span};
+use crate::errors::Error;
+use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Token {
