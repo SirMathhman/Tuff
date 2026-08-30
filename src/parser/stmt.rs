@@ -33,78 +33,95 @@ impl<'a> Parser<'a> {
         loop {
             match self.peek() {
                 Some(Token::Let) => {
-                    self.pos += 1; // consume 'let'
-                    let mutable = matches!(self.peek(), Some(Token::Mut));
-                    if mutable {
-                        self.pos += 1; // consume 'mut'
-                    }
-                    let name = self.parse_ident_name()?;
-                    self.expect_token(&Token::Eq)?;
-                    let value = self.parse_or_expr()?;
-                    self.expect_token(&Token::Semicolon)?;
-                    stmts.push(Stmt::Let {
-                        name,
-                        mutable,
-                        value,
-                    });
+                    stmts.push(self.parse_let_stmt()?);
                 }
-                Some(Token::Ident(_)) => {
-                    // Could be an assignment statement: Ident '=' expr ';'
-                    // or compound: Ident '+=' expr ';'
-                    let saved = self.pos;
-                    let name = self.parse_ident_name()?;
-                    if matches!(self.peek(), Some(Token::Eq)) {
-                        self.pos += 1; // consume '='
-                        let value = self.parse_or_expr()?;
-                        self.expect_token(&Token::Semicolon)?;
-                        let span = self.tokens[saved].span;
-                        stmts.push(Stmt::Assign { name, span, value });
-                    } else if matches!(self.peek(), Some(Token::PlusEq)) {
-                        // Desugar 'x += expr' to 'x = x + expr'
-                        self.pos += 1; // consume '+='
-                        let rhs = self.parse_or_expr()?;
-                        self.expect_token(&Token::Semicolon)?;
-                        let span = self.tokens[saved].span;
-                        let lhs = Expr::Ident {
-                            name: name.clone(),
-                            span,
-                        };
-                        let value = Expr::Binary {
-                            op: crate::ast::BinaryOp::Add,
-                            span,
-                            lhs: Box::new(lhs),
-                            rhs: Box::new(rhs),
-                        };
-                        stmts.push(Stmt::Assign { name, span, value });
-                    } else {
-                        // Not an assignment — this is the tail expression.
-                        self.pos = saved;
-                        break;
-                    }
-                }
+                Some(Token::Ident(_)) => match self.parse_assign_stmt()? {
+                    Some(stmt) => stmts.push(stmt),
+                    None => break,
+                },
                 Some(Token::Star) if self.is_deref_assign() => {
-                    // Deref-assign statement: '*Ident' '=' expr ';'
-                    let span = self.tokens[self.pos].span;
-                    self.pos += 1; // consume '*'
-                    let name = self.parse_ident_name()?;
-                    let ident_span = self.tokens[self.pos - 1].span;
-                    self.expect_token(&Token::Eq)?;
-                    let value = self.parse_or_expr()?;
-                    self.expect_token(&Token::Semicolon)?;
-                    let target = Expr::Ident {
-                        name,
-                        span: ident_span,
-                    };
-                    stmts.push(Stmt::DerefAssign {
-                        target,
-                        span,
-                        value,
-                    });
+                    stmts.push(self.parse_deref_assign_stmt()?);
                 }
                 _ => break,
             }
         }
         let tail = self.parse_or_expr()?;
+        Ok(Self::build_body(stmts, tail))
+    }
+
+    /// Parse a `let [mut] Ident = or_expr ;` statement.
+    fn parse_let_stmt(&mut self) -> Result<Stmt, Error> {
+        self.pos += 1; // consume 'let'
+        let mutable = matches!(self.peek(), Some(Token::Mut));
+        if mutable {
+            self.pos += 1; // consume 'mut'
+        }
+        let name = self.parse_ident_name()?;
+        self.expect_token(&Token::Eq)?;
+        let value = self.parse_or_expr()?;
+        self.expect_token(&Token::Semicolon)?;
+        Ok(Stmt::Let { name, mutable, value })
+    }
+
+    /// Parse an assignment statement: `Ident '=' expr ';'` or
+    /// compound `Ident '+=' expr ';'`. Returns `None` (and restores
+    /// position) when the lookahead shows a tail expression instead.
+    fn parse_assign_stmt(&mut self) -> Result<Option<Stmt>, Error> {
+        let saved = self.pos;
+        let name = self.parse_ident_name()?;
+        if matches!(self.peek(), Some(Token::Eq)) {
+            self.pos += 1; // consume '='
+            let value = self.parse_or_expr()?;
+            self.expect_token(&Token::Semicolon)?;
+            let span = self.tokens[saved].span;
+            Ok(Some(Stmt::Assign { name, span, value }))
+        } else if matches!(self.peek(), Some(Token::PlusEq)) {
+            // Desugar 'x += expr' to 'x = x + expr'
+            self.pos += 1; // consume '+='
+            let rhs = self.parse_or_expr()?;
+            self.expect_token(&Token::Semicolon)?;
+            let span = self.tokens[saved].span;
+            let lhs = Expr::Ident {
+                name: name.clone(),
+                span,
+            };
+            let value = Expr::Binary {
+                op: crate::ast::BinaryOp::Add,
+                span,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+            Ok(Some(Stmt::Assign { name, span, value }))
+        } else {
+            // Not an assignment — this is the tail expression.
+            self.pos = saved;
+            Ok(None)
+        }
+    }
+
+    /// Parse a deref-assign statement: `'*' Ident '=' expr ';'`.
+    fn parse_deref_assign_stmt(&mut self) -> Result<Stmt, Error> {
+        let span = self.tokens[self.pos].span;
+        self.pos += 1; // consume '*'
+        let name = self.parse_ident_name()?;
+        let ident_span = self.tokens[self.pos - 1].span;
+        self.expect_token(&Token::Eq)?;
+        let value = self.parse_or_expr()?;
+        self.expect_token(&Token::Semicolon)?;
+        let target = Expr::Ident {
+            name,
+            span: ident_span,
+        };
+        Ok(Stmt::DerefAssign {
+            target,
+            span,
+            value,
+        })
+    }
+
+    /// Fold parsed statements (in reverse) around the tail expression to
+    /// build the nested `Expr` tree.
+    fn build_body(stmts: Vec<Stmt>, tail: Expr) -> Expr {
         let mut body = tail;
         for stmt in stmts.into_iter().rev() {
             body = match stmt {
@@ -136,7 +153,7 @@ impl<'a> Parser<'a> {
                 },
             };
         }
-        Ok(body)
+        body
     }
 
     /// True if the current position starts a deref-assign statement:
