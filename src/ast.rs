@@ -70,4 +70,9 @@ pub enum Expr {
         then: Box<Expr>,
         els: Box<Expr>,
     },
+    Block {
+        span: Span,
+        value: Box<Expr>,
+        body: Box<Expr>,
+    },
 }

@@ -23,6 +23,7 @@ pub(super) enum Stmt {
         value: Expr,
     },
     Block {
+        span: Span,
         value: Expr,
     },
 }
@@ -73,7 +74,8 @@ impl<'a> Parser<'a> {
                         self.pos = saved;
                         break;
                     }
-                    stmts.push(Stmt::Block { value });
+                    let span = self.tokens[saved].span;
+                    stmts.push(Stmt::Block { span, value });
                 }
                 _ => break,
             }
@@ -187,9 +189,8 @@ impl<'a> Parser<'a> {
                     value: Box::new(value),
                     body: Box::new(body),
                 },
-                Stmt::Block { value } => Expr::Let {
-                    name: String::new(),
-                    mutable: false,
+                Stmt::Block { span, value } => Expr::Block {
+                    span,
                     value: Box::new(value),
                     body: Box::new(body),
                 },

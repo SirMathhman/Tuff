@@ -77,6 +77,16 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                 eval(els, env)
             }
         }
+        Expr::Block {
+            span: _,
+            value,
+            body,
+        } => {
+            // Block in statement position: evaluate for side effects,
+            // discard its value, then evaluate the continuation.
+            eval(value, env)?;
+            eval(body, env)
+        }
     }
 }
 
