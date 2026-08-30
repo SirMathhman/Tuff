@@ -4,6 +4,7 @@ pub mod eval;
 pub mod lexer;
 pub mod parser;
 pub mod span;
+pub mod value;
 
 pub use errors::Error;
 pub use span::Span;
@@ -20,16 +21,16 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
         return Ok(0);
     }
     let expr = parser::parse(&tokens)?;
-    let mut env = eval::Environment::new();
+    let mut env = value::Environment::new();
     let value = eval::eval(&expr, &mut env)?;
     match value {
-        eval::Value::Int(n) => Ok(n),
-        eval::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
-        eval::Value::Ref { name, span } => Err(Error::UnexpectedToken {
+        value::Value::Int(n) => Ok(n),
+        value::Value::Bool(b) => Ok(if b { 1 } else { 0 }),
+        value::Value::Ref { name, span } => Err(Error::UnexpectedToken {
             span,
             token: format!("reference to '{name}' as final result"),
         }),
-        eval::Value::RefMut { name, span } => Err(Error::UnexpectedToken {
+        value::Value::RefMut { name, span } => Err(Error::UnexpectedToken {
             span,
             token: format!("mutable reference to '{name}' as final result"),
         }),
