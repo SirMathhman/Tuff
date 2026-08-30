@@ -5,11 +5,14 @@ use crate::errors::Error;
 use crate::span::Span;
 
 /// A runtime value: either an integer or a reference to a variable.
+///
+/// Reference variants carry the span of the `&` / `&mut` expression that
+/// created them, so diagnostics can point at the real source location.
 #[derive(Debug, Clone)]
 pub enum Value {
     Int(i64),
-    Ref(String),
-    RefMut(String),
+    Ref { name: String, span: Span },
+    RefMut { name: String, span: Span },
 }
 
 /// A variable binding with its value and mutability flag.
@@ -94,14 +97,20 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                 Ok(Value::Int(-int_value(&v, *span)?))
             }
             UnaryOp::Ref => match operand.as_ref() {
-                Expr::Ident { name, .. } => Ok(Value::Ref(name.clone())),
+                Expr::Ident { name, .. } => Ok(Value::Ref {
+                    name: name.clone(),
+                    span: *span,
+                }),
                 _ => Err(Error::UnexpectedToken {
                     span: *span,
                     token: "non-identifier operand of &".to_string(),
                 }),
             },
             UnaryOp::RefMut => match operand.as_ref() {
-                Expr::Ident { name, .. } => Ok(Value::RefMut(name.clone())),
+                Expr::Ident { name, .. } => Ok(Value::RefMut {
+                    name: name.clone(),
+                    span: *span,
+                }),
                 _ => Err(Error::UnexpectedToken {
                     span: *span,
                     token: "non-identifier operand of &mut".to_string(),
@@ -110,7 +119,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             UnaryOp::Deref => {
                 let v = eval(operand, env)?;
                 match v {
-                    Value::Ref(name) | Value::RefMut(name) => env
+                    Value::Ref { name, .. } | Value::RefMut { name, .. } => env
                         .lookup(&name)
                         .ok_or(Error::UndefinedVariable { span: *span, name }),
                     Value::Int(_) => Err(Error::UnexpectedToken {
@@ -151,14 +160,19 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             env.assign(name, *span, v)?;
             eval(body, env)
         }
-        Expr::DerefAssign { target, span, value, body } => {
+        Expr::DerefAssign {
+            target,
+            span,
+            value,
+            body,
+        } => {
             let name = match eval(target, env)? {
-                Value::Ref(n) | Value::RefMut(n) => n,
+                Value::Ref { name, .. } | Value::RefMut { name, .. } => name,
                 Value::Int(_) => {
                     return Err(Error::UnexpectedToken {
                         span: *span,
                         token: "non-reference target of * =".to_string(),
-                    })
+                    });
                 }
             };
             let v = eval(value, env)?;
@@ -172,11 +186,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
 fn int_value(v: &Value, span: Span) -> Result<i64, Error> {
     match v {
         Value::Int(n) => Ok(*n),
-        Value::Ref(name) => Err(Error::UnexpectedToken {
+        Value::Ref { name, .. } => Err(Error::UnexpectedToken {
             span,
             token: format!("reference to '{name}' used as integer"),
         }),
-        Value::RefMut(name) => Err(Error::UnexpectedToken {
+        Value::RefMut { name, .. } => Err(Error::UnexpectedToken {
             span,
             token: format!("mutable reference to '{name}' used as integer"),
         }),

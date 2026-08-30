@@ -24,12 +24,12 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     let value = eval::eval(&expr, &mut env)?;
     match value {
         eval::Value::Int(n) => Ok(n),
-        eval::Value::Ref(name) => Err(Error::UnexpectedToken {
-            span: Span { start: 0, end: 0 },
+        eval::Value::Ref { name, span } => Err(Error::UnexpectedToken {
+            span,
             token: format!("reference to '{name}' as final result"),
         }),
-        eval::Value::RefMut(name) => Err(Error::UnexpectedToken {
-            span: Span { start: 0, end: 0 },
+        eval::Value::RefMut { name, span } => Err(Error::UnexpectedToken {
+            span,
             token: format!("mutable reference to '{name}' as final result"),
         }),
     }
