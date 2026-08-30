@@ -15,6 +15,7 @@ pub enum BinaryOp {
     Add,
     Sub,
     Mul,
+    Or,
 }
 
 /// An arithmetic expression.

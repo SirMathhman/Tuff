@@ -25,21 +25,21 @@ impl fmt::Display for Error {
             Error::UnexpectedChar { span, ch } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected character '{}' — expected a digit, a letter, '+', '-', '*', '&', '=', ';', '(', ')', '{{', or '}}'",
+                    "at {}..{}: unexpected character '{}' — expected a digit, a letter, '+', '-', '*', '&', '||', '=', ';', '(', ')', '{{', or '}}'",
                     span.start, span.end, ch
                 )
             }
             Error::UnexpectedToken { span, token } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected '{}' — expected a number, identifier, 'let', 'mut', 'true', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
+                    "at {}..{}: unexpected '{}' — expected a number, identifier, 'let', 'mut', 'true', 'false', '-', '&', '*', '||', '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end, token
                 )
             }
             Error::UnexpectedEnd { span } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected end of input — expected a number, identifier, 'let', 'mut', 'true', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
+                    "at {}..{}: unexpected end of input — expected a number, identifier, 'let', 'mut', 'true', 'false', '-', '&', '*', '||', '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end
                 )
             }

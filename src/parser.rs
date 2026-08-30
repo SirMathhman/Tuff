@@ -27,20 +27,22 @@ enum Stmt {
 /// Recursive descent with two precedence levels:
 ///
 /// ```text
-/// program  := stmt* expr
-/// stmt     := let_stmt | assign_stmt
+/// program  := stmt* or_expr
+/// stmt     := let_stmt | assign_stmt | deref_assign_stmt
 /// let_stmt := 'let' ['mut'] Ident '=' expr ';'
 /// assign_stmt := Ident '=' expr ';'
+/// deref_assign_stmt := '*' Ident '=' expr ';'
+/// or_expr  := expr (('||') expr)*
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
-/// factor   := Number | Ident | '-' factor | '(' expr ')' | block
+/// factor   := Number | 'true' | 'false' | Ident | '-' factor | '&' ['mut'] factor | '*' factor | '(' expr ')' | block
 /// block    := '{' stmt* expr '}'
 /// ```
 ///
 /// The parser owns all structural validation and reports real spans.
 pub fn parse(tokens: &[SpannedToken]) -> Result<Expr, Error> {
     let mut parser = Parser { tokens, pos: 0 };
-    let expr = parser.parse_let_seq()?;
+    let expr = parser.parse_stmt_seq()?;
     if parser.pos < parser.tokens.len() {
         let st = &parser.tokens[parser.pos];
         return Err(Error::UnexpectedToken {
@@ -89,6 +91,22 @@ impl<'a> Parser<'a> {
                 span: self.end_span(),
             }),
         }
+    }
+
+    fn parse_or_expr(&mut self) -> Result<Expr, Error> {
+        let mut lhs = self.parse_expr()?;
+        while matches!(self.peek(), Some(Token::Or)) {
+            let span = self.tokens[self.pos].span;
+            self.pos += 1;
+            let rhs = self.parse_expr()?;
+            lhs = Expr::Binary {
+                op: BinaryOp::Or,
+                span,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+        }
+        Ok(lhs)
     }
 
     fn parse_expr(&mut self) -> Result<Expr, Error> {
@@ -145,6 +163,11 @@ impl<'a> Parser<'a> {
                 // The boolean literal `true` is the integer 1.
                 self.pos += 1;
                 Ok(Expr::Number(1))
+            }
+            Some(Token::False) => {
+                // The boolean literal `false` is the integer 0.
+                self.pos += 1;
+                Ok(Expr::Number(0))
             }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.
@@ -210,7 +233,7 @@ impl<'a> Parser<'a> {
     /// `let` binding nested around it.
     fn parse_block(&mut self) -> Result<Expr, Error> {
         self.expect_token(&Token::LBrace)?;
-        let body = self.parse_let_seq()?;
+        let body = self.parse_stmt_seq()?;
         self.expect_token(&Token::RBrace)?;
         Ok(body)
     }
@@ -218,7 +241,7 @@ impl<'a> Parser<'a> {
     /// Parse zero or more statements followed by a tail expression.
     /// Statements are `let` bindings or assignments, each nested around
     /// the tail so later statements can reference earlier bindings.
-    fn parse_let_seq(&mut self) -> Result<Expr, Error> {
+    fn parse_stmt_seq(&mut self) -> Result<Expr, Error> {
         let mut stmts: Vec<Stmt> = Vec::new();
         loop {
             match self.peek() {
@@ -230,7 +253,7 @@ impl<'a> Parser<'a> {
                     }
                     let name = self.parse_ident_name()?;
                     self.expect_token(&Token::Eq)?;
-                    let value = self.parse_expr()?;
+                    let value = self.parse_or_expr()?;
                     self.expect_token(&Token::Semicolon)?;
                     stmts.push(Stmt::Let {
                         name,
@@ -244,7 +267,7 @@ impl<'a> Parser<'a> {
                     let name = self.parse_ident_name()?;
                     if matches!(self.peek(), Some(Token::Eq)) {
                         self.pos += 1; // consume '='
-                        let value = self.parse_expr()?;
+                        let value = self.parse_or_expr()?;
                         self.expect_token(&Token::Semicolon)?;
                         let span = self.tokens[saved].span;
                         stmts.push(Stmt::Assign { name, span, value });
@@ -261,7 +284,7 @@ impl<'a> Parser<'a> {
                     let name = self.parse_ident_name()?;
                     let ident_span = self.tokens[self.pos - 1].span;
                     self.expect_token(&Token::Eq)?;
-                    let value = self.parse_expr()?;
+                    let value = self.parse_or_expr()?;
                     self.expect_token(&Token::Semicolon)?;
                     let target = Expr::Ident {
                         name,
@@ -276,7 +299,7 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
-        let tail = self.parse_expr()?;
+        let tail = self.parse_or_expr()?;
         let mut body = tail;
         for stmt in stmts.into_iter().rev() {
             body = match stmt {

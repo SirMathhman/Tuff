@@ -8,6 +8,7 @@ pub enum Token {
     Let,
     Mut,
     True,
+    False,
     Plus,
     Minus,
     Star,
@@ -18,6 +19,7 @@ pub enum Token {
     Semicolon,
     Eq,
     Amp,
+    Or,
 }
 
 impl Token {
@@ -29,6 +31,7 @@ impl Token {
             Token::Let => "let".to_string(),
             Token::Mut => "mut".to_string(),
             Token::True => "true".to_string(),
+            Token::False => "false".to_string(),
             Token::Plus => "+".to_string(),
             Token::Minus => "-".to_string(),
             Token::Star => "*".to_string(),
@@ -39,6 +42,7 @@ impl Token {
             Token::Semicolon => ";".to_string(),
             Token::Eq => "=".to_string(),
             Token::Amp => "&".to_string(),
+            Token::Or => "||".to_string(),
         }
     }
 }
@@ -113,6 +117,21 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 tokens.push(spanned(Token::Amp, base, pos, 1));
                 pos += 1;
             }
+            '|' => {
+                // '||' is the logical-or operator; a lone '|' is invalid.
+                if chars.get(pos + 1) == Some(&'|') {
+                    tokens.push(spanned(Token::Or, base, pos, 2));
+                    pos += 2;
+                } else {
+                    return Err(Error::UnexpectedChar {
+                        span: Span {
+                            start: base + pos,
+                            end: base + pos + 1,
+                        },
+                        ch: '|',
+                    });
+                }
+            }
             _ => {
                 if chars[pos].is_ascii_alphabetic() {
                     let (ident, new_pos) = parse_ident(&chars, pos);
@@ -164,6 +183,7 @@ fn keyword_or_ident(ident: String) -> Token {
         "let" => Token::Let,
         "mut" => Token::Mut,
         "true" => Token::True,
+        "false" => Token::False,
         _ => Token::Ident(ident),
     }
 }

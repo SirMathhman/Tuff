@@ -173,6 +173,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_false_literal_and_or() {
+        assert_eq!(evaluate("let x = true; let y = false; x || y"), Ok(1));
+    }
+
+    #[test]
     fn test_unexpected_token_message_lists_unary_operators() {
         // Regression: error messages must stay in sync with the grammar.
         let msg = evaluate("let x = ; x").unwrap_err().to_string();
