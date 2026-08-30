@@ -6,9 +6,37 @@ pub enum Token {
     Plus,
     Minus,
     Star,
+    LParen,
+    RParen,
 }
 
-pub fn lex(input: &str) -> Result<Vec<Token>, Error> {
+impl Token {
+    /// A short human-readable form of the token, used in diagnostics.
+    pub fn describe(&self) -> String {
+        match self {
+            Token::Number(n) => n.to_string(),
+            Token::Plus => "+".to_string(),
+            Token::Minus => "-".to_string(),
+            Token::Star => "*".to_string(),
+            Token::LParen => "(".to_string(),
+            Token::RParen => ")".to_string(),
+        }
+    }
+}
+
+/// A token together with its position in the original source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpannedToken {
+    pub token: Token,
+    pub span: Span,
+}
+
+/// Convert source text into a token stream.
+///
+/// The lexer only rejects what is lexically invalid (bad characters,
+/// malformed numbers). Structural validation (operator/operand ordering,
+/// balanced parentheses) is the parser's job.
+pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
         return Ok(Vec::new());
@@ -16,8 +44,7 @@ pub fn lex(input: &str) -> Result<Vec<Token>, Error> {
     let base = input.len() - input.trim_start().len();
     let chars: Vec<char> = trimmed.chars().collect();
     let mut pos = 0;
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut last_op_span: Option<Span> = None;
+    let mut tokens: Vec<SpannedToken> = Vec::new();
 
     while pos < chars.len() {
         pos = skip_whitespace(&chars, pos);
@@ -26,67 +53,57 @@ pub fn lex(input: &str) -> Result<Vec<Token>, Error> {
         }
         let is_operand_start = tokens.is_empty()
             || matches!(
-                tokens.last(),
-                Some(Token::Plus) | Some(Token::Minus) | Some(Token::Star)
+                tokens.last().map(|t| &t.token),
+                Some(Token::Plus) | Some(Token::Minus) | Some(Token::Star) | Some(Token::LParen)
             );
         match chars[pos] {
-            '+' | '*' => {
-                if is_operand_start {
-                    return Err(Error::UnexpectedChar {
-                        span: Span {
-                            start: base + pos,
-                            end: base + pos + 1,
-                        },
-                        ch: chars[pos],
-                    });
-                }
-                tokens.push(if chars[pos] == '+' {
-                    Token::Plus
-                } else {
-                    Token::Star
-                });
-                last_op_span = Some(Span {
-                    start: base + pos,
-                    end: base + pos + 1,
-                });
+            '+' => {
+                tokens.push(spanned(Token::Plus, base, pos, 1));
                 pos += 1;
             }
             '-' => {
+                // A '-' is a negative sign when it starts an operand
+                // (at the beginning, after an operator, or after '(');
+                // otherwise it is a subtraction operator.
                 if is_operand_start {
                     let (val, new_pos) = parse_number(&chars, pos, true, base)?;
-                    tokens.push(Token::Number(val));
+                    tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
                     pos = new_pos;
                 } else {
-                    tokens.push(Token::Minus);
-                    last_op_span = Some(Span {
-                        start: base + pos,
-                        end: base + pos + 1,
-                    });
+                    tokens.push(spanned(Token::Minus, base, pos, 1));
                     pos += 1;
                 }
             }
+            '*' => {
+                tokens.push(spanned(Token::Star, base, pos, 1));
+                pos += 1;
+            }
+            '(' => {
+                tokens.push(spanned(Token::LParen, base, pos, 1));
+                pos += 1;
+            }
+            ')' => {
+                tokens.push(spanned(Token::RParen, base, pos, 1));
+                pos += 1;
+            }
             _ => {
                 let (val, new_pos) = parse_number(&chars, pos, false, base)?;
-                tokens.push(Token::Number(val));
+                tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
                 pos = new_pos;
             }
         }
     }
-    // A trailing operator with no operand is malformed
-    if matches!(
-        tokens.last(),
-        Some(Token::Plus) | Some(Token::Minus) | Some(Token::Star)
-    ) {
-        let span = last_op_span.unwrap();
-        let ch = match tokens.last().unwrap() {
-            Token::Plus => '+',
-            Token::Minus => '-',
-            Token::Star => '*',
-            _ => unreachable!(),
-        };
-        return Err(Error::UnexpectedChar { span, ch });
-    }
     Ok(tokens)
+}
+
+fn spanned(token: Token, base: usize, start: usize, len: usize) -> SpannedToken {
+    SpannedToken {
+        token,
+        span: Span {
+            start: base + start,
+            end: base + start + len,
+        },
+    }
 }
 
 fn skip_whitespace(chars: &[char], pos: usize) -> usize {

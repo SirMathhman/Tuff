@@ -6,13 +6,18 @@ pub mod parser;
 
 pub use errors::Error;
 
-/// Evaluate an arithmetic expression of integers with `+`, `-`, and `*`.
+/// Evaluate an arithmetic expression of integers with `+`, `-`, `*`,
+/// and parentheses for grouping.
 ///
-/// Pipeline: lex → parse → fold.
+/// Pipeline: lex → parse → eval.
 pub fn evaluate(input: &str) -> Result<i64, Error> {
     let tokens = lexer::lex(input)?;
-    let terms = parser::parse(&tokens);
-    Ok(eval::fold_terms(&terms))
+    if tokens.is_empty() {
+        // Empty input is defined to evaluate to 0.
+        return Ok(0);
+    }
+    let expr = parser::parse(&tokens)?;
+    Ok(eval::eval(&expr))
 }
 
 #[cfg(test)]
@@ -52,6 +57,11 @@ mod tests {
     #[test]
     fn test_evaluate_addition_before_multiplication() {
         assert_eq!(evaluate("2 + 3 * 4"), Ok(14));
+    }
+
+    #[test]
+    fn test_evaluate_parentheses_override_precedence() {
+        assert_eq!(evaluate("(2 + 3) * 4"), Ok(20));
     }
 
     #[test]

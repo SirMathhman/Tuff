@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -10,6 +10,8 @@ pub struct Span {
 pub enum Error {
     InvalidNumber { span: Span, text: String },
     UnexpectedChar { span: Span, ch: char },
+    UnexpectedToken { span: Span, token: String },
+    UnexpectedEnd { span: Span },
 }
 
 impl fmt::Display for Error {
@@ -25,8 +27,22 @@ impl fmt::Display for Error {
             Error::UnexpectedChar { span, ch } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected character '{}' — expected a digit, '+', or '-'",
+                    "at {}..{}: unexpected character '{}' — expected a digit, '+', '-', '*', or a parenthesis",
                     span.start, span.end, ch
+                )
+            }
+            Error::UnexpectedToken { span, token } => {
+                write!(
+                    f,
+                    "at {}..{}: unexpected '{}' — expected a number or '(', or a matching ')'",
+                    span.start, span.end, token
+                )
+            }
+            Error::UnexpectedEnd { span } => {
+                write!(
+                    f,
+                    "at {}..{}: unexpected end of input — expected a number or '(', or a matching ')'",
+                    span.start, span.end
                 )
             }
         }
