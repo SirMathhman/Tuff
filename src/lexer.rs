@@ -18,6 +18,7 @@ pub enum Token {
     RBrace,
     Semicolon,
     Eq,
+    EqEq,
     Amp,
     Or,
     And,
@@ -43,6 +44,7 @@ impl Token {
             Token::RBrace => "}".to_string(),
             Token::Semicolon => ";".to_string(),
             Token::Eq => "=".to_string(),
+            Token::EqEq => "==".to_string(),
             Token::Amp => "&".to_string(),
             Token::Or => "||".to_string(),
             Token::And => "&&".to_string(),
@@ -114,8 +116,14 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 pos += 1;
             }
             '=' => {
-                tokens.push(spanned(Token::Eq, base, pos, 1));
-                pos += 1;
+                // '==' is the equality operator; a lone '=' is assignment.
+                if chars.get(pos + 1) == Some(&'=') {
+                    tokens.push(spanned(Token::EqEq, base, pos, 2));
+                    pos += 2;
+                } else {
+                    tokens.push(spanned(Token::Eq, base, pos, 1));
+                    pos += 1;
+                }
             }
             '!' => {
                 tokens.push(spanned(Token::Not, base, pos, 1));

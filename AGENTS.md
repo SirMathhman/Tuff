@@ -2,9 +2,10 @@
 
 `tuffc` is a Rust compiler/interpreter for the **Tuff** language — currently an
 arithmetic expression evaluator with `let`/`mut` bindings, assignment, the
-`true`/`false` literals (evaluate to `1`/`0`), the `||` logical-or operator,
-and reference (`&` / `&mut`) / dereference (`*`) operators, including
-deref-assignment (`*y = 1;`).
+`true`/`false` literals (evaluate to `1`/`0`), the `||` logical-or, `&&`
+logical-and, `!` logical-not, and `==` equality operators, and reference
+(`&` / `&mut`) / dereference (`*`) operators, including deref-assignment
+(`*y = 1;`).
 
 ## Canonical Architecture
 

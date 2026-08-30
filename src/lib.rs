@@ -183,6 +183,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_equality_not_equal() {
+        assert_eq!(evaluate("let x = 1; let y = 2; x == y"), Ok(0));
+    }
+
+    #[test]
     fn test_evaluate_or_inside_parentheses() {
         assert_eq!(evaluate("(true || false) * 2"), Ok(2));
     }

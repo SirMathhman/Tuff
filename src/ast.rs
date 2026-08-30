@@ -16,6 +16,7 @@ pub enum BinaryOp {
     Add,
     Sub,
     Mul,
+    Eq,
     Or,
     And,
 }
