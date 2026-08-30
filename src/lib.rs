@@ -189,6 +189,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_less_than() {
+        assert_eq!(evaluate("let x = 0; let y = 1; x < y"), Ok(1));
+    }
+
+    #[test]
     fn test_evaluate_not() {
         assert_eq!(evaluate("let x = true; !x"), Ok(0));
     }

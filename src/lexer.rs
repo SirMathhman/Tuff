@@ -19,6 +19,7 @@ pub enum Token {
     Semicolon,
     Eq,
     EqEq,
+    Lt,
     Amp,
     Or,
     And,
@@ -45,6 +46,7 @@ impl Token {
             Token::Semicolon => ";".to_string(),
             Token::Eq => "=".to_string(),
             Token::EqEq => "==".to_string(),
+            Token::Lt => "<".to_string(),
             Token::Amp => "&".to_string(),
             Token::Or => "||".to_string(),
             Token::And => "&&".to_string(),
@@ -127,6 +129,10 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
             }
             '!' => {
                 tokens.push(spanned(Token::Not, base, pos, 1));
+                pos += 1;
+            }
+            '<' => {
+                tokens.push(spanned(Token::Lt, base, pos, 1));
                 pos += 1;
             }
             '&' => {

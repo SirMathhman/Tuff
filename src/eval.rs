@@ -233,6 +233,21 @@ fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, E
             };
             Value::Int(if eq { 1 } else { 0 })
         }
+        BinaryOp::Lt => {
+            // Less-than: 1 if the left operand is strictly less than the
+            // right, else 0. Operands must both be integers.
+            let lt = match (&l, &r) {
+                (Value::Int(a), Value::Int(b)) => a < b,
+                _ => {
+                    return Err(Error::TypeMismatch {
+                        span,
+                        expected: "both operands to be integers".to_string(),
+                        found: format!("{} and {}", type_name(&l), type_name(&r)),
+                    });
+                }
+            };
+            Value::Int(if lt { 1 } else { 0 })
+        }
         BinaryOp::Or => {
             // Logical OR: truthy is any non-zero value or true.
             Value::Int(if truthy(&l) || truthy(&r) { 1 } else { 0 })

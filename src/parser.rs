@@ -18,7 +18,7 @@ mod stmt;
 /// deref_assign_stmt := '*' Ident '=' expr ';'
 /// or_expr  := and_expr (('||') and_expr)*
 /// and_expr := comparison_expr (('&&') comparison_expr)*
-/// comparison_expr := expr (('==') expr)*
+/// comparison_expr := expr (('==' | '<') expr)*
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
 /// factor   := Number | 'true' | 'false' | Ident | '-' factor | '!' factor | '&' ['mut'] factor | '*' factor | '(' or_expr ')' | block
@@ -113,12 +113,17 @@ impl<'a> Parser<'a> {
 
     fn parse_comparison_expr(&mut self) -> Result<Expr, Error> {
         let mut lhs = self.parse_expr()?;
-        while matches!(self.peek(), Some(Token::EqEq)) {
+        while matches!(self.peek(), Some(Token::EqEq) | Some(Token::Lt)) {
+            let op = match self.tokens[self.pos].token {
+                Token::EqEq => BinaryOp::Eq,
+                Token::Lt => BinaryOp::Lt,
+                _ => unreachable!(),
+            };
             let span = self.tokens[self.pos].span;
             self.pos += 1;
             let rhs = self.parse_expr()?;
             lhs = Expr::Binary {
-                op: BinaryOp::Eq,
+                op,
                 span,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
