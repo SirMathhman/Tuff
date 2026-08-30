@@ -100,4 +100,14 @@ mod tests {
     fn test_evaluate_let_binding() {
         assert_eq!(evaluate("{ let x = 2 + 3; x } * 4"), Ok(20));
     }
+
+    #[test]
+    fn test_evaluate_top_level_let_error_mentions_identifiers() {
+        let err = evaluate("let x = 1").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("identifier") || msg.contains("let"),
+            "error message should mention identifiers or let: {msg}"
+        );
+    }
 }
