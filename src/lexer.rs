@@ -7,6 +7,7 @@ pub enum Token {
     Ident(String),
     Let,
     Mut,
+    True,
     Plus,
     Minus,
     Star,
@@ -27,6 +28,7 @@ impl Token {
             Token::Ident(s) => s.clone(),
             Token::Let => "let".to_string(),
             Token::Mut => "mut".to_string(),
+            Token::True => "true".to_string(),
             Token::Plus => "+".to_string(),
             Token::Minus => "-".to_string(),
             Token::Star => "*".to_string(),
@@ -161,6 +163,7 @@ fn keyword_or_ident(ident: String) -> Token {
     match ident.as_str() {
         "let" => Token::Let,
         "mut" => Token::Mut,
+        "true" => Token::True,
         _ => Token::Ident(ident),
     }
 }

@@ -32,14 +32,14 @@ impl fmt::Display for Error {
             Error::UnexpectedToken { span, token } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected '{}' — expected a number, identifier, 'let', 'mut', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
+                    "at {}..{}: unexpected '{}' — expected a number, identifier, 'let', 'mut', 'true', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end, token
                 )
             }
             Error::UnexpectedEnd { span } => {
                 write!(
                     f,
-                    "at {}..{}: unexpected end of input — expected a number, identifier, 'let', 'mut', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
+                    "at {}..{}: unexpected end of input — expected a number, identifier, 'let', 'mut', 'true', '-', '&', '*', '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end
                 )
             }

@@ -141,6 +141,11 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 Ok(Expr::Ident { name, span })
             }
+            Some(Token::True) => {
+                // The boolean literal `true` is the integer 1.
+                self.pos += 1;
+                Ok(Expr::Number(1))
+            }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.
                 let span = self.tokens[self.pos].span;
