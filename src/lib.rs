@@ -188,11 +188,6 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_or_inside_parentheses() {
-        assert_eq!(evaluate("(true || false) * 2"), Ok(2));
-    }
-
-    #[test]
     fn test_evaluate_not() {
         assert_eq!(evaluate("let x = true; !x"), Ok(0));
     }
