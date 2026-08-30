@@ -35,8 +35,8 @@ enum Stmt {
 /// or_expr  := expr (('||') expr)*
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
-/// factor   := Number | 'true' | 'false' | Ident | '-' factor | '&' ['mut'] factor | '*' factor | '(' expr ')' | block
-/// block    := '{' stmt* expr '}'
+/// factor   := Number | 'true' | 'false' | Ident | '-' factor | '&' ['mut'] factor | '*' factor | '(' or_expr ')' | block
+/// block    := '{' stmt* or_expr '}'
 /// ```
 ///
 /// The parser owns all structural validation and reports real spans.
@@ -213,7 +213,7 @@ impl<'a> Parser<'a> {
             }
             Some(Token::LParen) => {
                 self.pos += 1;
-                let inner = self.parse_expr()?;
+                let inner = self.parse_or_expr()?;
                 self.expect_token(&Token::RParen)?;
                 Ok(inner)
             }

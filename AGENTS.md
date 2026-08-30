@@ -2,8 +2,9 @@
 
 `tuffc` is a Rust compiler/interpreter for the **Tuff** language — currently an
 arithmetic expression evaluator with `let`/`mut` bindings, assignment, the
-`true` literal (evaluates to `1`), and reference (`&` / `&mut`) / dereference
-(`*`) operators, including deref-assignment (`*y = 1;`).
+`true`/`false` literals (evaluate to `1`/`0`), the `||` logical-or operator,
+and reference (`&` / `&mut`) / dereference (`*`) operators, including
+deref-assignment (`*y = 1;`).
 
 ## Canonical Architecture
 
@@ -58,7 +59,9 @@ with `ast`, `span`, `errors` as shared leaves. No module depends on `main`.
   final result is an error.
 - Deref-assignment (`*y = expr;`) writes through the reference; the referent
   must be a `let mut` binding (else `ImmutableVariable`).
-- `let`/`mut`/`true` are reserved keywords (dedicated `Token::Let`/`Token::Mut`/
-  `Token::True`), not valid identifiers. `true` desugars to the integer `1` at
-  parse time.
+- `let`/`mut`/`true`/`false` are reserved keywords (dedicated
+  `Token::Let`/`Token::Mut`/`Token::True`/`Token::False`), not valid
+  identifiers. `true`/`false` desugar to the integers `1`/`0` at parse time.
+- `||` is the logical-or operator (lowest precedence); truthy is any non-zero
+  value, and the result is `1` if either operand is non-zero else `0`.
 - Assigning to a non-`mut` binding is an `ImmutableVariable` error.
