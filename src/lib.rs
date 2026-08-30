@@ -127,4 +127,15 @@ mod tests {
         // 'let' is a keyword, not a valid variable name
         assert!(evaluate("let let = 1; let").is_err());
     }
+
+    #[test]
+    fn test_evaluate_assign_to_immutable() {
+        match evaluate("let x = 0; x = 1; x") {
+            Err(Error::ImmutableVariable { span, name }) => {
+                assert_eq!(name, "x");
+                assert_eq!(span, errors::Span { start: 11, end: 12 });
+            }
+            other => panic!("expected ImmutableVariable, got {:?}", other),
+        }
+    }
 }
