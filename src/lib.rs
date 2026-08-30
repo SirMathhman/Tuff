@@ -241,6 +241,14 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_if_statement_with_blocks() {
+        assert_eq!(
+            evaluate("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
+            Ok(1)
+        );
+    }
+
+    #[test]
     fn test_unexpected_token_message_lists_unary_operators() {
         // Regression: error messages must stay in sync with the grammar.
         let msg = evaluate("let x = ; x").unwrap_err().to_string();

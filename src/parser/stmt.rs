@@ -53,6 +53,11 @@ impl<'a> Parser<'a> {
                 Some(Token::Star) if self.is_deref_assign() => {
                     stmts.push(self.parse_deref_assign_stmt()?);
                 }
+                Some(Token::If) => {
+                    let span = self.tokens[self.pos].span;
+                    let value = self.parse_if_expr()?;
+                    stmts.push(Stmt::Block { span, value });
+                }
                 Some(Token::LBrace) => {
                     // A block is a statement only if it is not followed by a
                     // binary operator or ')', which would make it an operand
