@@ -141,6 +141,24 @@ impl<'a> Parser<'a> {
                     operand: Box::new(operand),
                 })
             }
+            Some(Token::Amp) => {
+                // Unary reference: take a reference to an identifier.
+                self.pos += 1;
+                let operand = self.parse_factor()?;
+                Ok(Expr::Unary {
+                    op: '&',
+                    operand: Box::new(operand),
+                })
+            }
+            Some(Token::Star) => {
+                // Unary dereference: dereference a reference.
+                self.pos += 1;
+                let operand = self.parse_factor()?;
+                Ok(Expr::Unary {
+                    op: '*',
+                    operand: Box::new(operand),
+                })
+            }
             Some(Token::LParen) => {
                 self.pos += 1;
                 let inner = self.parse_expr()?;

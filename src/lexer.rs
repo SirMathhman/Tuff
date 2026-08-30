@@ -16,6 +16,7 @@ pub enum Token {
     RBrace,
     Semicolon,
     Eq,
+    Amp,
 }
 
 impl Token {
@@ -35,6 +36,7 @@ impl Token {
             Token::RBrace => "}".to_string(),
             Token::Semicolon => ";".to_string(),
             Token::Eq => "=".to_string(),
+            Token::Amp => "&".to_string(),
         }
     }
 }
@@ -103,6 +105,10 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
             }
             '=' => {
                 tokens.push(spanned(Token::Eq, base, pos, 1));
+                pos += 1;
+            }
+            '&' => {
+                tokens.push(spanned(Token::Amp, base, pos, 1));
                 pos += 1;
             }
             _ => {

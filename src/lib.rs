@@ -21,7 +21,14 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
     }
     let expr = parser::parse(&tokens)?;
     let mut env = eval::Environment::new();
-    eval::eval(&expr, &mut env)
+    let value = eval::eval(&expr, &mut env)?;
+    match value {
+        eval::Value::Int(n) => Ok(n),
+        eval::Value::Ref(name) => Err(Error::UnexpectedToken {
+            span: Span { start: 0, end: 0 },
+            token: format!("reference to '{name}' as final result"),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -139,5 +146,10 @@ mod tests {
             }
             other => panic!("expected ImmutableVariable, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_evaluate_reference_and_dereference() {
+        assert_eq!(evaluate("let x = 1; let y = &x; *y"), Ok(1));
     }
 }

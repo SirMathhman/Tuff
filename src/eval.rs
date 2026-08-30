@@ -4,10 +4,17 @@ use crate::ast::Expr;
 use crate::errors::Error;
 use crate::span::Span;
 
+/// A runtime value: either an integer or a reference to a variable.
+#[derive(Debug, Clone)]
+pub enum Value {
+    Int(i64),
+    Ref(String),
+}
+
 /// A variable binding with its value and mutability flag.
 #[derive(Debug, Clone)]
 struct Binding {
-    value: i64,
+    value: Value,
     mutable: bool,
 }
 
@@ -24,16 +31,16 @@ impl Environment {
     }
 
     /// Look up a variable's value, searching innermost scope first.
-    pub fn lookup(&self, name: &str) -> Option<i64> {
+    pub fn lookup(&self, name: &str) -> Option<Value> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).map(|b| b.value))
+            .find_map(|scope| scope.get(name).map(|b| b.value.clone()))
     }
 
     /// Assign a new value to an existing variable. Returns an error if the
     /// variable is not found or is immutable.
-    pub fn assign(&mut self, name: &str, span: Span, value: i64) -> Result<(), Error> {
+    pub fn assign(&mut self, name: &str, span: Span, value: Value) -> Result<(), Error> {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(binding) = scope.get_mut(name) {
                 if !binding.mutable {
@@ -53,7 +60,7 @@ impl Environment {
     }
 
     /// Push a new scope and bind `name` to `value` in it.
-    pub fn define(&mut self, name: String, value: i64, mutable: bool) {
+    pub fn define(&mut self, name: String, value: Value, mutable: bool) {
         self.scopes.push(HashMap::new());
         self.scopes
             .last_mut()
@@ -73,31 +80,49 @@ impl Environment {
 /// built it that way), so evaluation is a straightforward recursive walk.
 /// `Let` nodes bind their value in a fresh scope for the duration of the
 /// body.
-pub fn eval(expr: &Expr, env: &mut Environment) -> Result<i64, Error> {
+pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
     match expr {
-        Expr::Number(n) => Ok(*n),
-        Expr::Ident { name, span } => env.lookup(name).map(Ok).unwrap_or_else(|| {
-            Err(Error::UndefinedVariable {
-                span: *span,
-                name: name.clone(),
-            })
+        Expr::Number(n) => Ok(Value::Int(*n)),
+        Expr::Ident { name, span } => env.lookup(name).ok_or_else(|| Error::UndefinedVariable {
+            span: *span,
+            name: name.clone(),
         }),
-        Expr::Unary { op, operand } => {
-            let v = eval(operand, env)?;
-            Ok(match op {
-                '-' => -v,
-                _ => unreachable!(),
-            })
-        }
+        Expr::Unary { op, operand } => match op {
+            '-' => {
+                let v = eval(operand, env)?;
+                Ok(Value::Int(-int_value(&v)?))
+            }
+            '&' => match operand.as_ref() {
+                Expr::Ident { name, .. } => Ok(Value::Ref(name.clone())),
+                _ => Err(Error::UnexpectedToken {
+                    span: Span { start: 0, end: 0 },
+                    token: "non-identifier operand of &".to_string(),
+                }),
+            },
+            '*' => {
+                let v = eval(operand, env)?;
+                match v {
+                    Value::Ref(name) => env.lookup(&name).ok_or(Error::UndefinedVariable {
+                        span: Span { start: 0, end: 0 },
+                        name,
+                    }),
+                    Value::Int(_) => Err(Error::UnexpectedToken {
+                        span: Span { start: 0, end: 0 },
+                        token: "non-reference operand of *".to_string(),
+                    }),
+                }
+            }
+            _ => unreachable!(),
+        },
         Expr::Binary { op, lhs, rhs } => {
-            let l = eval(lhs, env)?;
-            let r = eval(rhs, env)?;
-            Ok(match op {
+            let l = int_value(&eval(lhs, env)?)?;
+            let r = int_value(&eval(rhs, env)?)?;
+            Ok(Value::Int(match op {
                 '+' => l + r,
                 '-' => l - r,
                 '*' => l * r,
                 _ => unreachable!(),
-            })
+            }))
         }
         Expr::Let {
             name,
@@ -121,5 +146,16 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<i64, Error> {
             env.assign(name, *span, v)?;
             eval(body, env)
         }
+    }
+}
+
+/// Extract an `i64` from a `Value`, erroring if it is a reference.
+fn int_value(v: &Value) -> Result<i64, Error> {
+    match v {
+        Value::Int(n) => Ok(*n),
+        Value::Ref(name) => Err(Error::UnexpectedToken {
+            span: Span { start: 0, end: 0 },
+            token: format!("reference to '{name}' used as integer"),
+        }),
     }
 }
