@@ -184,67 +184,15 @@ impl<'a> Parser<'a> {
                 Ok(Expr::Ident { name, span })
             }
             Some(Token::True) => {
-                // The boolean literal `true`.
                 self.pos += 1;
                 Ok(Expr::Bool(true))
             }
             Some(Token::False) => {
-                // The boolean literal `false`.
                 self.pos += 1;
                 Ok(Expr::Bool(false))
             }
-            Some(Token::Minus) => {
-                // Unary minus: a negative factor.
-                let span = self.tokens[self.pos].span;
-                self.pos += 1;
-                let operand = self.parse_factor()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Neg,
-                    span,
-                    operand: Box::new(operand),
-                })
-            }
-            Some(Token::Not) => {
-                // Unary logical not: 1 if the operand is zero, else 0.
-                let span = self.tokens[self.pos].span;
-                self.pos += 1;
-                let operand = self.parse_factor()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Not,
-                    span,
-                    operand: Box::new(operand),
-                })
-            }
-            Some(Token::Amp) => {
-                // Unary reference: take a (mutable) reference to an identifier.
-                let span = self.tokens[self.pos].span;
-                self.pos += 1;
-                let mutable = matches!(self.peek(), Some(Token::Mut));
-                if mutable {
-                    self.pos += 1; // consume 'mut'
-                }
-                let operand = self.parse_factor()?;
-                let op = if mutable {
-                    UnaryOp::RefMut
-                } else {
-                    UnaryOp::Ref
-                };
-                Ok(Expr::Unary {
-                    op,
-                    span,
-                    operand: Box::new(operand),
-                })
-            }
-            Some(Token::Star) => {
-                // Unary dereference: dereference a reference.
-                let span = self.tokens[self.pos].span;
-                self.pos += 1;
-                let operand = self.parse_factor()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Deref,
-                    span,
-                    operand: Box::new(operand),
-                })
+            Some(Token::Minus) | Some(Token::Not) | Some(Token::Amp) | Some(Token::Star) => {
+                self.parse_unary_factor()
             }
             Some(Token::If) => self.parse_if_expr(),
             Some(Token::LParen) => {
@@ -262,6 +210,44 @@ impl<'a> Parser<'a> {
                 span: self.end_span(),
             }),
         }
+    }
+
+    /// Parse a unary-prefix factor: `'-' factor`, `'!' factor`,
+    /// `'&' ['mut'] factor`, or `'*' factor`.
+    fn parse_unary_factor(&mut self) -> Result<Expr, Error> {
+        let span = self.tokens[self.pos].span;
+        let op = match self.peek() {
+            Some(Token::Minus) => UnaryOp::Neg,
+            Some(Token::Not) => UnaryOp::Not,
+            Some(Token::Amp) => {
+                self.pos += 1; // consume '&'
+                let mutable = matches!(self.peek(), Some(Token::Mut));
+                if mutable {
+                    self.pos += 1; // consume 'mut'
+                }
+                return {
+                    let operand = self.parse_factor()?;
+                    Ok(Expr::Unary {
+                        op: if mutable {
+                            UnaryOp::RefMut
+                        } else {
+                            UnaryOp::Ref
+                        },
+                        span,
+                        operand: Box::new(operand),
+                    })
+                };
+            }
+            Some(Token::Star) => UnaryOp::Deref,
+            _ => unreachable!(),
+        };
+        self.pos += 1; // consume the operator token
+        let operand = self.parse_factor()?;
+        Ok(Expr::Unary {
+            op,
+            span,
+            operand: Box::new(operand),
+        })
     }
 
     /// Parse an `if` expression: `if cond then else els`.
