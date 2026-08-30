@@ -207,6 +207,14 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_comparison_result_not_comparable_to_int() {
+        match evaluate("(2 == 2) == 1") {
+            Err(Error::TypeMismatch { .. }) => {}
+            other => panic!("expected TypeMismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
     fn test_unexpected_token_message_lists_unary_operators() {
         // Regression: error messages must stay in sync with the grammar.
         let msg = evaluate("let x = ; x").unwrap_err().to_string();

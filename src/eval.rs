@@ -218,7 +218,7 @@ fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, E
         BinaryOp::Sub => Value::Int(int_value(&l, span)? - int_value(&r, span)?),
         BinaryOp::Mul => Value::Int(int_value(&l, span)? * int_value(&r, span)?),
         BinaryOp::Eq => {
-            // Equality: 1 if the operands are equal, else 0.
+            // Equality: true if the operands are equal, else false.
             // Operands must share a type; mixing bool and int is an error.
             let eq = match (&l, &r) {
                 (Value::Int(a), Value::Int(b)) => *a == *b,
@@ -231,11 +231,11 @@ fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, E
                     });
                 }
             };
-            Value::Int(if eq { 1 } else { 0 })
+            Value::Bool(eq)
         }
         BinaryOp::Lt => {
-            // Less-than: 1 if the left operand is strictly less than the
-            // right, else 0. Operands must both be integers.
+            // Less-than: true if the left operand is strictly less than the
+            // right, else false. Operands must both be integers.
             let lt = match (&l, &r) {
                 (Value::Int(a), Value::Int(b)) => a < b,
                 _ => {
@@ -246,7 +246,7 @@ fn eval_binary(op: &BinaryOp, span: Span, l: Value, r: Value) -> Result<Value, E
                     });
                 }
             };
-            Value::Int(if lt { 1 } else { 0 })
+            Value::Bool(lt)
         }
         BinaryOp::Or => {
             // Logical OR: truthy is any non-zero value or true.
