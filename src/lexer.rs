@@ -26,6 +26,7 @@ pub enum Token {
     Not,
     If,
     Else,
+    PlusEq,
 }
 
 impl Token {
@@ -55,6 +56,7 @@ impl Token {
             Token::Not => "!".to_string(),
             Token::If => "if".to_string(),
             Token::Else => "else".to_string(),
+            Token::PlusEq => "+=".to_string(),
         }
     }
 }
@@ -98,7 +100,14 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
 /// the original source, used to build real spans.
 fn next_token(chars: &[char], pos: usize, base: usize) -> Result<(Token, usize), Error> {
     match chars[pos] {
-        '+' => Ok((Token::Plus, pos + 1)),
+        '+' => {
+            // '+=' is the compound-addition operator; a lone '+' is addition.
+            if chars.get(pos + 1) == Some(&'=') {
+                Ok((Token::PlusEq, pos + 2))
+            } else {
+                Ok((Token::Plus, pos + 1))
+            }
+        }
         '-' => {
             // The lexer always emits Minus; the parser decides whether
             // it is unary (negative) or binary (subtraction).

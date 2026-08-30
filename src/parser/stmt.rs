@@ -50,6 +50,7 @@ impl<'a> Parser<'a> {
                 }
                 Some(Token::Ident(_)) => {
                     // Could be an assignment statement: Ident '=' expr ';'
+                    // or compound: Ident '+=' expr ';'
                     let saved = self.pos;
                     let name = self.parse_ident_name()?;
                     if matches!(self.peek(), Some(Token::Eq)) {
@@ -57,6 +58,23 @@ impl<'a> Parser<'a> {
                         let value = self.parse_or_expr()?;
                         self.expect_token(&Token::Semicolon)?;
                         let span = self.tokens[saved].span;
+                        stmts.push(Stmt::Assign { name, span, value });
+                    } else if matches!(self.peek(), Some(Token::PlusEq)) {
+                        // Desugar 'x += expr' to 'x = x + expr'
+                        self.pos += 1; // consume '+='
+                        let rhs = self.parse_or_expr()?;
+                        self.expect_token(&Token::Semicolon)?;
+                        let span = self.tokens[saved].span;
+                        let lhs = Expr::Ident {
+                            name: name.clone(),
+                            span,
+                        };
+                        let value = Expr::Binary {
+                            op: crate::ast::BinaryOp::Add,
+                            span,
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
+                        };
                         stmts.push(Stmt::Assign { name, span, value });
                     } else {
                         // Not an assignment — this is the tail expression.
