@@ -88,6 +88,15 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 Ok(Expr::Number(value))
             }
+            Some(Token::Minus) => {
+                // Unary minus: a negative factor.
+                self.pos += 1;
+                let operand = self.parse_factor()?;
+                Ok(Expr::Unary {
+                    op: '-',
+                    operand: Box::new(operand),
+                })
+            }
             Some(Token::LParen) => {
                 self.pos += 1;
                 let inner = self.parse_expr()?;
@@ -100,14 +109,18 @@ impl<'a> Parser<'a> {
                         span: self.tokens[self.pos].span,
                         token: other.describe(),
                     }),
-                    None => Err(Error::UnexpectedEnd { span: self.end_span() }),
+                    None => Err(Error::UnexpectedEnd {
+                        span: self.end_span(),
+                    }),
                 }
             }
             Some(other) => Err(Error::UnexpectedToken {
                 span: self.tokens[self.pos].span,
                 token: other.describe(),
             }),
-            None => Err(Error::UnexpectedEnd { span: self.end_span() }),
+            None => Err(Error::UnexpectedEnd {
+                span: self.end_span(),
+            }),
         }
     }
 }

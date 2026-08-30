@@ -65,6 +65,12 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_unary_minus() {
+        assert_eq!(evaluate("2 * -3"), Ok(-6));
+        assert_eq!(evaluate("-(2 + 3)"), Ok(-5));
+    }
+
+    #[test]
     fn test_evaluate_invalid_input() {
         match evaluate("1 + x") {
             Err(Error::UnexpectedChar { span, ch }) => {

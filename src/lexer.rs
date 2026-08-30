@@ -51,28 +51,16 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
         if pos >= chars.len() {
             break;
         }
-        let is_operand_start = tokens.is_empty()
-            || matches!(
-                tokens.last().map(|t| &t.token),
-                Some(Token::Plus) | Some(Token::Minus) | Some(Token::Star) | Some(Token::LParen)
-            );
         match chars[pos] {
             '+' => {
                 tokens.push(spanned(Token::Plus, base, pos, 1));
                 pos += 1;
             }
             '-' => {
-                // A '-' is a negative sign when it starts an operand
-                // (at the beginning, after an operator, or after '(');
-                // otherwise it is a subtraction operator.
-                if is_operand_start {
-                    let (val, new_pos) = parse_number(&chars, pos, true, base)?;
-                    tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
-                    pos = new_pos;
-                } else {
-                    tokens.push(spanned(Token::Minus, base, pos, 1));
-                    pos += 1;
-                }
+                // The lexer always emits Minus; the parser decides whether
+                // it is unary (negative) or binary (subtraction).
+                tokens.push(spanned(Token::Minus, base, pos, 1));
+                pos += 1;
             }
             '*' => {
                 tokens.push(spanned(Token::Star, base, pos, 1));
@@ -87,7 +75,7 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
                 pos += 1;
             }
             _ => {
-                let (val, new_pos) = parse_number(&chars, pos, false, base)?;
+                let (val, new_pos) = parse_number(&chars, pos, base)?;
                 tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
                 pos = new_pos;
             }
@@ -117,15 +105,10 @@ fn skip_whitespace(chars: &[char], pos: usize) -> usize {
 fn parse_number(
     chars: &[char],
     mut pos: usize,
-    allow_negative: bool,
     base: usize,
 ) -> Result<(i64, usize), Error> {
     let start = pos;
     let mut num_str = String::new();
-    if allow_negative && chars[pos] == '-' {
-        num_str.push('-');
-        pos += 1;
-    }
     while pos < chars.len() && chars[pos].is_ascii_digit() {
         num_str.push(chars[pos]);
         pos += 1;
@@ -137,15 +120,6 @@ fn parse_number(
                 end: base + start + 1,
             },
             ch: chars[start],
-        });
-    }
-    if num_str == "-" {
-        return Err(Error::InvalidNumber {
-            span: Span {
-                start: base + start,
-                end: base + pos,
-            },
-            text: num_str,
         });
     }
     let val: i64 = num_str.parse().map_err(|_| Error::InvalidNumber {

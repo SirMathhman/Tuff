@@ -7,6 +7,13 @@ use crate::ast::Expr;
 pub fn eval(expr: &Expr) -> i64 {
     match expr {
         Expr::Number(n) => *n,
+        Expr::Unary { op, operand } => {
+            let v = eval(operand);
+            match op {
+                '-' => -v,
+                _ => unreachable!(),
+            }
+        }
         Expr::Binary { op, lhs, rhs } => {
             let l = eval(lhs);
             let r = eval(rhs);

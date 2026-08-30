@@ -6,6 +6,10 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Number(i64),
+    Unary {
+        op: char,
+        operand: Box<Expr>,
+    },
     Binary {
         op: char,
         lhs: Box<Expr>,
