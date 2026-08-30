@@ -16,6 +16,11 @@ pub enum Error {
         span: Span,
         token: String,
     },
+    ExpectedToken {
+        span: Span,
+        expected: String,
+        found: String,
+    },
     UnexpectedEnd {
         span: Span,
     },
@@ -56,6 +61,17 @@ impl fmt::Display for Error {
                     f,
                     "at {}..{}: unexpected '{}' — expected a number, identifier, 'let', 'mut', 'true', 'false', 'if', '-', '!', '&', '*', '==', '<', '||', '&&', '(', '{{', or a matching ')' or '}}'",
                     span.start, span.end, token
+                )
+            }
+            Error::ExpectedToken {
+                span,
+                expected,
+                found,
+            } => {
+                write!(
+                    f,
+                    "at {}..{}: expected '{expected}', found '{found}'",
+                    span.start, span.end
                 )
             }
             Error::UnexpectedEnd { span } => {

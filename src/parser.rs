@@ -69,9 +69,10 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 Ok(())
             }
-            Some(other) => Err(Error::UnexpectedToken {
+            Some(other) => Err(Error::ExpectedToken {
                 span: self.tokens[self.pos].span,
-                token: other.describe(),
+                expected: expected.describe(),
+                found: other.describe(),
             }),
             None => Err(Error::UnexpectedEnd {
                 span: self.end_span(),
