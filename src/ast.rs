@@ -5,6 +5,7 @@ use crate::span::Span;
 pub enum UnaryOp {
     Neg,
     Ref,
+    RefMut,
     Deref,
 }
 
@@ -47,6 +48,12 @@ pub enum Expr {
     },
     Assign {
         name: String,
+        span: Span,
+        value: Box<Expr>,
+        body: Box<Expr>,
+    },
+    DerefAssign {
+        target: Box<Expr>,
         span: Span,
         value: Box<Expr>,
         body: Box<Expr>,

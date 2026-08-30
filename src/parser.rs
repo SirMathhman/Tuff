@@ -15,6 +15,11 @@ enum Stmt {
         span: Span,
         value: Expr,
     },
+    DerefAssign {
+        target: Expr,
+        span: Span,
+        value: Expr,
+    },
 }
 
 /// Parse a token stream into an expression tree.
@@ -148,12 +153,17 @@ impl<'a> Parser<'a> {
                 })
             }
             Some(Token::Amp) => {
-                // Unary reference: take a reference to an identifier.
+                // Unary reference: take a (mutable) reference to an identifier.
                 let span = self.tokens[self.pos].span;
                 self.pos += 1;
+                let mutable = matches!(self.peek(), Some(Token::Mut));
+                if mutable {
+                    self.pos += 1; // consume 'mut'
+                }
                 let operand = self.parse_factor()?;
+                let op = if mutable { UnaryOp::RefMut } else { UnaryOp::Ref };
                 Ok(Expr::Unary {
-                    op: UnaryOp::Ref,
+                    op,
                     span,
                     operand: Box::new(operand),
                 })
@@ -235,6 +245,18 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
+                Some(Token::Star) if self.is_deref_assign() => {
+                    // Deref-assign statement: '*Ident' '=' expr ';'
+                    let span = self.tokens[self.pos].span;
+                    self.pos += 1; // consume '*'
+                    let name = self.parse_ident_name()?;
+                    let ident_span = self.tokens[self.pos - 1].span;
+                    self.expect_token(&Token::Eq)?;
+                    let value = self.parse_expr()?;
+                    self.expect_token(&Token::Semicolon)?;
+                    let target = Expr::Ident { name, span: ident_span };
+                    stmts.push(Stmt::DerefAssign { target, span, value });
+                }
                 _ => break,
             }
         }
@@ -257,10 +279,28 @@ impl<'a> Parser<'a> {
                     span,
                     value: Box::new(value),
                     body: Box::new(body),
-                },
-            };
+                },                Stmt::DerefAssign { target, span, value } => Expr::DerefAssign {
+                    target: Box::new(target),
+                    span,
+                    value: Box::new(value),
+                    body: Box::new(body),
+                },            };
         }
         Ok(body)
+    }
+
+    /// True if the current position starts a deref-assign statement:
+    /// `'*' Ident '='`.
+    fn is_deref_assign(&self) -> bool {
+        matches!(self.peek(), Some(Token::Star))
+            && matches!(
+                self.tokens.get(self.pos + 1).map(|t| &t.token),
+                Some(Token::Ident(_))
+            )
+            && matches!(
+                self.tokens.get(self.pos + 2).map(|t| &t.token),
+                Some(Token::Eq)
+            )
     }
 
     /// Parse an identifier token, returning its name.

@@ -9,6 +9,7 @@ use crate::span::Span;
 pub enum Value {
     Int(i64),
     Ref(String),
+    RefMut(String),
 }
 
 /// A variable binding with its value and mutability flag.
@@ -99,10 +100,17 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                     token: "non-identifier operand of &".to_string(),
                 }),
             },
+            UnaryOp::RefMut => match operand.as_ref() {
+                Expr::Ident { name, .. } => Ok(Value::RefMut(name.clone())),
+                _ => Err(Error::UnexpectedToken {
+                    span: *span,
+                    token: "non-identifier operand of &mut".to_string(),
+                }),
+            },
             UnaryOp::Deref => {
                 let v = eval(operand, env)?;
                 match v {
-                    Value::Ref(name) => env
+                    Value::Ref(name) | Value::RefMut(name) => env
                         .lookup(&name)
                         .ok_or(Error::UndefinedVariable { span: *span, name }),
                     Value::Int(_) => Err(Error::UnexpectedToken {
@@ -143,6 +151,20 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             env.assign(name, *span, v)?;
             eval(body, env)
         }
+        Expr::DerefAssign { target, span, value, body } => {
+            let name = match eval(target, env)? {
+                Value::Ref(n) | Value::RefMut(n) => n,
+                Value::Int(_) => {
+                    return Err(Error::UnexpectedToken {
+                        span: *span,
+                        token: "non-reference target of * =".to_string(),
+                    })
+                }
+            };
+            let v = eval(value, env)?;
+            env.assign(&name, *span, v)?;
+            eval(body, env)
+        }
     }
 }
 
@@ -153,6 +175,10 @@ fn int_value(v: &Value, span: Span) -> Result<i64, Error> {
         Value::Ref(name) => Err(Error::UnexpectedToken {
             span,
             token: format!("reference to '{name}' used as integer"),
+        }),
+        Value::RefMut(name) => Err(Error::UnexpectedToken {
+            span,
+            token: format!("mutable reference to '{name}' used as integer"),
         }),
     }
 }

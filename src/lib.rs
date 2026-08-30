@@ -28,6 +28,10 @@ pub fn evaluate(input: &str) -> Result<i64, Error> {
             span: Span { start: 0, end: 0 },
             token: format!("reference to '{name}' as final result"),
         }),
+        eval::Value::RefMut(name) => Err(Error::UnexpectedToken {
+            span: Span { start: 0, end: 0 },
+            token: format!("mutable reference to '{name}' as final result"),
+        }),
     }
 }
 
@@ -156,6 +160,14 @@ mod tests {
     #[test]
     fn test_evaluate_double_dereference() {
         assert_eq!(evaluate("let x = 1; let y = &x; let z = &y; **z"), Ok(1));
+    }
+
+    #[test]
+    fn test_evaluate_mut_reference_and_deref_assign() {
+        assert_eq!(
+            evaluate("let mut x = 0; let y = &mut x; *y = 1; x"),
+            Ok(1)
+        );
     }
 
     #[test]
