@@ -266,13 +266,18 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// Parse a braced block: zero or more `let` statements followed by a
-    /// tail expression. The block's value is the tail expression, with each
-    /// `let` binding nested around it.
+    /// Parse a braced block: zero or more statements followed by an
+    /// optional tail expression. If no tail is present (next token is `}`),
+    /// the block evaluates to `0`.
     fn parse_block(&mut self) -> Result<Expr, Error> {
         self.expect_token(&Token::LBrace)?;
-        let body = self.parse_stmt_seq()?;
+        let stmts = self.parse_stmts()?;
+        let tail = if matches!(self.peek(), Some(Token::RBrace)) {
+            Expr::Number(0)
+        } else {
+            self.parse_or_expr()?
+        };
         self.expect_token(&Token::RBrace)?;
-        Ok(body)
+        Ok(Self::build_body(stmts, tail))
     }
 }

@@ -22,6 +22,9 @@ pub(super) enum Stmt {
         span: Span,
         value: Expr,
     },
+    Block {
+        value: Expr,
+    },
 }
 
 impl<'a> Parser<'a> {
@@ -29,6 +32,13 @@ impl<'a> Parser<'a> {
     /// Statements are `let` bindings or assignments, each nested around
     /// the tail so later statements can reference earlier bindings.
     pub(super) fn parse_stmt_seq(&mut self) -> Result<Expr, Error> {
+        let stmts = self.parse_stmts()?;
+        let tail = self.parse_or_expr()?;
+        Ok(Self::build_body(stmts, tail))
+    }
+
+    /// Parse zero or more statements, returning them in order.
+    pub(super) fn parse_stmts(&mut self) -> Result<Vec<Stmt>, Error> {
         let mut stmts: Vec<Stmt> = Vec::new();
         loop {
             match self.peek() {
@@ -42,11 +52,33 @@ impl<'a> Parser<'a> {
                 Some(Token::Star) if self.is_deref_assign() => {
                     stmts.push(self.parse_deref_assign_stmt()?);
                 }
+                Some(Token::LBrace) => {
+                    // A block is a statement only if it is not followed by a
+                    // binary operator or ')', which would make it an operand
+                    // of a larger expression (i.e. the tail).
+                    let saved = self.pos;
+                    let value = self.parse_block()?;
+                    if matches!(
+                        self.peek(),
+                        Some(Token::Plus)
+                            | Some(Token::Minus)
+                            | Some(Token::Star)
+                            | Some(Token::EqEq)
+                            | Some(Token::Lt)
+                            | Some(Token::Or)
+                            | Some(Token::And)
+                            | Some(Token::RParen)
+                    ) {
+                        // Block is an expression, not a statement.
+                        self.pos = saved;
+                        break;
+                    }
+                    stmts.push(Stmt::Block { value });
+                }
                 _ => break,
             }
         }
-        let tail = self.parse_or_expr()?;
-        Ok(Self::build_body(stmts, tail))
+        Ok(stmts)
     }
 
     /// Parse a `let [mut] Ident = or_expr ;` statement.
@@ -125,7 +157,7 @@ impl<'a> Parser<'a> {
 
     /// Fold parsed statements (in reverse) around the tail expression to
     /// build the nested `Expr` tree.
-    fn build_body(stmts: Vec<Stmt>, tail: Expr) -> Expr {
+    pub(super) fn build_body(stmts: Vec<Stmt>, tail: Expr) -> Expr {
         let mut body = tail;
         for stmt in stmts.into_iter().rev() {
             body = match stmt {
@@ -152,6 +184,12 @@ impl<'a> Parser<'a> {
                 } => Expr::DerefAssign {
                     target: Box::new(target),
                     span,
+                    value: Box::new(value),
+                    body: Box::new(body),
+                },
+                Stmt::Block { value } => Expr::Let {
+                    name: String::new(),
+                    mutable: false,
                     value: Box::new(value),
                     body: Box::new(body),
                 },
