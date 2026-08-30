@@ -23,6 +23,13 @@ pub enum Expr {
     },
     Let {
         name: String,
+        mutable: bool,
+        value: Box<Expr>,
+        body: Box<Expr>,
+    },
+    Assign {
+        name: String,
+        span: Span,
         value: Box<Expr>,
         body: Box<Expr>,
     },

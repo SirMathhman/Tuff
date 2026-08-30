@@ -2,17 +2,33 @@ use crate::ast::Expr;
 use crate::errors::{Error, Span};
 use crate::lexer::{SpannedToken, Token};
 
+/// A parsed statement (before nesting into the expression tree).
+enum Stmt {
+    Let {
+        name: String,
+        mutable: bool,
+        value: Expr,
+    },
+    Assign {
+        name: String,
+        span: Span,
+        value: Expr,
+    },
+}
+
 /// Parse a token stream into an expression tree.
 ///
 /// Recursive descent with two precedence levels:
 ///
 /// ```text
-/// program  := let_stmt* expr
+/// program  := stmt* expr
+/// stmt     := let_stmt | assign_stmt
+/// let_stmt := 'let' ['mut'] Ident '=' expr ';'
+/// assign_stmt := Ident '=' expr ';'
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
 /// factor   := Number | Ident | '-' factor | '(' expr ')' | block
-/// block    := '{' let_stmt* expr '}'
-/// let_stmt := 'let' Ident '=' expr ';'
+/// block    := '{' stmt* expr '}'
 /// ```
 ///
 /// The parser owns all structural validation and reports real spans.
@@ -151,48 +167,88 @@ impl<'a> Parser<'a> {
         Ok(body)
     }
 
-    /// Parse zero or more `let` statements followed by a tail expression.
-    /// Each `let` binding is nested around the tail, so later bindings can
-    /// reference earlier ones.
+    /// Parse zero or more statements followed by a tail expression.
+    /// Statements are `let` bindings or assignments, each nested around
+    /// the tail so later statements can reference earlier bindings.
     fn parse_let_seq(&mut self) -> Result<Expr, Error> {
-        let mut lets: Vec<(String, Expr)> = Vec::new();
-        while let Some(Token::Ident(name)) = self.peek() {
-            if name != "let" {
-                break;
+        let mut stmts: Vec<Stmt> = Vec::new();
+        loop {
+            match self.peek() {
+                Some(Token::Ident(name)) if name == "let" => {
+                    self.pos += 1; // consume 'let'
+                    let mutable = matches!(self.peek(), Some(Token::Ident(m)) if m == "mut");
+                    if mutable {
+                        self.pos += 1; // consume 'mut'
+                    }
+                    let name = self.parse_ident_name()?;
+                    self.expect_token(&Token::Eq)?;
+                    let value = self.parse_expr()?;
+                    self.expect_token(&Token::Semicolon)?;
+                    stmts.push(Stmt::Let {
+                        name,
+                        mutable,
+                        value,
+                    });
+                }
+                Some(Token::Ident(_)) => {
+                    // Could be an assignment statement: Ident '=' expr ';'
+                    let saved = self.pos;
+                    let name = self.parse_ident_name()?;
+                    if matches!(self.peek(), Some(Token::Eq)) {
+                        self.pos += 1; // consume '='
+                        let value = self.parse_expr()?;
+                        self.expect_token(&Token::Semicolon)?;
+                        let span = self.tokens[saved].span;
+                        stmts.push(Stmt::Assign { name, span, value });
+                    } else {
+                        // Not an assignment — this is the tail expression.
+                        self.pos = saved;
+                        break;
+                    }
+                }
+                _ => break,
             }
-            self.pos += 1; // consume 'let'
-            let name = match self.peek() {
-                Some(Token::Ident(name)) => {
-                    let n = name.clone();
-                    self.pos += 1;
-                    n
-                }
-                Some(other) => {
-                    return Err(Error::UnexpectedToken {
-                        span: self.tokens[self.pos].span,
-                        token: other.describe(),
-                    });
-                }
-                None => {
-                    return Err(Error::UnexpectedEnd {
-                        span: self.end_span(),
-                    });
-                }
-            };
-            self.expect_token(&Token::Eq)?;
-            let value = self.parse_expr()?;
-            self.expect_token(&Token::Semicolon)?;
-            lets.push((name, value));
         }
         let tail = self.parse_expr()?;
         let mut body = tail;
-        for (name, value) in lets.into_iter().rev() {
-            body = Expr::Let {
-                name,
-                value: Box::new(value),
-                body: Box::new(body),
+        for stmt in stmts.into_iter().rev() {
+            body = match stmt {
+                Stmt::Let {
+                    name,
+                    mutable,
+                    value,
+                } => Expr::Let {
+                    name,
+                    mutable,
+                    value: Box::new(value),
+                    body: Box::new(body),
+                },
+                Stmt::Assign { name, span, value } => Expr::Assign {
+                    name,
+                    span,
+                    value: Box::new(value),
+                    body: Box::new(body),
+                },
             };
         }
         Ok(body)
+    }
+
+    /// Parse an identifier token, returning its name.
+    fn parse_ident_name(&mut self) -> Result<String, Error> {
+        match self.peek() {
+            Some(Token::Ident(name)) => {
+                let n = name.clone();
+                self.pos += 1;
+                Ok(n)
+            }
+            Some(other) => Err(Error::UnexpectedToken {
+                span: self.tokens[self.pos].span,
+                token: other.describe(),
+            }),
+            None => Err(Error::UnexpectedEnd {
+                span: self.end_span(),
+            }),
+        }
     }
 }

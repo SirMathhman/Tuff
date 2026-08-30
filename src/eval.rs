@@ -1,13 +1,20 @@
 use std::collections::HashMap;
 
 use crate::ast::Expr;
-use crate::errors::Error;
+use crate::errors::{Error, Span};
+
+/// A variable binding with its value and mutability flag.
+#[derive(Debug, Clone)]
+struct Binding {
+    value: i64,
+    mutable: bool,
+}
 
 /// A stack of lexical scopes. Each scope maps variable names to their
-/// integer values. Inner scopes shadow outer ones.
+/// bindings. Inner scopes shadow outer ones.
 #[derive(Debug, Clone, Default)]
 pub struct Environment {
-    scopes: Vec<HashMap<String, i64>>,
+    scopes: Vec<HashMap<String, Binding>>,
 }
 
 impl Environment {
@@ -15,18 +22,42 @@ impl Environment {
         Self::default()
     }
 
-    /// Look up a variable, searching innermost scope first.
+    /// Look up a variable's value, searching innermost scope first.
     pub fn lookup(&self, name: &str) -> Option<i64> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.get(name).copied())
+            .find_map(|scope| scope.get(name).map(|b| b.value))
+    }
+
+    /// Assign a new value to an existing variable. Returns an error if the
+    /// variable is not found or is immutable.
+    pub fn assign(&mut self, name: &str, span: Span, value: i64) -> Result<(), Error> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(binding) = scope.get_mut(name) {
+                if !binding.mutable {
+                    return Err(Error::ImmutableVariable {
+                        span,
+                        name: name.to_string(),
+                    });
+                }
+                binding.value = value;
+                return Ok(());
+            }
+        }
+        Err(Error::UndefinedVariable {
+            span,
+            name: name.to_string(),
+        })
     }
 
     /// Push a new scope and bind `name` to `value` in it.
-    pub fn define(&mut self, name: String, value: i64) {
+    pub fn define(&mut self, name: String, value: i64, mutable: bool) {
         self.scopes.push(HashMap::new());
-        self.scopes.last_mut().unwrap().insert(name, value);
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name, Binding { value, mutable });
     }
 
     /// Pop the most recent scope.
@@ -67,12 +98,27 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<i64, Error> {
                 _ => unreachable!(),
             })
         }
-        Expr::Let { name, value, body } => {
+        Expr::Let {
+            name,
+            mutable,
+            value,
+            body,
+        } => {
             let v = eval(value, env)?;
-            env.define(name.clone(), v);
+            env.define(name.clone(), v, *mutable);
             let result = eval(body, env)?;
             env.pop_scope();
             Ok(result)
+        }
+        Expr::Assign {
+            name,
+            span,
+            value,
+            body,
+        } => {
+            let v = eval(value, env)?;
+            env.assign(name, *span, v)?;
+            eval(body, env)
         }
     }
 }

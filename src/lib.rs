@@ -116,4 +116,9 @@ mod tests {
             Ok(20)
         );
     }
+
+    #[test]
+    fn test_evaluate_mut_assignment() {
+        assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(1));
+    }
 }

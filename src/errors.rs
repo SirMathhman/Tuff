@@ -13,6 +13,7 @@ pub enum Error {
     UnexpectedToken { span: Span, token: String },
     UnexpectedEnd { span: Span },
     UndefinedVariable { span: Span, name: String },
+    ImmutableVariable { span: Span, name: String },
 }
 
 impl fmt::Display for Error {
@@ -50,6 +51,13 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "at {}..{}: undefined variable '{name}'",
+                    span.start, span.end
+                )
+            }
+            Error::ImmutableVariable { span, name } => {
+                write!(
+                    f,
+                    "at {}..{}: cannot assign to immutable variable '{name}'",
                     span.start, span.end
                 )
             }
