@@ -82,99 +82,72 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
         if pos >= chars.len() {
             break;
         }
-        match chars[pos] {
-            '+' => {
-                tokens.push(spanned(Token::Plus, base, pos, 1));
-                pos += 1;
+        let (token, new_pos) = next_token(&chars, pos, base)?;
+        tokens.push(spanned(token, base, pos, new_pos - pos));
+        pos = new_pos;
+    }
+    Ok(tokens)
+}
+
+/// Lex a single token starting at `chars[pos]`, returning the token and the
+/// position just past it. `base` is the offset of the trimmed input within
+/// the original source, used to build real spans.
+fn next_token(chars: &[char], pos: usize, base: usize) -> Result<(Token, usize), Error> {
+    match chars[pos] {
+        '+' => Ok((Token::Plus, pos + 1)),
+        '-' => {
+            // The lexer always emits Minus; the parser decides whether
+            // it is unary (negative) or binary (subtraction).
+            Ok((Token::Minus, pos + 1))
+        }
+        '*' => Ok((Token::Star, pos + 1)),
+        '(' => Ok((Token::LParen, pos + 1)),
+        ')' => Ok((Token::RParen, pos + 1)),
+        '{' => Ok((Token::LBrace, pos + 1)),
+        '}' => Ok((Token::RBrace, pos + 1)),
+        ';' => Ok((Token::Semicolon, pos + 1)),
+        '=' => {
+            // '==' is the equality operator; a lone '=' is assignment.
+            if chars.get(pos + 1) == Some(&'=') {
+                Ok((Token::EqEq, pos + 2))
+            } else {
+                Ok((Token::Eq, pos + 1))
             }
-            '-' => {
-                // The lexer always emits Minus; the parser decides whether
-                // it is unary (negative) or binary (subtraction).
-                tokens.push(spanned(Token::Minus, base, pos, 1));
-                pos += 1;
+        }
+        '!' => Ok((Token::Not, pos + 1)),
+        '<' => Ok((Token::Lt, pos + 1)),
+        '&' => {
+            // '&&' is the logical-and operator; a lone '&' is a reference.
+            if chars.get(pos + 1) == Some(&'&') {
+                Ok((Token::And, pos + 2))
+            } else {
+                Ok((Token::Amp, pos + 1))
             }
-            '*' => {
-                tokens.push(spanned(Token::Star, base, pos, 1));
-                pos += 1;
+        }
+        '|' => {
+            // '||' is the logical-or operator; a lone '|' is invalid.
+            if chars.get(pos + 1) == Some(&'|') {
+                Ok((Token::Or, pos + 2))
+            } else {
+                Err(Error::UnexpectedChar {
+                    span: Span {
+                        start: base + pos,
+                        end: base + pos + 1,
+                    },
+                    ch: '|',
+                })
             }
-            '(' => {
-                tokens.push(spanned(Token::LParen, base, pos, 1));
-                pos += 1;
-            }
-            ')' => {
-                tokens.push(spanned(Token::RParen, base, pos, 1));
-                pos += 1;
-            }
-            '{' => {
-                tokens.push(spanned(Token::LBrace, base, pos, 1));
-                pos += 1;
-            }
-            '}' => {
-                tokens.push(spanned(Token::RBrace, base, pos, 1));
-                pos += 1;
-            }
-            ';' => {
-                tokens.push(spanned(Token::Semicolon, base, pos, 1));
-                pos += 1;
-            }
-            '=' => {
-                // '==' is the equality operator; a lone '=' is assignment.
-                if chars.get(pos + 1) == Some(&'=') {
-                    tokens.push(spanned(Token::EqEq, base, pos, 2));
-                    pos += 2;
-                } else {
-                    tokens.push(spanned(Token::Eq, base, pos, 1));
-                    pos += 1;
-                }
-            }
-            '!' => {
-                tokens.push(spanned(Token::Not, base, pos, 1));
-                pos += 1;
-            }
-            '<' => {
-                tokens.push(spanned(Token::Lt, base, pos, 1));
-                pos += 1;
-            }
-            '&' => {
-                // '&&' is the logical-and operator; a lone '&' is a reference.
-                if chars.get(pos + 1) == Some(&'&') {
-                    tokens.push(spanned(Token::And, base, pos, 2));
-                    pos += 2;
-                } else {
-                    tokens.push(spanned(Token::Amp, base, pos, 1));
-                    pos += 1;
-                }
-            }
-            '|' => {
-                // '||' is the logical-or operator; a lone '|' is invalid.
-                if chars.get(pos + 1) == Some(&'|') {
-                    tokens.push(spanned(Token::Or, base, pos, 2));
-                    pos += 2;
-                } else {
-                    return Err(Error::UnexpectedChar {
-                        span: Span {
-                            start: base + pos,
-                            end: base + pos + 1,
-                        },
-                        ch: '|',
-                    });
-                }
-            }
-            _ => {
-                if chars[pos].is_ascii_alphabetic() {
-                    let (ident, new_pos) = parse_ident(&chars, pos);
-                    let token = keyword_or_ident(ident);
-                    tokens.push(spanned(token, base, pos, new_pos - pos));
-                    pos = new_pos;
-                } else {
-                    let (val, new_pos) = parse_number(&chars, pos, base)?;
-                    tokens.push(spanned(Token::Number(val), base, pos, new_pos - pos));
-                    pos = new_pos;
-                }
+        }
+        _ => {
+            if chars[pos].is_ascii_alphabetic() {
+                let (ident, new_pos) = parse_ident(chars, pos);
+                Ok((keyword_or_ident(ident), new_pos))
+            } else {
+                let (val, new_pos) = parse_number(chars, pos, base)?;
+                Ok((Token::Number(val), new_pos))
             }
         }
     }
-    Ok(tokens)
 }
 
 fn spanned(token: Token, base: usize, start: usize, len: usize) -> SpannedToken {
