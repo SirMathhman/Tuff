@@ -64,4 +64,10 @@ pub enum Expr {
         value: Box<Expr>,
         body: Box<Expr>,
     },
+    If {
+        span: Span,
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        els: Box<Expr>,
+    },
 }

@@ -24,6 +24,8 @@ pub enum Token {
     Or,
     And,
     Not,
+    If,
+    Else,
 }
 
 impl Token {
@@ -51,6 +53,8 @@ impl Token {
             Token::Or => "||".to_string(),
             Token::And => "&&".to_string(),
             Token::Not => "!".to_string(),
+            Token::If => "if".to_string(),
+            Token::Else => "else".to_string(),
         }
     }
 }
@@ -185,6 +189,8 @@ fn keyword_or_ident(ident: String) -> Token {
         "mut" => Token::Mut,
         "true" => Token::True,
         "false" => Token::False,
+        "if" => Token::If,
+        "else" => Token::Else,
         _ => Token::Ident(ident),
     }
 }

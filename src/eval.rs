@@ -64,6 +64,19 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             env.assign(&name, *span, v)?;
             eval(body, env)
         }
+        Expr::If {
+            span: _,
+            cond,
+            then,
+            els,
+        } => {
+            let c = eval(cond, env)?;
+            if truthy(&c) {
+                eval(then, env)
+            } else {
+                eval(els, env)
+            }
+        }
     }
 }
 

@@ -245,6 +245,7 @@ impl<'a> Parser<'a> {
                     operand: Box::new(operand),
                 })
             }
+            Some(Token::If) => self.parse_if_expr(),
             Some(Token::LParen) => {
                 self.pos += 1;
                 let inner = self.parse_or_expr()?;
@@ -260,6 +261,22 @@ impl<'a> Parser<'a> {
                 span: self.end_span(),
             }),
         }
+    }
+
+    /// Parse an `if` expression: `if cond then else els`.
+    fn parse_if_expr(&mut self) -> Result<Expr, Error> {
+        let span = self.tokens[self.pos].span;
+        self.pos += 1; // consume 'if'
+        let cond = self.parse_or_expr()?;
+        let then = self.parse_or_expr()?;
+        self.expect_token(&Token::Else)?;
+        let els = self.parse_or_expr()?;
+        Ok(Expr::If {
+            span,
+            cond: Box::new(cond),
+            then: Box::new(then),
+            els: Box::new(els),
+        })
     }
 
     /// Parse a braced block: zero or more `let` statements followed by a
