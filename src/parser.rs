@@ -37,7 +37,7 @@ enum Stmt {
 /// and_expr := expr (('&&') expr)*
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
-/// factor   := Number | 'true' | 'false' | Ident | '-' factor | '&' ['mut'] factor | '*' factor | '(' or_expr ')' | block
+/// factor   := Number | 'true' | 'false' | Ident | '-' factor | '!' factor | '&' ['mut'] factor | '*' factor | '(' or_expr ')' | block
 /// block    := '{' stmt* or_expr '}'
 /// ```
 ///
@@ -194,6 +194,17 @@ impl<'a> Parser<'a> {
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
                     op: UnaryOp::Neg,
+                    span,
+                    operand: Box::new(operand),
+                })
+            }
+            Some(Token::Not) => {
+                // Unary logical not: 1 if the operand is zero, else 0.
+                let span = self.tokens[self.pos].span;
+                self.pos += 1;
+                let operand = self.parse_factor()?;
+                Ok(Expr::Unary {
+                    op: UnaryOp::Not,
                     span,
                     operand: Box::new(operand),
                 })

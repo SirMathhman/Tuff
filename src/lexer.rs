@@ -21,6 +21,7 @@ pub enum Token {
     Amp,
     Or,
     And,
+    Not,
 }
 
 impl Token {
@@ -45,6 +46,7 @@ impl Token {
             Token::Amp => "&".to_string(),
             Token::Or => "||".to_string(),
             Token::And => "&&".to_string(),
+            Token::Not => "!".to_string(),
         }
     }
 }
@@ -113,6 +115,10 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
             }
             '=' => {
                 tokens.push(spanned(Token::Eq, base, pos, 1));
+                pos += 1;
+            }
+            '!' => {
+                tokens.push(spanned(Token::Not, base, pos, 1));
                 pos += 1;
             }
             '&' => {

@@ -96,6 +96,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
                 let v = eval(operand, env)?;
                 Ok(Value::Int(-int_value(&v, *span)?))
             }
+            UnaryOp::Not => {
+                let v = eval(operand, env)?;
+                // Logical NOT: 1 if the operand is zero, else 0.
+                Ok(Value::Int(if int_value(&v, *span)? == 0 { 1 } else { 0 }))
+            }
             UnaryOp::Ref => match operand.as_ref() {
                 Expr::Ident { name, .. } => Ok(Value::Ref {
                     name: name.clone(),
