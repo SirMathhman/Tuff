@@ -174,9 +174,9 @@ impl<'a> Parser<'a> {
         let mut stmts: Vec<Stmt> = Vec::new();
         loop {
             match self.peek() {
-                Some(Token::Ident(name)) if name == "let" => {
+                Some(Token::Let) => {
                     self.pos += 1; // consume 'let'
-                    let mutable = matches!(self.peek(), Some(Token::Ident(m)) if m == "mut");
+                    let mutable = matches!(self.peek(), Some(Token::Mut));
                     if mutable {
                         self.pos += 1; // consume 'mut'
                     }

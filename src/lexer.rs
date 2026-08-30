@@ -4,6 +4,8 @@ use crate::errors::{Error, Span};
 pub enum Token {
     Number(i64),
     Ident(String),
+    Let,
+    Mut,
     Plus,
     Minus,
     Star,
@@ -21,6 +23,8 @@ impl Token {
         match self {
             Token::Number(n) => n.to_string(),
             Token::Ident(s) => s.clone(),
+            Token::Let => "let".to_string(),
+            Token::Mut => "mut".to_string(),
             Token::Plus => "+".to_string(),
             Token::Minus => "-".to_string(),
             Token::Star => "*".to_string(),
@@ -103,7 +107,8 @@ pub fn lex(input: &str) -> Result<Vec<SpannedToken>, Error> {
             _ => {
                 if chars[pos].is_ascii_alphabetic() {
                     let (ident, new_pos) = parse_ident(&chars, pos);
-                    tokens.push(spanned(Token::Ident(ident), base, pos, new_pos - pos));
+                    let token = keyword_or_ident(ident);
+                    tokens.push(spanned(token, base, pos, new_pos - pos));
                     pos = new_pos;
                 } else {
                     let (val, new_pos) = parse_number(&chars, pos, base)?;
@@ -141,6 +146,16 @@ fn parse_ident(chars: &[char], mut pos: usize) -> (String, usize) {
     }
     let ident: String = chars[start..pos].iter().collect();
     (ident, pos)
+}
+
+/// Convert an identifier string to a keyword token if it matches a
+/// reserved word, otherwise return it as a regular `Ident`.
+fn keyword_or_ident(ident: String) -> Token {
+    match ident.as_str() {
+        "let" => Token::Let,
+        "mut" => Token::Mut,
+        _ => Token::Ident(ident),
+    }
 }
 
 fn parse_number(chars: &[char], mut pos: usize, base: usize) -> Result<(i64, usize), Error> {

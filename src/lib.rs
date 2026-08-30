@@ -121,4 +121,10 @@ mod tests {
     fn test_evaluate_mut_assignment() {
         assert_eq!(evaluate("let mut x = 0; x = 1; x"), Ok(1));
     }
+
+    #[test]
+    fn test_evaluate_keyword_as_ident_rejected() {
+        // 'let' is a keyword, not a valid variable name
+        assert!(evaluate("let let = 1; let").is_err());
+    }
 }
