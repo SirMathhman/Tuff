@@ -60,7 +60,11 @@ impl<'a> Parser<'a> {
         self.expect_token(&Token::Eq)?;
         let value = self.parse_or_expr()?;
         self.expect_token(&Token::Semicolon)?;
-        Ok(Stmt::Let { name, mutable, value })
+        Ok(Stmt::Let {
+            name,
+            mutable,
+            value,
+        })
     }
 
     /// Parse an assignment statement: `Ident '=' expr ';'` or

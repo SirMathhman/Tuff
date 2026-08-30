@@ -231,6 +231,11 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_block_scoping() {
+        assert_eq!(evaluate("{ let x = 1; x } + { let x = 2; x }"), Ok(3));
+    }
+
+    #[test]
     fn test_unexpected_token_message_lists_unary_operators() {
         // Regression: error messages must stay in sync with the grammar.
         let msg = evaluate("let x = ; x").unwrap_err().to_string();
