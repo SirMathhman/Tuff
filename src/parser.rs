@@ -7,6 +7,7 @@ use crate::lexer::{SpannedToken, Token};
 /// Recursive descent with two precedence levels:
 ///
 /// ```text
+/// program  := let_stmt* expr
 /// expr     := term (('+' | '-') term)*
 /// term     := factor (('*') factor)*
 /// factor   := Number | Ident | '-' factor | '(' expr ')' | block
@@ -17,7 +18,7 @@ use crate::lexer::{SpannedToken, Token};
 /// The parser owns all structural validation and reports real spans.
 pub fn parse(tokens: &[SpannedToken]) -> Result<Expr, Error> {
     let mut parser = Parser { tokens, pos: 0 };
-    let expr = parser.parse_expr()?;
+    let expr = parser.parse_let_seq()?;
     if parser.pos < parser.tokens.len() {
         let st = &parser.tokens[parser.pos];
         return Err(Error::UnexpectedToken {
@@ -145,6 +146,15 @@ impl<'a> Parser<'a> {
     /// `let` binding nested around it.
     fn parse_block(&mut self) -> Result<Expr, Error> {
         self.expect_token(&Token::LBrace)?;
+        let body = self.parse_let_seq()?;
+        self.expect_token(&Token::RBrace)?;
+        Ok(body)
+    }
+
+    /// Parse zero or more `let` statements followed by a tail expression.
+    /// Each `let` binding is nested around the tail, so later bindings can
+    /// reference earlier ones.
+    fn parse_let_seq(&mut self) -> Result<Expr, Error> {
         let mut lets: Vec<(String, Expr)> = Vec::new();
         while let Some(Token::Ident(name)) = self.peek() {
             if name != "let" {
@@ -175,7 +185,6 @@ impl<'a> Parser<'a> {
             lets.push((name, value));
         }
         let tail = self.parse_expr()?;
-        self.expect_token(&Token::RBrace)?;
         let mut body = tail;
         for (name, value) in lets.into_iter().rev() {
             body = Expr::Let {

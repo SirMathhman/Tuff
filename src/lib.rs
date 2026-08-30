@@ -7,7 +7,8 @@ pub mod parser;
 pub use errors::Error;
 
 /// Evaluate an arithmetic expression of integers with `+`, `-`, `*`,
-/// parentheses and braces for grouping, and `let` bindings inside braces.
+/// parentheses and braces for grouping, and `let` bindings at the top
+/// level and inside braces.
 ///
 /// Pipeline: lex → parse → eval.
 pub fn evaluate(input: &str) -> Result<i64, Error> {
@@ -109,12 +110,10 @@ mod tests {
     }
 
     #[test]
-    fn test_evaluate_top_level_let_error_mentions_identifiers() {
-        let err = evaluate("let x = 1").unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("identifier") || msg.contains("let"),
-            "error message should mention identifiers or let: {msg}"
+    fn test_evaluate_top_level_let() {
+        assert_eq!(
+            evaluate("let z = { let x = 2 + 3; let y = x; y } * 4; z"),
+            Ok(20)
         );
     }
 }
