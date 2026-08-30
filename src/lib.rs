@@ -152,4 +152,9 @@ mod tests {
     fn test_evaluate_reference_and_dereference() {
         assert_eq!(evaluate("let x = 1; let y = &x; *y"), Ok(1));
     }
+
+    #[test]
+    fn test_evaluate_double_dereference() {
+        assert_eq!(evaluate("let x = 1; let y = &x; let z = &y; **z"), Ok(1));
+    }
 }
