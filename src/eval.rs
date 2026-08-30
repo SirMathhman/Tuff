@@ -81,7 +81,7 @@ fn eval_unary(
         }
         UnaryOp::Not => {
             let v = eval(operand, env)?;
-            // Logical NOT: 1 if the operand is falsy, else 0.
+            // Logical NOT: negation of truthiness.
             let t = match &v {
                 Value::Int(n) => *n != 0,
                 Value::Bool(b) => *b,
@@ -98,7 +98,7 @@ fn eval_unary(
                     });
                 }
             };
-            Ok(Value::Int(if t { 0 } else { 1 }))
+            Ok(Value::Bool(!t))
         }
         UnaryOp::Ref => match operand {
             Expr::Ident { name, .. } => Ok(Value::Ref {
