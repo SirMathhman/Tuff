@@ -110,8 +110,9 @@ impl<'a> Parser<'a> {
             }
             Some(Token::Ident(name)) => {
                 let name = name.clone();
+                let span = self.tokens[self.pos].span;
                 self.pos += 1;
-                Ok(Expr::Ident(name))
+                Ok(Expr::Ident { name, span })
             }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.

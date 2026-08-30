@@ -44,10 +44,12 @@ impl Environment {
 pub fn eval(expr: &Expr, env: &mut Environment) -> Result<i64, Error> {
     match expr {
         Expr::Number(n) => Ok(*n),
-        Expr::Ident(name) => env
-            .lookup(name)
-            .map(Ok)
-            .unwrap_or_else(|| Err(Error::UndefinedVariable { name: name.clone() })),
+        Expr::Ident { name, span } => env.lookup(name).map(Ok).unwrap_or_else(|| {
+            Err(Error::UndefinedVariable {
+                span: *span,
+                name: name.clone(),
+            })
+        }),
         Expr::Unary { op, operand } => {
             let v = eval(operand, env)?;
             Ok(match op {

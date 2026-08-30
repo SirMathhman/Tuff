@@ -12,7 +12,7 @@ pub enum Error {
     UnexpectedChar { span: Span, ch: char },
     UnexpectedToken { span: Span, token: String },
     UnexpectedEnd { span: Span },
-    UndefinedVariable { name: String },
+    UndefinedVariable { span: Span, name: String },
 }
 
 impl fmt::Display for Error {
@@ -46,8 +46,12 @@ impl fmt::Display for Error {
                     span.start, span.end
                 )
             }
-            Error::UndefinedVariable { name } => {
-                write!(f, "undefined variable '{name}'")
+            Error::UndefinedVariable { span, name } => {
+                write!(
+                    f,
+                    "at {}..{}: undefined variable '{name}'",
+                    span.start, span.end
+                )
             }
         }
     }

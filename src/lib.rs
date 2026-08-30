@@ -79,8 +79,9 @@ mod tests {
     #[test]
     fn test_evaluate_undefined_variable() {
         match evaluate("1 + x") {
-            Err(Error::UndefinedVariable { name }) => {
+            Err(Error::UndefinedVariable { span, name }) => {
                 assert_eq!(name, "x");
+                assert_eq!(span, errors::Span { start: 4, end: 5 });
             }
             other => panic!("expected UndefinedVariable, got {:?}", other),
         }
@@ -89,8 +90,9 @@ mod tests {
     #[test]
     fn test_evaluate_span_with_leading_whitespace() {
         match evaluate("  1 + x") {
-            Err(Error::UndefinedVariable { name }) => {
+            Err(Error::UndefinedVariable { span, name }) => {
                 assert_eq!(name, "x");
+                assert_eq!(span, errors::Span { start: 6, end: 7 });
             }
             other => panic!("expected UndefinedVariable, got {:?}", other),
         }

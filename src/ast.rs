@@ -1,3 +1,5 @@
+use crate::errors::Span;
+
 /// An arithmetic expression.
 ///
 /// `Number` is a leaf; `Binary` combines two sub-expressions with an
@@ -6,7 +8,10 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Number(i64),
-    Ident(String),
+    Ident {
+        name: String,
+        span: Span,
+    },
     Unary {
         op: char,
         operand: Box<Expr>,
