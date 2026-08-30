@@ -94,10 +94,12 @@ impl<'a> Parser<'a> {
                 Token::Minus => '-',
                 _ => unreachable!(),
             };
+            let span = self.tokens[self.pos].span;
             self.pos += 1;
             let rhs = self.parse_term()?;
             lhs = Expr::Binary {
                 op,
+                span,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
             };
@@ -108,10 +110,12 @@ impl<'a> Parser<'a> {
     fn parse_term(&mut self) -> Result<Expr, Error> {
         let mut lhs = self.parse_factor()?;
         while matches!(self.peek(), Some(Token::Star)) {
+            let span = self.tokens[self.pos].span;
             self.pos += 1;
             let rhs = self.parse_factor()?;
             lhs = Expr::Binary {
                 op: '*',
+                span,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
             };
@@ -134,28 +138,34 @@ impl<'a> Parser<'a> {
             }
             Some(Token::Minus) => {
                 // Unary minus: a negative factor.
+                let span = self.tokens[self.pos].span;
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
                     op: '-',
+                    span,
                     operand: Box::new(operand),
                 })
             }
             Some(Token::Amp) => {
                 // Unary reference: take a reference to an identifier.
+                let span = self.tokens[self.pos].span;
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
                     op: '&',
+                    span,
                     operand: Box::new(operand),
                 })
             }
             Some(Token::Star) => {
                 // Unary dereference: dereference a reference.
+                let span = self.tokens[self.pos].span;
                 self.pos += 1;
                 let operand = self.parse_factor()?;
                 Ok(Expr::Unary {
                     op: '*',
+                    span,
                     operand: Box::new(operand),
                 })
             }

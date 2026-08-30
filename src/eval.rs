@@ -87,36 +87,35 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
             span: *span,
             name: name.clone(),
         }),
-        Expr::Unary { op, operand } => match op {
+        Expr::Unary { op, span, operand } => match op {
             '-' => {
                 let v = eval(operand, env)?;
-                Ok(Value::Int(-int_value(&v)?))
+                Ok(Value::Int(-int_value(&v, *span)?))
             }
             '&' => match operand.as_ref() {
                 Expr::Ident { name, .. } => Ok(Value::Ref(name.clone())),
                 _ => Err(Error::UnexpectedToken {
-                    span: Span { start: 0, end: 0 },
+                    span: *span,
                     token: "non-identifier operand of &".to_string(),
                 }),
             },
             '*' => {
                 let v = eval(operand, env)?;
                 match v {
-                    Value::Ref(name) => env.lookup(&name).ok_or(Error::UndefinedVariable {
-                        span: Span { start: 0, end: 0 },
-                        name,
-                    }),
+                    Value::Ref(name) => env
+                        .lookup(&name)
+                        .ok_or(Error::UndefinedVariable { span: *span, name }),
                     Value::Int(_) => Err(Error::UnexpectedToken {
-                        span: Span { start: 0, end: 0 },
+                        span: *span,
                         token: "non-reference operand of *".to_string(),
                     }),
                 }
             }
             _ => unreachable!(),
         },
-        Expr::Binary { op, lhs, rhs } => {
-            let l = int_value(&eval(lhs, env)?)?;
-            let r = int_value(&eval(rhs, env)?)?;
+        Expr::Binary { op, span, lhs, rhs } => {
+            let l = int_value(&eval(lhs, env)?, *span)?;
+            let r = int_value(&eval(rhs, env)?, *span)?;
             Ok(Value::Int(match op {
                 '+' => l + r,
                 '-' => l - r,
@@ -150,11 +149,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Value, Error> {
 }
 
 /// Extract an `i64` from a `Value`, erroring if it is a reference.
-fn int_value(v: &Value) -> Result<i64, Error> {
+fn int_value(v: &Value, span: Span) -> Result<i64, Error> {
     match v {
         Value::Int(n) => Ok(*n),
         Value::Ref(name) => Err(Error::UnexpectedToken {
-            span: Span { start: 0, end: 0 },
+            span,
             token: format!("reference to '{name}' used as integer"),
         }),
     }

@@ -14,10 +14,12 @@ pub enum Expr {
     },
     Unary {
         op: char,
+        span: Span,
         operand: Box<Expr>,
     },
     Binary {
         op: char,
+        span: Span,
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
