@@ -74,6 +74,18 @@ class Parser {
           ok: true,
           ast: { type: "ident", name: tok.value, position: tok.position },
         };
+      case "true":
+        this.advance();
+        return {
+          ok: true,
+          ast: { type: "number", value: 1, position: tok.position },
+        };
+      case "false":
+        this.advance();
+        return {
+          ok: true,
+          ast: { type: "number", value: 0, position: tok.position },
+        };
       case "lparen":
         return this.parseGrouped();
       case "lbrace":

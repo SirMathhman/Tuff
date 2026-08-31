@@ -113,3 +113,11 @@ test('evaluate("let x = 1; &x") => type error at the &', () => {
     error: { kind: "type", message: "expected a number", position: 11 },
   });
 });
+
+test('evaluate("let x = true; x") => 1', () => {
+  expect(evaluate("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluate("let x = false; x") => 0', () => {
+  expect(evaluate("let x = false; x")).toEqual({ ok: true, value: 0 });
+});
