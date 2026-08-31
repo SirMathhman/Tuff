@@ -1,10 +1,10 @@
-import type { Token } from "./lexer.ts";
 import type { AstNode } from "./ast.ts";
-import type { EvalError } from "./errors.ts";
+import type { EvalFailure } from "./errors.ts";
+import type { Token } from "./lexer.ts";
 
 export type ParseResult =
   | { ok: true; ast: AstNode }
-  | { ok: false; error: EvalError };
+  | { ok: false; error: EvalFailure };
 
 export function parse(tokens: Token[]): ParseResult {
   // Grammar rule: empty input (only the end token) evaluates to 0.
@@ -136,7 +136,7 @@ class Parser {
   // letStmt := let ident '=' expr ';'
   private parseLetStmt():
     | { ok: true; name: string; value: AstNode }
-    | { ok: false; error: EvalError } {
+    | { ok: false; error: EvalFailure } {
     this.advance(); // consume let
     const nameTok = this.next();
     if (nameTok === undefined || nameTok.type !== "ident") {

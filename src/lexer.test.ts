@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { lex } from "./lexer.ts";
 
 test('lex(" 1 ") => number token at position 1', () => {

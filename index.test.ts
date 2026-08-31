@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { evaluate } from "./index.ts";
 
 test('evaluate("") => 0', () => {
@@ -61,4 +61,8 @@ test('evaluate("let z = { let x = 2 + 3; let y = x; y } * 4; z") => 20', () => {
     ok: true,
     value: 20,
   });
+});
+
+test('evaluate("let x = 0; let x = 1; x") => 1', () => {
+  expect(evaluate("let x = 0; let x = 1; x")).toEqual({ ok: true, value: 1 });
 });

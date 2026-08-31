@@ -1,6 +1,6 @@
 export type ErrorKind = "syntax" | "number" | "overflow" | "undefined";
 
-export type EvalError = {
+export type EvalFailure = {
   kind: ErrorKind;
   message: string;
   position: number;

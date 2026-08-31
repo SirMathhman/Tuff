@@ -1,6 +1,6 @@
-import { test, expect } from "bun:test";
-import { parse } from "./parser.ts";
+import { expect, test } from "bun:test";
 import type { Token } from "./lexer.ts";
+import { parse } from "./parser.ts";
 
 test("parse single number token", () => {
   const tokens: Token[] = [

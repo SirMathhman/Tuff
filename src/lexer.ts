@@ -1,4 +1,4 @@
-import type { EvalError } from "./errors.ts";
+import type { EvalFailure } from "./errors.ts";
 
 export type Token =
   | { type: "number"; value: number; position: number }
@@ -17,7 +17,7 @@ export type Token =
 
 export type LexResult =
   | { ok: true; tokens: Token[] }
-  | { ok: false; error: EvalError };
+  | { ok: false; error: EvalFailure };
 
 export function lex(input: string): LexResult {
   const tokens: Token[] = [];

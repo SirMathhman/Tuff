@@ -1,7 +1,7 @@
+import type { EvalResult } from "./src/evaluator.ts";
+import { evalAst } from "./src/evaluator.ts";
 import { lex } from "./src/lexer.ts";
 import { parse } from "./src/parser.ts";
-import { evalAst } from "./src/evaluator.ts";
-import type { EvalResult } from "./src/evaluator.ts";
 
 export type { EvalResult };
 

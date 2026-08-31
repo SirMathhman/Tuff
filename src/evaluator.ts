@@ -1,9 +1,9 @@
 import type { AstNode } from "./ast.ts";
-import type { EvalError } from "./errors.ts";
+import type { EvalFailure } from "./errors.ts";
 
 export type EvalResult =
   | { ok: true; value: number }
-  | { ok: false; error: EvalError };
+  | { ok: false; error: EvalFailure };
 
 export type Env = Map<string, number>;
 
