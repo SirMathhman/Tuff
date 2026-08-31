@@ -42,31 +42,120 @@ class Parser {
     return { ok: true, ast: { type: "number", value: tok.value } };
   }
 
-  // factor := number | '(' expr ')' | '{' expr '}'
+  // factor := number | ident | '(' expr ')' | block
   private parseFactor(): ParseResult {
     const tok = this.next();
-    if (tok === undefined || (tok.type !== "lparen" && tok.type !== "lbrace")) {
+    if (tok === undefined) {
       return this.parseNumber();
     }
+    switch (tok.type) {
+      case "ident":
+        this.advance();
+        return {
+          ok: true,
+          ast: { type: "ident", name: tok.value, position: tok.position },
+        };
+      case "lparen":
+        return this.parseGrouped();
+      case "lbrace":
+        return this.parseBlock();
+      default:
+        return this.parseNumber();
+    }
+  }
+
+  private parseGrouped(): ParseResult {
     this.advance();
     const inner = this.parseExpr();
     if (!inner.ok) {
       return inner;
     }
-    const expected = tok.type === "lparen" ? "rparen" : "rbrace";
     const close = this.next();
-    if (close === undefined || close.type !== expected) {
+    if (close === undefined || close.type !== "rparen") {
       return {
         ok: false,
         error: {
           kind: "syntax",
-          message: `expected ${tok.type === "lparen" ? ")" : "}"}`,
+          message: "expected )",
           position: close?.position ?? 0,
         },
       };
     }
     this.advance();
     return { ok: true, ast: inner.ast };
+  }
+
+  // block := '{' (let ident '=' expr ';')? expr '}'
+  private parseBlock(): ParseResult {
+    this.advance(); // consume lbrace
+    let name: string | undefined;
+    let value: AstNode | undefined;
+    const maybeLet = this.next();
+    if (maybeLet !== undefined && maybeLet.type === "let") {
+      this.advance();
+      const nameTok = this.next();
+      if (nameTok === undefined || nameTok.type !== "ident") {
+        return {
+          ok: false,
+          error: {
+            kind: "syntax",
+            message: "expected a variable name",
+            position: nameTok?.position ?? 0,
+          },
+        };
+      }
+      name = nameTok.value;
+      this.advance();
+      const eq = this.next();
+      if (eq === undefined || eq.type !== "equals") {
+        return {
+          ok: false,
+          error: {
+            kind: "syntax",
+            message: "expected =",
+            position: eq?.position ?? 0,
+          },
+        };
+      }
+      this.advance();
+      const valueRes = this.parseExpr();
+      if (!valueRes.ok) {
+        return valueRes;
+      }
+      value = valueRes.ast;
+      const semi = this.next();
+      if (semi === undefined || semi.type !== "semicolon") {
+        return {
+          ok: false,
+          error: {
+            kind: "syntax",
+            message: "expected ;",
+            position: semi?.position ?? 0,
+          },
+        };
+      }
+      this.advance();
+    }
+    const body = this.parseExpr();
+    if (!body.ok) {
+      return body;
+    }
+    const close = this.next();
+    if (close === undefined || close.type !== "rbrace") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected }",
+          position: close?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    if (name === undefined || value === undefined) {
+      return { ok: true, ast: body.ast };
+    }
+    return { ok: true, ast: { type: "let", name, value, body: body.ast } };
   }
 
   // term := factor ('*' factor)*, left-associative

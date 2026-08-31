@@ -1,11 +1,9 @@
 import { lex } from "./src/lexer.ts";
 import { parse } from "./src/parser.ts";
 import { evalAst } from "./src/evaluator.ts";
-import type { EvalError } from "./src/errors.ts";
+import type { EvalResult } from "./src/evaluator.ts";
 
-export type EvalResult =
-  | { ok: true; value: number }
-  | { ok: false; error: EvalError };
+export type { EvalResult };
 
 export function evaluate(input: string): EvalResult {
   const lexed = lex(input);
@@ -16,5 +14,5 @@ export function evaluate(input: string): EvalResult {
   if (!parsed.ok) {
     return parsed;
   }
-  return { ok: true, value: evalAst(parsed.ast) };
+  return evalAst(parsed.ast);
 }
