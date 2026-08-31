@@ -121,3 +121,10 @@ test('evaluate("let x = true; x") => 1', () => {
 test('evaluate("let x = false; x") => 0', () => {
   expect(evaluate("let x = false; x")).toEqual({ ok: true, value: 0 });
 });
+
+test('evaluate("let x = true; let y = false; x || y") => 1', () => {
+  expect(evaluate("let x = true; let y = false; x || y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

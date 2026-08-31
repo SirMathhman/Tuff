@@ -3,6 +3,7 @@ export type AstNode =
   | { type: "add"; left: AstNode; right: AstNode; position: number }
   | { type: "sub"; left: AstNode; right: AstNode; position: number }
   | { type: "mul"; left: AstNode; right: AstNode; position: number }
+  | { type: "or"; left: AstNode; right: AstNode; position: number }
   | { type: "ident"; name: string; position: number }
   | {
       type: "let";

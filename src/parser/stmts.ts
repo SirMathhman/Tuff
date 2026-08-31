@@ -32,7 +32,7 @@ type ExprResult =
 export interface StmtParser {
   next(): Token | undefined;
   advance(): Token | undefined;
-  parseExpr(): ExprResult;
+  parseOrExpr(): ExprResult;
 }
 
 // letStmt := let (mut)? ident '=' expr ';'
@@ -108,7 +108,7 @@ export function parseEqExprSemi(p: StmtParser): AstResult {
     };
   }
   p.advance();
-  const valueRes = p.parseExpr();
+  const valueRes = p.parseOrExpr();
   if (!valueRes.ok) {
     return valueRes;
   }
@@ -135,7 +135,7 @@ export function parseDerefAssignRest(
   position: number,
 ): StmtResult {
   p.advance(); // consume '='
-  const valueRes = p.parseExpr();
+  const valueRes = p.parseOrExpr();
   if (!valueRes.ok) {
     return valueRes;
   }

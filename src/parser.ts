@@ -87,7 +87,7 @@ class Parser {
 
   private parseGrouped(): ParseResult {
     this.advance();
-    const inner = this.parseExpr();
+    const inner = this.parseOrExpr();
     if (!inner.ok) {
       return inner;
     }
@@ -182,7 +182,7 @@ class Parser {
       }
       break;
     }
-    const bodyRes = this.parseExpr();
+    const bodyRes = this.parseOrExpr();
     if (!bodyRes.ok) {
       return bodyRes;
     }
@@ -286,6 +286,28 @@ class Parser {
         return right;
       }
       ast = { type: "mul", left: ast, right: right.ast, position: op.position };
+    }
+    return { ok: true, ast };
+  }
+
+  // orExpr := expr ('||' expr)*, left-associative
+  parseOrExpr(): ParseResult {
+    const left = this.parseExpr();
+    if (!left.ok) {
+      return left;
+    }
+    let ast = left.ast;
+    for (;;) {
+      const op = this.next();
+      if (op === undefined || op.type !== "pipe") {
+        break;
+      }
+      this.advance();
+      const right = this.parseExpr();
+      if (!right.ok) {
+        return right;
+      }
+      ast = { type: "or", left: ast, right: right.ast, position: op.position };
     }
     return { ok: true, ast };
   }

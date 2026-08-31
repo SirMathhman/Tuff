@@ -21,6 +21,8 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
       return binop(ast, env, (a, b) => a - b);
     case "mul":
       return binop(ast, env, (a, b) => a * b);
+    case "or":
+      return binop(ast, env, (a, b) => (a !== 0 || b !== 0 ? 1 : 0));
     case "ident": {
       const binding = env.get(ast.name);
       if (binding === undefined) {

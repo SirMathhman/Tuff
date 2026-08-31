@@ -17,6 +17,7 @@ export type Token =
   | { type: "equals"; position: number }
   | { type: "semicolon"; position: number }
   | { type: "amp"; position: number }
+  | { type: "pipe"; position: number }
   | { type: "end"; position: number };
 
 export type LexResult =
@@ -91,6 +92,21 @@ export function lex(input: string): LexResult {
       tokens.push({ type: "amp", position: i });
       i++;
       continue;
+    }
+    if (ch === "|") {
+      if (i + 1 < input.length && input.charAt(i + 1) === "|") {
+        tokens.push({ type: "pipe", position: i });
+        i += 2;
+        continue;
+      }
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: `unexpected character ${ch}`,
+          position: i,
+        },
+      };
     }
     if (/[a-zA-Z_]/.test(ch)) {
       const start = i;
