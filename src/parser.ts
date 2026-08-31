@@ -88,6 +88,27 @@ class Parser {
   // block := '{' letStmt* expr '}'
   private parseBlock(): ParseResult {
     this.advance(); // consume lbrace
+    const result = this.parseLetSeq();
+    if (!result.ok) {
+      return result;
+    }
+    const close = this.next();
+    if (close === undefined || close.type !== "rbrace") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected }",
+          position: close?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    return result;
+  }
+
+  // letSeq := letStmt* expr — desugared into nested let nodes
+  private parseLetSeq(): ParseResult {
     const stmts: { name: string; value: AstNode }[] = [];
     for (;;) {
       const tok = this.next();
@@ -104,18 +125,6 @@ class Parser {
     if (!bodyRes.ok) {
       return bodyRes;
     }
-    const close = this.next();
-    if (close === undefined || close.type !== "rbrace") {
-      return {
-        ok: false,
-        error: {
-          kind: "syntax",
-          message: "expected }",
-          position: close?.position ?? 0,
-        },
-      };
-    }
-    this.advance();
     let ast: AstNode = bodyRes.ast;
     for (let k = stmts.length - 1; k >= 0; k--) {
       const stmt = stmts[k]!;
@@ -219,8 +228,9 @@ class Parser {
     return { ok: true, ast };
   }
 
+  // input := letStmt* expr
   parseInput(): ParseResult {
-    const result = this.parseExpr();
+    const result = this.parseLetSeq();
     if (!result.ok) {
       return result;
     }

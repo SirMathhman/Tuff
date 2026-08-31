@@ -55,3 +55,10 @@ test('evaluate("{ let x = 2 + 3; let y = x; y } * 4") => 20', () => {
     value: 20,
   });
 });
+
+test('evaluate("let z = { let x = 2 + 3; let y = x; y } * 4; z") => 20', () => {
+  expect(evaluate("let z = { let x = 2 + 3; let y = x; y } * 4; z")).toEqual({
+    ok: true,
+    value: 20,
+  });
+});
