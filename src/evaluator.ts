@@ -8,5 +8,7 @@ export function evalAst(ast: AstNode): number {
       return evalAst(ast.left) + evalAst(ast.right);
     case "sub":
       return evalAst(ast.left) - evalAst(ast.right);
+    case "mul":
+      return evalAst(ast.left) * evalAst(ast.right);
   }
 }

@@ -30,8 +30,30 @@ export function parse(tokens: Token[]): ParseResult {
     return { ok: true, ast: { type: "number", value: tok.value } };
   };
 
-  // expr := number (('+' | '-') number)*, left-associative
-  const left = parseNumber();
+  // term := number ('*' number)*, left-associative
+  const parseTerm = (): ParseResult => {
+    const left = parseNumber();
+    if (!left.ok) {
+      return left;
+    }
+    let ast = left.ast;
+    for (;;) {
+      const op = next();
+      if (op === undefined || op.type !== "star") {
+        break;
+      }
+      advance();
+      const right = parseNumber();
+      if (!right.ok) {
+        return right;
+      }
+      ast = { type: "mul", left: ast, right: right.ast };
+    }
+    return { ok: true, ast };
+  };
+
+  // expr := term (('+' | '-') term)*, left-associative
+  const left = parseTerm();
   if (!left.ok) {
     return left;
   }
@@ -42,7 +64,7 @@ export function parse(tokens: Token[]): ParseResult {
       break;
     }
     advance();
-    const right = parseNumber();
+    const right = parseTerm();
     if (!right.ok) {
       return right;
     }
