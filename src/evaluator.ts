@@ -201,11 +201,14 @@ function binop(
   return { ok: true, value: op(left.value, right.value) };
 }
 
-// Short-circuit logical OR: the right operand is evaluated only when the
-// left is zero (falsy). A ref operand is a "type" error, matching binop.
-function evalOr(
+// Shared short-circuit logical operator. `shortCircuitWhen` is the predicate
+// on the left value that skips the right operand; `shortCircuitValue` is the
+// result returned in that case. A ref operand is a "type" error, matching binop.
+function evalShortCircuit(
   ast: { left: AstNode; right: AstNode; position: number },
   env: Env,
+  shortCircuitWhen: (v: number) => boolean,
+  shortCircuitValue: number,
 ): EvalResult {
   const left = evalAst(ast.left, env);
   if (!left.ok) {
@@ -221,8 +224,8 @@ function evalOr(
       },
     };
   }
-  if (left.value !== 0) {
-    return { ok: true, value: 1 };
+  if (shortCircuitWhen(left.value)) {
+    return { ok: true, value: shortCircuitValue };
   }
   const right = evalAst(ast.right, env);
   if (!right.ok) {
@@ -241,42 +244,20 @@ function evalOr(
   return { ok: true, value: right.value !== 0 ? 1 : 0 };
 }
 
+// Short-circuit logical OR: the right operand is evaluated only when the
+// left is zero (falsy).
+function evalOr(
+  ast: { left: AstNode; right: AstNode; position: number },
+  env: Env,
+): EvalResult {
+  return evalShortCircuit(ast, env, (v) => v !== 0, 1);
+}
+
 // Short-circuit logical AND: the right operand is evaluated only when the
-// left is non-zero (truthy). A ref operand is a "type" error, matching binop.
+// left is non-zero (truthy).
 function evalAnd(
   ast: { left: AstNode; right: AstNode; position: number },
   env: Env,
 ): EvalResult {
-  const left = evalAst(ast.left, env);
-  if (!left.ok) {
-    return left;
-  }
-  if (typeof left.value !== "number") {
-    return {
-      ok: false,
-      error: {
-        kind: "type",
-        message: "expected a number",
-        position: ast.position,
-      },
-    };
-  }
-  if (left.value === 0) {
-    return { ok: true, value: 0 };
-  }
-  const right = evalAst(ast.right, env);
-  if (!right.ok) {
-    return right;
-  }
-  if (typeof right.value !== "number") {
-    return {
-      ok: false,
-      error: {
-        kind: "type",
-        message: "expected a number",
-        position: ast.position,
-      },
-    };
-  }
-  return { ok: true, value: right.value !== 0 ? 1 : 0 };
+  return evalShortCircuit(ast, env, (v) => v === 0, 0);
 }
