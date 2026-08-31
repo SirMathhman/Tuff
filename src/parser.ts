@@ -1,26 +1,16 @@
 import type { AstNode } from "./ast.ts";
 import type { EvalFailure } from "./errors.ts";
 import type { Token } from "./lexer.ts";
+import {
+  parseAssignStmt,
+  parseDerefAssignRest,
+  parseLetStmt,
+  type Stmt,
+} from "./parser/stmts.ts";
 
 export type ParseResult =
   | { ok: true; ast: AstNode }
   | { ok: false; error: EvalFailure };
-
-type Stmt =
-  | {
-      kind: "let";
-      name: string;
-      mutable: boolean;
-      value: AstNode;
-      position: number;
-    }
-  | { kind: "assign"; name: string; position: number; value: AstNode }
-  | {
-      kind: "derefAssign";
-      operand: AstNode;
-      value: AstNode;
-      position: number;
-    };
 
 export function parse(tokens: Token[]): ParseResult {
   // Grammar rule: empty input (only the end token) evaluates to 0.
@@ -35,11 +25,11 @@ class Parser {
 
   constructor(private readonly tokens: Token[]) {}
 
-  private next(): Token | undefined {
+  next(): Token | undefined {
     return this.tokens[this.i];
   }
 
-  private advance(): Token | undefined {
+  advance(): Token | undefined {
     return this.tokens[this.i++];
   }
 
@@ -147,7 +137,7 @@ class Parser {
         break;
       }
       if (tok.type === "let") {
-        const stmt = this.parseLetStmt();
+        const stmt = parseLetStmt(this);
         if (!stmt.ok) {
           return stmt;
         }
@@ -161,7 +151,7 @@ class Parser {
         if (after === undefined || after.type !== "equals") {
           break;
         }
-        const stmt = this.parseAssignStmt(tok);
+        const stmt = parseAssignStmt(this, tok);
         if (!stmt.ok) {
           return stmt;
         }
@@ -183,7 +173,7 @@ class Parser {
           this.i = saved;
           break;
         }
-        const stmt = this.parseDerefAssignRest(operand.ast, tok.position);
+        const stmt = parseDerefAssignRest(this, operand.ast, tok.position);
         if (!stmt.ok) {
           return stmt;
         }
@@ -226,103 +216,6 @@ class Parser {
               };
     }
     return { ok: true, ast };
-  }
-
-  // letStmt := let (mut)? ident '=' expr ';'
-  private parseLetStmt():
-    | { ok: true; value: Stmt }
-    | { ok: false; error: EvalFailure } {
-    const letTok = this.next()!;
-    this.advance(); // consume let
-    let mutable = false;
-    const mutTok = this.next();
-    if (mutTok !== undefined && mutTok.type === "mut") {
-      mutable = true;
-      this.advance();
-    }
-    const nameTok = this.next();
-    if (nameTok === undefined || nameTok.type !== "ident") {
-      return {
-        ok: false,
-        error: {
-          kind: "syntax",
-          message: "expected a variable name",
-          position: nameTok?.position ?? 0,
-        },
-      };
-    }
-    this.advance();
-    const value = this.parseEqExprSemi();
-    if (!value.ok) {
-      return value;
-    }
-    return {
-      ok: true,
-      value: {
-        kind: "let",
-        name: nameTok.value,
-        mutable,
-        value: value.value,
-        position: letTok.position,
-      },
-    };
-  }
-
-  // assignStmt := ident '=' expr ';'
-  private parseAssignStmt(nameTok: {
-    type: "ident";
-    value: string;
-    position: number;
-  }): { ok: true; value: Stmt } | { ok: false; error: EvalFailure } {
-    this.advance(); // consume ident
-    const value = this.parseEqExprSemi();
-    if (!value.ok) {
-      return value;
-    }
-    return {
-      ok: true,
-      value: {
-        kind: "assign",
-        name: nameTok.value,
-        position: nameTok.position,
-        value: value.value,
-      },
-    };
-  }
-
-  // eqExprSemi := '=' expr ';'
-  private parseEqExprSemi():
-    | { ok: true; value: AstNode }
-    | { ok: false; error: EvalFailure } {
-    const eq = this.next();
-    if (eq === undefined || eq.type !== "equals") {
-      return {
-        ok: false,
-        error: {
-          kind: "syntax",
-          message: "expected =",
-          position: eq?.position ?? 0,
-        },
-      };
-    }
-    this.advance();
-    const valueRes = this.parseExpr();
-    if (!valueRes.ok) {
-      return valueRes;
-    }
-    const semi = this.next();
-    if (semi === undefined || semi.type !== "semicolon") {
-      return {
-        ok: false,
-        error: {
-          kind: "syntax",
-          message: "expected ;",
-          position: semi?.position ?? 0,
-        },
-      };
-    }
-    this.advance();
-    return { ok: true, value: valueRes.ast };
   }
 
   // unary := '&' ident | '*' unary | factor
@@ -375,40 +268,6 @@ class Parser {
     return this.parseFactor();
   }
 
-  // derefAssignStmt := '*' unary '=' expr ';'
-  // Called after the operand has been parsed and '=' confirmed as next.
-  private parseDerefAssignRest(
-    operand: AstNode,
-    position: number,
-  ): { ok: true; value: Stmt } | { ok: false; error: EvalFailure } {
-    this.advance(); // consume '='
-    const valueRes = this.parseExpr();
-    if (!valueRes.ok) {
-      return valueRes;
-    }
-    const semi = this.next();
-    if (semi === undefined || semi.type !== "semicolon") {
-      return {
-        ok: false,
-        error: {
-          kind: "syntax",
-          message: "expected ;",
-          position: semi?.position ?? 0,
-        },
-      };
-    }
-    this.advance();
-    return {
-      ok: true,
-      value: {
-        kind: "derefAssign",
-        operand,
-        value: valueRes.ast,
-        position,
-      },
-    };
-  }
-
   // term := unary ('*' unary)*, left-associative
   private parseTerm(): ParseResult {
     const left = this.parseUnary();
@@ -432,7 +291,7 @@ class Parser {
   }
 
   // expr := term (('+' | '-') term)*, left-associative
-  private parseExpr(): ParseResult {
+  parseExpr(): ParseResult {
     const left = this.parseTerm();
     if (!left.ok) {
       return left;
