@@ -16,3 +16,7 @@ test('evaluate("12") => 12', () => {
 test('evaluate("1 + 2") => 3', () => {
   expect(evaluate("1 + 2")).toEqual({ ok: true, value: 3 });
 });
+
+test('evaluate("1 + 2 + 3") => 6', () => {
+  expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
+});
