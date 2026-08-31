@@ -17,6 +17,7 @@ export type Token =
   | { type: "equals"; position: number }
   | { type: "semicolon"; position: number }
   | { type: "amp"; position: number }
+  | { type: "and"; position: number }
   | { type: "pipe"; position: number }
   | { type: "end"; position: number };
 
@@ -89,6 +90,11 @@ export function lex(input: string): LexResult {
       continue;
     }
     if (ch === "&") {
+      if (i + 1 < input.length && input.charAt(i + 1) === "&") {
+        tokens.push({ type: "and", position: i });
+        i += 2;
+        continue;
+      }
       tokens.push({ type: "amp", position: i });
       i++;
       continue;

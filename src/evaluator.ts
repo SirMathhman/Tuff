@@ -23,6 +23,8 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
       return binop(ast, env, (a, b) => a * b);
     case "or":
       return evalOr(ast, env);
+    case "and":
+      return evalAnd(ast, env);
     case "ident": {
       const binding = env.get(ast.name);
       if (binding === undefined) {
@@ -221,6 +223,46 @@ function evalOr(
   }
   if (left.value !== 0) {
     return { ok: true, value: 1 };
+  }
+  const right = evalAst(ast.right, env);
+  if (!right.ok) {
+    return right;
+  }
+  if (typeof right.value !== "number") {
+    return {
+      ok: false,
+      error: {
+        kind: "type",
+        message: "expected a number",
+        position: ast.position,
+      },
+    };
+  }
+  return { ok: true, value: right.value !== 0 ? 1 : 0 };
+}
+
+// Short-circuit logical AND: the right operand is evaluated only when the
+// left is non-zero (truthy). A ref operand is a "type" error, matching binop.
+function evalAnd(
+  ast: { left: AstNode; right: AstNode; position: number },
+  env: Env,
+): EvalResult {
+  const left = evalAst(ast.left, env);
+  if (!left.ok) {
+    return left;
+  }
+  if (typeof left.value !== "number") {
+    return {
+      ok: false,
+      error: {
+        kind: "type",
+        message: "expected a number",
+        position: ast.position,
+      },
+    };
+  }
+  if (left.value === 0) {
+    return { ok: true, value: 0 };
   }
   const right = evalAst(ast.right, env);
   if (!right.ok) {

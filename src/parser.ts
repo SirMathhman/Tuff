@@ -290,9 +290,9 @@ class Parser {
     return { ok: true, ast };
   }
 
-  // orExpr := expr ('||' expr)*, left-associative
+  // orExpr := andExpr ('||' andExpr)*, left-associative
   parseOrExpr(): ParseResult {
-    const left = this.parseExpr();
+    const left = this.parseAndExpr();
     if (!left.ok) {
       return left;
     }
@@ -303,11 +303,33 @@ class Parser {
         break;
       }
       this.advance();
-      const right = this.parseExpr();
+      const right = this.parseAndExpr();
       if (!right.ok) {
         return right;
       }
       ast = { type: "or", left: ast, right: right.ast, position: op.position };
+    }
+    return { ok: true, ast };
+  }
+
+  // andExpr := expr ('&&' expr)*, left-associative
+  parseAndExpr(): ParseResult {
+    const left = this.parseExpr();
+    if (!left.ok) {
+      return left;
+    }
+    let ast = left.ast;
+    for (;;) {
+      const op = this.next();
+      if (op === undefined || op.type !== "and") {
+        break;
+      }
+      this.advance();
+      const right = this.parseExpr();
+      if (!right.ok) {
+        return right;
+      }
+      ast = { type: "and", left: ast, right: right.ast, position: op.position };
     }
     return { ok: true, ast };
   }

@@ -4,6 +4,7 @@ export type AstNode =
   | { type: "sub"; left: AstNode; right: AstNode; position: number }
   | { type: "mul"; left: AstNode; right: AstNode; position: number }
   | { type: "or"; left: AstNode; right: AstNode; position: number }
+  | { type: "and"; left: AstNode; right: AstNode; position: number }
   | { type: "ident"; name: string; position: number }
   | {
       type: "let";
