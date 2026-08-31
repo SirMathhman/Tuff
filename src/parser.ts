@@ -11,12 +11,24 @@ export function parse(tokens: Token[]): ParseResult {
   if (tokens.length === 1 && tokens[0]!.type === "end") {
     return { ok: true, ast: { type: "number", value: 0 } };
   }
-  let i = 0;
-  const next = (): Token | undefined => tokens[i];
-  const advance = (): Token | undefined => tokens[i++];
+  return new Parser(tokens).parseInput();
+}
 
-  const parseNumber = (): ParseResult => {
-    const tok = advance();
+class Parser {
+  private i = 0;
+
+  constructor(private readonly tokens: Token[]) {}
+
+  private next(): Token | undefined {
+    return this.tokens[this.i];
+  }
+
+  private advance(): Token | undefined {
+    return this.tokens[this.i++];
+  }
+
+  private parseNumber(): ParseResult {
+    const tok = this.advance();
     if (tok === undefined || tok.type !== "number") {
       return {
         ok: false,
@@ -28,62 +40,97 @@ export function parse(tokens: Token[]): ParseResult {
       };
     }
     return { ok: true, ast: { type: "number", value: tok.value } };
-  };
+  }
 
-  // term := number ('*' number)*, left-associative
-  const parseTerm = (): ParseResult => {
-    const left = parseNumber();
+  // factor := number | '(' expr ')'
+  private parseFactor(): ParseResult {
+    const tok = this.next();
+    if (tok === undefined || tok.type !== "lparen") {
+      return this.parseNumber();
+    }
+    this.advance();
+    const inner = this.parseExpr();
+    if (!inner.ok) {
+      return inner;
+    }
+    const close = this.next();
+    if (close === undefined || close.type !== "rparen") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected )",
+          position: close?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    return { ok: true, ast: inner.ast };
+  }
+
+  // term := factor ('*' factor)*, left-associative
+  private parseTerm(): ParseResult {
+    const left = this.parseFactor();
     if (!left.ok) {
       return left;
     }
     let ast = left.ast;
     for (;;) {
-      const op = next();
+      const op = this.next();
       if (op === undefined || op.type !== "star") {
         break;
       }
-      advance();
-      const right = parseNumber();
+      this.advance();
+      const right = this.parseFactor();
       if (!right.ok) {
         return right;
       }
       ast = { type: "mul", left: ast, right: right.ast };
     }
     return { ok: true, ast };
-  };
+  }
 
   // expr := term (('+' | '-') term)*, left-associative
-  const left = parseTerm();
-  if (!left.ok) {
-    return left;
-  }
-  let ast = left.ast;
-  for (;;) {
-    const op = next();
-    if (op === undefined || (op.type !== "plus" && op.type !== "minus")) {
-      break;
+  private parseExpr(): ParseResult {
+    const left = this.parseTerm();
+    if (!left.ok) {
+      return left;
     }
-    advance();
-    const right = parseTerm();
-    if (!right.ok) {
-      return right;
+    let ast = left.ast;
+    for (;;) {
+      const op = this.next();
+      if (op === undefined || (op.type !== "plus" && op.type !== "minus")) {
+        break;
+      }
+      this.advance();
+      const right = this.parseTerm();
+      if (!right.ok) {
+        return right;
+      }
+      ast =
+        op.type === "plus"
+          ? { type: "add", left: ast, right: right.ast }
+          : { type: "sub", left: ast, right: right.ast };
     }
-    ast =
-      op.type === "plus"
-        ? { type: "add", left: ast, right: right.ast }
-        : { type: "sub", left: ast, right: right.ast };
+    return { ok: true, ast };
   }
 
-  const trailing = next();
-  if (trailing === undefined || trailing.type !== "end") {
-    return {
-      ok: false,
-      error: {
-        kind: "syntax",
-        message: "expected end of input",
-        position: trailing?.position ?? 0,
-      },
-    };
+  parseInput(): ParseResult {
+    const result = this.parseExpr();
+    if (!result.ok) {
+      return result;
+    }
+    const trailing = this.next();
+    if (trailing === undefined || trailing.type !== "end") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected end of input",
+          position: trailing?.position ?? 0,
+        },
+      };
+    }
+    return { ok: true, ast: result.ast };
   }
-  return { ok: true, ast };
 }

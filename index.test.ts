@@ -36,3 +36,7 @@ test('evaluate("2 * 3 + 4") => 10', () => {
 test('evaluate("2 + 3 * 4") => 14', () => {
   expect(evaluate("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
 });
+
+test('evaluate("(2 + 3) * 4") => 20', () => {
+  expect(evaluate("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+});
