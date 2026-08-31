@@ -8,7 +8,7 @@ export type ParseResult =
 
 export function parse(tokens: Token[]): ParseResult {
   // Grammar rule: empty input (only the end token) evaluates to 0.
-  if (tokens.length === 1 && tokens[0].type === "end") {
+  if (tokens.length === 1 && tokens[0]!.type === "end") {
     return { ok: true, ast: { type: "number", value: 0 } };
   }
   let i = 0;
