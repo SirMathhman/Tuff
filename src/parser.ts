@@ -85,60 +85,24 @@ class Parser {
     return { ok: true, ast: inner.ast };
   }
 
-  // block := '{' (let ident '=' expr ';')? expr '}'
+  // block := '{' letStmt* expr '}'
   private parseBlock(): ParseResult {
     this.advance(); // consume lbrace
-    let name: string | undefined;
-    let value: AstNode | undefined;
-    const maybeLet = this.next();
-    if (maybeLet !== undefined && maybeLet.type === "let") {
-      this.advance();
-      const nameTok = this.next();
-      if (nameTok === undefined || nameTok.type !== "ident") {
-        return {
-          ok: false,
-          error: {
-            kind: "syntax",
-            message: "expected a variable name",
-            position: nameTok?.position ?? 0,
-          },
-        };
+    const stmts: { name: string; value: AstNode }[] = [];
+    for (;;) {
+      const tok = this.next();
+      if (tok === undefined || tok.type !== "let") {
+        break;
       }
-      name = nameTok.value;
-      this.advance();
-      const eq = this.next();
-      if (eq === undefined || eq.type !== "equals") {
-        return {
-          ok: false,
-          error: {
-            kind: "syntax",
-            message: "expected =",
-            position: eq?.position ?? 0,
-          },
-        };
+      const stmt = this.parseLetStmt();
+      if (!stmt.ok) {
+        return stmt;
       }
-      this.advance();
-      const valueRes = this.parseExpr();
-      if (!valueRes.ok) {
-        return valueRes;
-      }
-      value = valueRes.ast;
-      const semi = this.next();
-      if (semi === undefined || semi.type !== "semicolon") {
-        return {
-          ok: false,
-          error: {
-            kind: "syntax",
-            message: "expected ;",
-            position: semi?.position ?? 0,
-          },
-        };
-      }
-      this.advance();
+      stmts.push({ name: stmt.name, value: stmt.value });
     }
-    const body = this.parseExpr();
-    if (!body.ok) {
-      return body;
+    const bodyRes = this.parseExpr();
+    if (!bodyRes.ok) {
+      return bodyRes;
     }
     const close = this.next();
     if (close === undefined || close.type !== "rbrace") {
@@ -152,10 +116,60 @@ class Parser {
       };
     }
     this.advance();
-    if (name === undefined || value === undefined) {
-      return { ok: true, ast: body.ast };
+    let ast: AstNode = bodyRes.ast;
+    for (let k = stmts.length - 1; k >= 0; k--) {
+      const stmt = stmts[k]!;
+      ast = { type: "let", name: stmt.name, value: stmt.value, body: ast };
     }
-    return { ok: true, ast: { type: "let", name, value, body: body.ast } };
+    return { ok: true, ast };
+  }
+
+  // letStmt := let ident '=' expr ';'
+  private parseLetStmt():
+    | { ok: true; name: string; value: AstNode }
+    | { ok: false; error: EvalError } {
+    this.advance(); // consume let
+    const nameTok = this.next();
+    if (nameTok === undefined || nameTok.type !== "ident") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected a variable name",
+          position: nameTok?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    const eq = this.next();
+    if (eq === undefined || eq.type !== "equals") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected =",
+          position: eq?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    const valueRes = this.parseExpr();
+    if (!valueRes.ok) {
+      return valueRes;
+    }
+    const semi = this.next();
+    if (semi === undefined || semi.type !== "semicolon") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected ;",
+          position: semi?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    return { ok: true, name: nameTok.value, value: valueRes.ast };
   }
 
   // term := factor ('*' factor)*, left-associative
