@@ -1,4 +1,9 @@
-export type ErrorKind = "syntax" | "number" | "overflow" | "undefined";
+export type ErrorKind =
+  | "syntax"
+  | "number"
+  | "overflow"
+  | "undefined"
+  | "immutable";
 
 export type EvalFailure = {
   kind: ErrorKind;

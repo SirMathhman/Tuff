@@ -10,6 +10,7 @@ export type Token =
   | { type: "lbrace"; position: number }
   | { type: "rbrace"; position: number }
   | { type: "let"; position: number }
+  | { type: "mut"; position: number }
   | { type: "ident"; value: string; position: number }
   | { type: "equals"; position: number }
   | { type: "semicolon"; position: number }
@@ -90,7 +91,9 @@ export function lex(input: string): LexResult {
       tokens.push(
         text === "let"
           ? { type: "let", position: start }
-          : { type: "ident", value: text, position: start },
+          : text === "mut"
+            ? { type: "mut", position: start }
+            : { type: "ident", value: text, position: start },
       );
       continue;
     }

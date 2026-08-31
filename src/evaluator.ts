@@ -5,7 +5,9 @@ export type EvalResult =
   | { ok: true; value: number }
   | { ok: false; error: EvalFailure };
 
-export type Env = Map<string, number>;
+export type Binding = { value: number; mutable: boolean };
+
+export type Env = Map<string, Binding>;
 
 export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
   switch (ast.type) {
@@ -18,8 +20,8 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
     case "mul":
       return binop(ast, env, (a, b) => a * b);
     case "ident": {
-      const value = env.get(ast.name);
-      if (value === undefined) {
+      const binding = env.get(ast.name);
+      if (binding === undefined) {
         return {
           ok: false,
           error: {
@@ -29,7 +31,7 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
           },
         };
       }
-      return { ok: true, value };
+      return { ok: true, value: binding.value };
     }
     case "let": {
       const value = evalAst(ast.value, env);
@@ -37,8 +39,37 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
         return value;
       }
       const child = new Map(env);
-      child.set(ast.name, value.value);
+      child.set(ast.name, { value: value.value, mutable: ast.mutable });
       return evalAst(ast.body, child);
+    }
+    case "assign": {
+      const value = evalAst(ast.value, env);
+      if (!value.ok) {
+        return value;
+      }
+      const binding = env.get(ast.name);
+      if (binding === undefined) {
+        return {
+          ok: false,
+          error: {
+            kind: "undefined",
+            message: `undefined variable ${ast.name}`,
+            position: ast.position,
+          },
+        };
+      }
+      if (!binding.mutable) {
+        return {
+          ok: false,
+          error: {
+            kind: "immutable",
+            message: `cannot assign to immutable variable ${ast.name}`,
+            position: ast.position,
+          },
+        };
+      }
+      binding.value = value.value;
+      return evalAst(ast.body, env);
     }
   }
 }
