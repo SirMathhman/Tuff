@@ -81,3 +81,10 @@ test('evaluate("let y = { let x = 0; x }; x") => Err', () => {
     },
   });
 });
+
+test('evaluate("let x = 2; let y = { let x = 0; x }; x") => 2', () => {
+  expect(evaluate("let x = 2; let y = { let x = 0; x }; x")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
