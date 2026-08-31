@@ -20,3 +20,11 @@ test('evaluate("1 + 2") => 3', () => {
 test('evaluate("1 + 2 + 3") => 6', () => {
   expect(evaluate("1 + 2 + 3")).toEqual({ ok: true, value: 6 });
 });
+
+test('evaluate("2 + 3 - 4") => 1', () => {
+  expect(evaluate("2 + 3 - 4")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluate("   ") => 0', () => {
+  expect(evaluate("   ")).toEqual({ ok: true, value: 0 });
+});

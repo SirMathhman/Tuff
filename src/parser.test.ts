@@ -20,6 +20,14 @@ test("parse empty tokens => error", () => {
   });
 });
 
+test("parse only end token => number 0", () => {
+  const tokens: Token[] = [{ type: "end", position: 0 }];
+  expect(parse(tokens)).toEqual({
+    ok: true,
+    ast: { type: "number", value: 0 },
+  });
+});
+
 test("parse two numbers => error", () => {
   const tokens: Token[] = [
     { type: "number", value: 1, position: 0 },

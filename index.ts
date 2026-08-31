@@ -12,10 +12,6 @@ export function evaluate(input: string): EvalResult {
   if (!lexed.ok) {
     return lexed;
   }
-  if (lexed.tokens.length === 1) {
-    // Policy: empty input evaluates to 0.
-    return { ok: true, value: 0 };
-  }
   const parsed = parse(lexed.tokens);
   if (!parsed.ok) {
     return parsed;

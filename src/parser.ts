@@ -7,6 +7,10 @@ export type ParseResult =
   | { ok: false; error: EvalError };
 
 export function parse(tokens: Token[]): ParseResult {
+  // Grammar rule: empty input (only the end token) evaluates to 0.
+  if (tokens.length === 1 && tokens[0].type === "end") {
+    return { ok: true, ast: { type: "number", value: 0 } };
+  }
   let i = 0;
   const next = (): Token | undefined => tokens[i];
   const advance = (): Token | undefined => tokens[i++];
@@ -26,7 +30,7 @@ export function parse(tokens: Token[]): ParseResult {
     return { ok: true, ast: { type: "number", value: tok.value } };
   };
 
-  // expr := number ('+' number)*, left-associative
+  // expr := number (('+' | '-') number)*, left-associative
   const left = parseNumber();
   if (!left.ok) {
     return left;
@@ -34,7 +38,7 @@ export function parse(tokens: Token[]): ParseResult {
   let ast = left.ast;
   for (;;) {
     const op = next();
-    if (op === undefined || op.type !== "plus") {
+    if (op === undefined || (op.type !== "plus" && op.type !== "minus")) {
       break;
     }
     advance();
@@ -42,7 +46,10 @@ export function parse(tokens: Token[]): ParseResult {
     if (!right.ok) {
       return right;
     }
-    ast = { type: "add", left: ast, right: right.ast };
+    ast =
+      op.type === "plus"
+        ? { type: "add", left: ast, right: right.ast }
+        : { type: "sub", left: ast, right: right.ast };
   }
 
   const trailing = next();

@@ -6,5 +6,7 @@ export function evalAst(ast: AstNode): number {
       return ast.value;
     case "add":
       return evalAst(ast.left) + evalAst(ast.right);
+    case "sub":
+      return evalAst(ast.left) - evalAst(ast.right);
   }
 }
