@@ -1,5 +1,6 @@
 import { lex } from "./src/lexer.ts";
 import { parse } from "./src/parser.ts";
+import { evalAst } from "./src/evaluator.ts";
 import type { EvalError } from "./src/errors.ts";
 
 export type EvalResult =
@@ -19,5 +20,5 @@ export function evaluate(input: string): EvalResult {
   if (!parsed.ok) {
     return parsed;
   }
-  return { ok: true, value: parsed.ast.value };
+  return { ok: true, value: evalAst(parsed.ast) };
 }

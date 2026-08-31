@@ -1,0 +1,10 @@
+import type { AstNode } from "./ast.ts";
+
+export function evalAst(ast: AstNode): number {
+  switch (ast.type) {
+    case "number":
+      return ast.value;
+    case "add":
+      return evalAst(ast.left) + evalAst(ast.right);
+  }
+}

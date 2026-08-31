@@ -2,6 +2,7 @@ import type { EvalError } from "./errors.ts";
 
 export type Token =
   | { type: "number"; value: number; position: number }
+  | { type: "plus"; position: number }
   | { type: "end"; position: number };
 
 export type LexResult =
@@ -25,6 +26,11 @@ export function lex(input: string): LexResult {
         value: Number(input.slice(start, i)),
         position: start,
       });
+      continue;
+    }
+    if (ch === "+") {
+      tokens.push({ type: "plus", position: i });
+      i++;
       continue;
     }
     return {

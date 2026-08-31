@@ -7,22 +7,54 @@ export type ParseResult =
   | { ok: false; error: EvalError };
 
 export function parse(tokens: Token[]): ParseResult {
-  const [first, second] = tokens;
-  if (first === undefined || first.type === "end") {
-    return {
-      ok: false,
-      error: { kind: "syntax", message: "expected a number", position: 0 },
-    };
+  let i = 0;
+  const next = (): Token | undefined => tokens[i];
+  const advance = (): Token | undefined => tokens[i++];
+
+  const parseNumber = (): ParseResult => {
+    const tok = advance();
+    if (tok === undefined || tok.type !== "number") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected a number",
+          position: tok?.position ?? 0,
+        },
+      };
+    }
+    return { ok: true, ast: { type: "number", value: tok.value } };
+  };
+
+  // expr := number ('+' number)*, left-associative
+  const left = parseNumber();
+  if (!left.ok) {
+    return left;
   }
-  if (second === undefined || second.type !== "end") {
+  let ast = left.ast;
+  for (;;) {
+    const op = next();
+    if (op === undefined || op.type !== "plus") {
+      break;
+    }
+    advance();
+    const right = parseNumber();
+    if (!right.ok) {
+      return right;
+    }
+    ast = { type: "add", left: ast, right: right.ast };
+  }
+
+  const trailing = next();
+  if (trailing === undefined || trailing.type !== "end") {
     return {
       ok: false,
       error: {
         kind: "syntax",
         message: "expected end of input",
-        position: second?.position ?? first.position,
+        position: trailing?.position ?? 0,
       },
     };
   }
-  return { ok: true, ast: { type: "number", value: first.value } };
+  return { ok: true, ast };
 }

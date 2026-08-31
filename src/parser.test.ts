@@ -31,3 +31,20 @@ test("parse two numbers => error", () => {
     error: { kind: "syntax", message: "expected end of input", position: 2 },
   });
 });
+
+test("parse addition", () => {
+  const tokens: Token[] = [
+    { type: "number", value: 1, position: 0 },
+    { type: "plus", position: 2 },
+    { type: "number", value: 2, position: 4 },
+    { type: "end", position: 5 },
+  ];
+  expect(parse(tokens)).toEqual({
+    ok: true,
+    ast: {
+      type: "add",
+      left: { type: "number", value: 1 },
+      right: { type: "number", value: 2 },
+    },
+  });
+});
