@@ -128,3 +128,28 @@ test('evaluate("let x = true; let y = false; x || y") => 1', () => {
     value: 1,
   });
 });
+
+test('evaluate("let x = false; let y = true; x || y") => 1', () => {
+  expect(evaluate("let x = false; let y = true; x || y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('evaluate("let x = false; let y = false; x || y") => 0', () => {
+  expect(evaluate("let x = false; let y = false; x || y")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test('evaluate("let x = 1; x || &x") => 1 (short-circuit)', () => {
+  expect(evaluate("let x = 1; x || &x")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluate("let x = 0; x || &x") => type error at the ||', () => {
+  expect(evaluate("let x = 0; x || &x")).toEqual({
+    ok: false,
+    error: { kind: "type", message: "expected a number", position: 13 },
+  });
+});
