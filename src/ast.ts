@@ -19,5 +19,12 @@ export type AstNode =
       value: AstNode;
       body: AstNode;
     }
-  | { type: "ref"; target: string; position: number }
-  | { type: "deref"; operand: AstNode; position: number };
+  | { type: "ref"; target: string; mut: boolean; position: number }
+  | { type: "deref"; operand: AstNode; position: number }
+  | {
+      type: "derefAssign";
+      operand: AstNode;
+      value: AstNode;
+      body: AstNode;
+      position: number;
+    };

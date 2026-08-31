@@ -34,10 +34,14 @@ export function evaluate(input: string): EvalResult {
   return { ok: true, value: result.value };
 }
 
-// The node that produces the final value: follow let/assign bodies to the leaf.
+// The node that produces the final value: follow statement bodies to the leaf.
 function valueNode(ast: AstNode): AstNode {
   let node = ast;
-  while (node.type === "let" || node.type === "assign") {
+  while (
+    node.type === "let" ||
+    node.type === "assign" ||
+    node.type === "derefAssign"
+  ) {
     node = node.body;
   }
   return node;

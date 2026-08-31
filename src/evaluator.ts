@@ -1,7 +1,7 @@
 import type { AstNode } from "./ast.ts";
 import type { EvalFailure } from "./errors.ts";
 
-export type Value = number | { ref: string };
+export type Value = number | { ref: string; mut: boolean };
 
 export type EvalResult =
   | { ok: true; value: Value }
@@ -85,7 +85,17 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
           },
         };
       }
-      return { ok: true, value: { ref: ast.target } };
+      if (ast.mut && !binding.mutable) {
+        return {
+          ok: false,
+          error: {
+            kind: "type",
+            message: `cannot take a mutable reference to immutable variable ${ast.target}`,
+            position: ast.position,
+          },
+        };
+      }
+      return { ok: true, value: { ref: ast.target, mut: ast.mut } };
     }
     case "deref": {
       const inner = evalAst(ast.operand, env);
@@ -114,6 +124,49 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
         };
       }
       return { ok: true, value: target.value };
+    }
+    case "derefAssign": {
+      const value = evalAst(ast.value, env);
+      if (!value.ok) {
+        return value;
+      }
+      const inner = evalAst(ast.operand, env);
+      if (!inner.ok) {
+        return inner;
+      }
+      if (typeof inner.value === "number") {
+        return {
+          ok: false,
+          error: {
+            kind: "type",
+            message: "cannot assign through a number",
+            position: ast.position,
+          },
+        };
+      }
+      if (!inner.value.mut) {
+        return {
+          ok: false,
+          error: {
+            kind: "type",
+            message: "cannot assign through a shared reference",
+            position: ast.position,
+          },
+        };
+      }
+      const target = env.get(inner.value.ref);
+      if (target === undefined) {
+        return {
+          ok: false,
+          error: {
+            kind: "undefined",
+            message: `undefined variable ${inner.value.ref}`,
+            position: ast.position,
+          },
+        };
+      }
+      target.value = value.value;
+      return evalAst(ast.body, env);
     }
   }
 }

@@ -14,7 +14,13 @@ type Stmt =
       value: AstNode;
       position: number;
     }
-  | { kind: "assign"; name: string; position: number; value: AstNode };
+  | { kind: "assign"; name: string; position: number; value: AstNode }
+  | {
+      kind: "derefAssign";
+      operand: AstNode;
+      value: AstNode;
+      position: number;
+    };
 
 export function parse(tokens: Token[]): ParseResult {
   // Grammar rule: empty input (only the end token) evaluates to 0.
@@ -150,6 +156,28 @@ class Parser {
         stmts.push(stmt.value);
         continue;
       }
+      if (tok.type === "star") {
+        // A deref-assignment statement is '*' <ref> '=' expr ';'.
+        // Consume the '*', parse the reference operand, then check for '=';
+        // backtrack if it is not a statement (it is the body expression).
+        const saved = this.i;
+        this.advance(); // consume '*'
+        const operand = this.parseUnary();
+        if (!operand.ok) {
+          return operand;
+        }
+        const eq = this.next();
+        if (eq === undefined || eq.type !== "equals") {
+          this.i = saved;
+          break;
+        }
+        const stmt = this.parseDerefAssignRest(operand.ast, tok.position);
+        if (!stmt.ok) {
+          return stmt;
+        }
+        stmts.push(stmt.value);
+        continue;
+      }
       break;
     }
     const bodyRes = this.parseExpr();
@@ -169,13 +197,21 @@ class Parser {
               body: ast,
               position: stmt.position,
             }
-          : {
-              type: "assign",
-              name: stmt.name,
-              position: stmt.position,
-              value: stmt.value,
-              body: ast,
-            };
+          : stmt.kind === "assign"
+            ? {
+                type: "assign",
+                name: stmt.name,
+                position: stmt.position,
+                value: stmt.value,
+                body: ast,
+              }
+            : {
+                type: "derefAssign",
+                operand: stmt.operand,
+                value: stmt.value,
+                body: ast,
+                position: stmt.position,
+              };
     }
     return { ok: true, ast };
   }
@@ -285,6 +321,12 @@ class Parser {
     }
     if (tok.type === "amp") {
       this.advance();
+      let mut = false;
+      const mutTok = this.next();
+      if (mutTok !== undefined && mutTok.type === "mut") {
+        mut = true;
+        this.advance();
+      }
       const nameTok = this.next();
       if (nameTok === undefined || nameTok.type !== "ident") {
         return {
@@ -299,7 +341,12 @@ class Parser {
       this.advance();
       return {
         ok: true,
-        ast: { type: "ref", target: nameTok.value, position: tok.position },
+        ast: {
+          type: "ref",
+          target: nameTok.value,
+          mut,
+          position: tok.position,
+        },
       };
     }
     if (tok.type === "star") {
@@ -314,6 +361,40 @@ class Parser {
       };
     }
     return this.parseFactor();
+  }
+
+  // derefAssignStmt := '*' unary '=' expr ';'
+  // Called after the operand has been parsed and '=' confirmed as next.
+  private parseDerefAssignRest(
+    operand: AstNode,
+    position: number,
+  ): { ok: true; value: Stmt } | { ok: false; error: EvalFailure } {
+    this.advance(); // consume '='
+    const valueRes = this.parseExpr();
+    if (!valueRes.ok) {
+      return valueRes;
+    }
+    const semi = this.next();
+    if (semi === undefined || semi.type !== "semicolon") {
+      return {
+        ok: false,
+        error: {
+          kind: "syntax",
+          message: "expected ;",
+          position: semi?.position ?? 0,
+        },
+      };
+    }
+    this.advance();
+    return {
+      ok: true,
+      value: {
+        kind: "derefAssign",
+        operand,
+        value: valueRes.ast,
+        position,
+      },
+    };
   }
 
   // term := unary ('*' unary)*, left-associative
