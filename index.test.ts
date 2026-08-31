@@ -8,3 +8,7 @@ test('evaluate("") => 0', () => {
 test('evaluate("1") => 1', () => {
   expect(evaluate("1")).toEqual({ ok: true, value: 1 });
 });
+
+test('evaluate("12") => 12', () => {
+  expect(evaluate("12")).toEqual({ ok: true, value: 12 });
+});
