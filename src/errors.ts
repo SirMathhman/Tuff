@@ -1,5 +1,7 @@
+export type ErrorKind = "syntax" | "number" | "overflow";
+
 export type EvalError = {
-  kind: string;
+  kind: ErrorKind;
   message: string;
   position: number;
 };
