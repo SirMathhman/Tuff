@@ -42,10 +42,10 @@ class Parser {
     return { ok: true, ast: { type: "number", value: tok.value } };
   }
 
-  // factor := number | '(' expr ')'
+  // factor := number | '(' expr ')' | '{' expr '}'
   private parseFactor(): ParseResult {
     const tok = this.next();
-    if (tok === undefined || tok.type !== "lparen") {
+    if (tok === undefined || (tok.type !== "lparen" && tok.type !== "lbrace")) {
       return this.parseNumber();
     }
     this.advance();
@@ -53,13 +53,14 @@ class Parser {
     if (!inner.ok) {
       return inner;
     }
+    const expected = tok.type === "lparen" ? "rparen" : "rbrace";
     const close = this.next();
-    if (close === undefined || close.type !== "rparen") {
+    if (close === undefined || close.type !== expected) {
       return {
         ok: false,
         error: {
           kind: "syntax",
-          message: "expected )",
+          message: `expected ${tok.type === "lparen" ? ")" : "}"}`,
           position: close?.position ?? 0,
         },
       };

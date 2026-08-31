@@ -7,6 +7,8 @@ export type Token =
   | { type: "star"; position: number }
   | { type: "lparen"; position: number }
   | { type: "rparen"; position: number }
+  | { type: "lbrace"; position: number }
+  | { type: "rbrace"; position: number }
   | { type: "end"; position: number };
 
 export type LexResult =
@@ -54,6 +56,16 @@ export function lex(input: string): LexResult {
     }
     if (ch === ")") {
       tokens.push({ type: "rparen", position: i });
+      i++;
+      continue;
+    }
+    if (ch === "{") {
+      tokens.push({ type: "lbrace", position: i });
+      i++;
+      continue;
+    }
+    if (ch === "}") {
+      tokens.push({ type: "rbrace", position: i });
       i++;
       continue;
     }
