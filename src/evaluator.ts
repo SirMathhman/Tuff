@@ -1,11 +1,13 @@
 import type { AstNode } from "./ast.ts";
 import type { EvalFailure } from "./errors.ts";
 
+export type Value = number | { ref: string };
+
 export type EvalResult =
-  | { ok: true; value: number }
+  | { ok: true; value: Value }
   | { ok: false; error: EvalFailure };
 
-export type Binding = { value: number; mutable: boolean };
+export type Binding = { value: Value; mutable: boolean };
 
 export type Env = Map<string, Binding>;
 
@@ -71,11 +73,53 @@ export function evalAst(ast: AstNode, env: Env = new Map()): EvalResult {
       binding.value = value.value;
       return evalAst(ast.body, env);
     }
+    case "ref": {
+      const binding = env.get(ast.target);
+      if (binding === undefined) {
+        return {
+          ok: false,
+          error: {
+            kind: "undefined",
+            message: `undefined variable ${ast.target}`,
+            position: ast.position,
+          },
+        };
+      }
+      return { ok: true, value: { ref: ast.target } };
+    }
+    case "deref": {
+      const inner = evalAst(ast.operand, env);
+      if (!inner.ok) {
+        return inner;
+      }
+      if (typeof inner.value === "number") {
+        return {
+          ok: false,
+          error: {
+            kind: "type",
+            message: "cannot dereference a number",
+            position: ast.position,
+          },
+        };
+      }
+      const target = env.get(inner.value.ref);
+      if (target === undefined) {
+        return {
+          ok: false,
+          error: {
+            kind: "undefined",
+            message: `undefined variable ${inner.value.ref}`,
+            position: ast.position,
+          },
+        };
+      }
+      return { ok: true, value: target.value };
+    }
   }
 }
 
 function binop(
-  ast: { left: AstNode; right: AstNode },
+  ast: { left: AstNode; right: AstNode; position: number },
   env: Env,
   op: (a: number, b: number) => number,
 ): EvalResult {
@@ -86,6 +130,16 @@ function binop(
   const right = evalAst(ast.right, env);
   if (!right.ok) {
     return right;
+  }
+  if (typeof left.value !== "number" || typeof right.value !== "number") {
+    return {
+      ok: false,
+      error: {
+        kind: "type",
+        message: "expected a number",
+        position: ast.position,
+      },
+    };
   }
   return { ok: true, value: op(left.value, right.value) };
 }

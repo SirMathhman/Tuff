@@ -9,7 +9,7 @@ test("parse single number token", () => {
   ];
   expect(parse(tokens)).toEqual({
     ok: true,
-    ast: { type: "number", value: 12 },
+    ast: { type: "number", value: 12, position: 0 },
   });
 });
 
@@ -24,7 +24,7 @@ test("parse only end token => number 0", () => {
   const tokens: Token[] = [{ type: "end", position: 0 }];
   expect(parse(tokens)).toEqual({
     ok: true,
-    ast: { type: "number", value: 0 },
+    ast: { type: "number", value: 0, position: 0 },
   });
 });
 
@@ -51,8 +51,9 @@ test("parse addition", () => {
     ok: true,
     ast: {
       type: "add",
-      left: { type: "number", value: 1 },
-      right: { type: "number", value: 2 },
+      left: { type: "number", value: 1, position: 0 },
+      right: { type: "number", value: 2, position: 4 },
+      position: 2,
     },
   });
 });

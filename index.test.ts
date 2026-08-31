@@ -88,3 +88,21 @@ test('evaluate("let x = 2; let y = { let x = 0; x }; x") => 2', () => {
     value: 2,
   });
 });
+
+test('evaluate("let x = 1; let y = &x; *y") => 1', () => {
+  expect(evaluate("let x = 1; let y = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluate("let x = 1; 1 + &x") => type error at the +', () => {
+  expect(evaluate("let x = 1; 1 + &x")).toEqual({
+    ok: false,
+    error: { kind: "type", message: "expected a number", position: 13 },
+  });
+});
+
+test('evaluate("let x = 1; &x") => type error at the &', () => {
+  expect(evaluate("let x = 1; &x")).toEqual({
+    ok: false,
+    error: { kind: "type", message: "expected a number", position: 11 },
+  });
+});

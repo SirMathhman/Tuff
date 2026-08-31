@@ -7,13 +7,19 @@ export type ParseResult =
   | { ok: false; error: EvalFailure };
 
 type Stmt =
-  | { kind: "let"; name: string; mutable: boolean; value: AstNode }
+  | {
+      kind: "let";
+      name: string;
+      mutable: boolean;
+      value: AstNode;
+      position: number;
+    }
   | { kind: "assign"; name: string; position: number; value: AstNode };
 
 export function parse(tokens: Token[]): ParseResult {
   // Grammar rule: empty input (only the end token) evaluates to 0.
   if (tokens.length === 1 && tokens[0]!.type === "end") {
-    return { ok: true, ast: { type: "number", value: 0 } };
+    return { ok: true, ast: { type: "number", value: 0, position: 0 } };
   }
   return new Parser(tokens).parseInput();
 }
@@ -43,7 +49,10 @@ class Parser {
         },
       };
     }
-    return { ok: true, ast: { type: "number", value: tok.value } };
+    return {
+      ok: true,
+      ast: { type: "number", value: tok.value, position: tok.position },
+    };
   }
 
   // factor := number | ident | '(' expr ')' | block
@@ -158,6 +167,7 @@ class Parser {
               mutable: stmt.mutable,
               value: stmt.value,
               body: ast,
+              position: stmt.position,
             }
           : {
               type: "assign",
@@ -174,6 +184,7 @@ class Parser {
   private parseLetStmt():
     | { ok: true; value: Stmt }
     | { ok: false; error: EvalFailure } {
+    const letTok = this.next()!;
     this.advance(); // consume let
     let mutable = false;
     const mutTok = this.next();
@@ -199,7 +210,13 @@ class Parser {
     }
     return {
       ok: true,
-      value: { kind: "let", name: nameTok.value, mutable, value: value.value },
+      value: {
+        kind: "let",
+        name: nameTok.value,
+        mutable,
+        value: value.value,
+        position: letTok.position,
+      },
     };
   }
 
@@ -260,9 +277,48 @@ class Parser {
     return { ok: true, value: valueRes.ast };
   }
 
-  // term := factor ('*' factor)*, left-associative
+  // unary := '&' ident | '*' unary | factor
+  private parseUnary(): ParseResult {
+    const tok = this.next();
+    if (tok === undefined) {
+      return this.parseFactor();
+    }
+    if (tok.type === "amp") {
+      this.advance();
+      const nameTok = this.next();
+      if (nameTok === undefined || nameTok.type !== "ident") {
+        return {
+          ok: false,
+          error: {
+            kind: "syntax",
+            message: "expected a variable name",
+            position: nameTok?.position ?? 0,
+          },
+        };
+      }
+      this.advance();
+      return {
+        ok: true,
+        ast: { type: "ref", target: nameTok.value, position: tok.position },
+      };
+    }
+    if (tok.type === "star") {
+      this.advance();
+      const inner = this.parseUnary();
+      if (!inner.ok) {
+        return inner;
+      }
+      return {
+        ok: true,
+        ast: { type: "deref", operand: inner.ast, position: tok.position },
+      };
+    }
+    return this.parseFactor();
+  }
+
+  // term := unary ('*' unary)*, left-associative
   private parseTerm(): ParseResult {
-    const left = this.parseFactor();
+    const left = this.parseUnary();
     if (!left.ok) {
       return left;
     }
@@ -273,11 +329,11 @@ class Parser {
         break;
       }
       this.advance();
-      const right = this.parseFactor();
+      const right = this.parseUnary();
       if (!right.ok) {
         return right;
       }
-      ast = { type: "mul", left: ast, right: right.ast };
+      ast = { type: "mul", left: ast, right: right.ast, position: op.position };
     }
     return { ok: true, ast };
   }
@@ -301,8 +357,8 @@ class Parser {
       }
       ast =
         op.type === "plus"
-          ? { type: "add", left: ast, right: right.ast }
-          : { type: "sub", left: ast, right: right.ast };
+          ? { type: "add", left: ast, right: right.ast, position: op.position }
+          : { type: "sub", left: ast, right: right.ast, position: op.position };
     }
     return { ok: true, ast };
   }

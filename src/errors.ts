@@ -3,7 +3,8 @@ export type ErrorKind =
   | "number"
   | "overflow"
   | "undefined"
-  | "immutable";
+  | "immutable"
+  | "type";
 
 export type EvalFailure = {
   kind: ErrorKind;

@@ -1,9 +1,12 @@
-import type { EvalResult } from "./src/evaluator.ts";
+import type { AstNode } from "./src/ast.ts";
+import type { EvalFailure } from "./src/errors.ts";
 import { evalAst } from "./src/evaluator.ts";
 import { lex } from "./src/lexer.ts";
 import { parse } from "./src/parser.ts";
 
-export type { EvalResult };
+export type EvalResult =
+  | { ok: true; value: number }
+  | { ok: false; error: EvalFailure };
 
 export function evaluate(input: string): EvalResult {
   const lexed = lex(input);
@@ -14,5 +17,28 @@ export function evaluate(input: string): EvalResult {
   if (!parsed.ok) {
     return parsed;
   }
-  return evalAst(parsed.ast);
+  const result = evalAst(parsed.ast);
+  if (!result.ok) {
+    return result;
+  }
+  if (typeof result.value !== "number") {
+    return {
+      ok: false,
+      error: {
+        kind: "type",
+        message: "expected a number",
+        position: valueNode(parsed.ast).position,
+      },
+    };
+  }
+  return { ok: true, value: result.value };
+}
+
+// The node that produces the final value: follow let/assign bodies to the leaf.
+function valueNode(ast: AstNode): AstNode {
+  let node = ast;
+  while (node.type === "let" || node.type === "assign") {
+    node = node.body;
+  }
+  return node;
 }

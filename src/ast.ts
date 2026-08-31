@@ -1,8 +1,8 @@
 export type AstNode =
-  | { type: "number"; value: number }
-  | { type: "add"; left: AstNode; right: AstNode }
-  | { type: "sub"; left: AstNode; right: AstNode }
-  | { type: "mul"; left: AstNode; right: AstNode }
+  | { type: "number"; value: number; position: number }
+  | { type: "add"; left: AstNode; right: AstNode; position: number }
+  | { type: "sub"; left: AstNode; right: AstNode; position: number }
+  | { type: "mul"; left: AstNode; right: AstNode; position: number }
   | { type: "ident"; name: string; position: number }
   | {
       type: "let";
@@ -10,6 +10,7 @@ export type AstNode =
       mutable: boolean;
       value: AstNode;
       body: AstNode;
+      position: number;
     }
   | {
       type: "assign";
@@ -17,4 +18,6 @@ export type AstNode =
       position: number;
       value: AstNode;
       body: AstNode;
-    };
+    }
+  | { type: "ref"; target: string; position: number }
+  | { type: "deref"; operand: AstNode; position: number };
