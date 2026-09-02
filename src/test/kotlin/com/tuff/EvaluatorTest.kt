@@ -153,4 +153,9 @@ class EvaluatorTest {
     fun `evaluate logical or with true and false`() {
         assertEquals(1, evaluate("let x = true; let y = false; x || y").getOrThrow())
     }
+
+    @Test
+    fun `evaluate equality with different values`() {
+        assertEquals(0, evaluate("let x = 1; let y = 2; x == y").getOrThrow())
+    }
 }

@@ -1,6 +1,6 @@
 package com.tuff
 
-enum class OpKind { PLUS, MINUS, MULTIPLY, OR }
+enum class OpKind { PLUS, MINUS, MULTIPLY, OR, EQ }
 
 sealed class Token {
     data class Number(val value: Int) : Token()

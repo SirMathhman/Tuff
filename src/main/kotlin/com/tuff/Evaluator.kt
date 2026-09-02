@@ -29,6 +29,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
                     OpKind.MINUS -> left.getOrThrow() - right.getOrThrow()
                     OpKind.MULTIPLY -> left.getOrThrow() * right.getOrThrow()
                     OpKind.OR -> if (left.getOrThrow() != 0 || right.getOrThrow() != 0) 1 else 0
+                    OpKind.EQ -> if (left.getOrThrow() == right.getOrThrow()) 1 else 0
                 }
             )
         }

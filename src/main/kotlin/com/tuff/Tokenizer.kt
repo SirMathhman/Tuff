@@ -3,8 +3,11 @@ package com.tuff
 fun tokenize(input: String): Result<List<Token>> {
     if (input.isBlank()) return Result.failure(EvalError.EmptyExpression(0))
 
-    // Insert spaces around delimiters and operators so they become standalone tokens
+    // Insert spaces around delimiters and operators so they become standalone tokens.
+    // Multi-char operators use a placeholder to avoid being split by single-char replacements.
     val normalized = input
+        .replace("==", "\u0001")
+        .replace("||", "\u0002")
         .replace("(", " ( ")
         .replace(")", " ) ")
         .replace("{", " { ")
@@ -13,7 +16,8 @@ fun tokenize(input: String): Result<List<Token>> {
         .replace("=", " = ")
         .replace("&", " & ")
         .replace("*", " * ")
-        .replace("||", " || ")
+        .replace("\u0001", " == ")
+        .replace("\u0002", " || ")
     val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
 
     val result = mutableListOf<Token>()
@@ -28,6 +32,7 @@ fun tokenize(input: String): Result<List<Token>> {
             "-" -> result.add(Token.Op(OpKind.MINUS))
             "*" -> result.add(Token.Star)
             "||" -> result.add(Token.Op(OpKind.OR))
+            "==" -> result.add(Token.Op(OpKind.EQ))
             "=" -> result.add(Token.Equals)
             ";" -> result.add(Token.Semicolon)
             "let" -> result.add(Token.Let)
