@@ -8,33 +8,78 @@ fun evaluate(input: String): Result<Int> {
 }
 
 fun evaluate(tokens: List<Token>): Result<Int> {
-    // Extract numbers and operators
-    val numbers = mutableListOf<Int>()
-    val operators = mutableListOf<OpKind>()
-
-    for (token in tokens) {
-        when (token) {
-            is Token.Number -> numbers.add(token.value)
-            is Token.Op -> operators.add(token.kind)
-        }
-    }
-
-    // Pass 1: resolve multiplication
-    val multNumbers = mutableListOf(numbers[0])
-    val multOps = mutableListOf<OpKind>()
-    for (i in 1 until numbers.size) {
-        if (operators[i - 1] == OpKind.MULTIPLY) {
-            multNumbers[multNumbers.size - 1] *= numbers[i]
+    val parser = TokenParser(tokens)
+    return try {
+        val result = parser.parseExpression()
+        if (!parser.isAtEnd) {
+            Result.failure(EvalError.UnexpectedToken(parser.position, tokens[parser.position].toString()))
         } else {
-            multOps.add(operators[i - 1])
-            multNumbers.add(numbers[i])
+            Result.success(result)
+        }
+    } catch (e: EvalError) {
+        Result.failure(e)
+    }
+}
+
+private class TokenParser(private val tokens: List<Token>) {
+    private var pos = 0
+
+    val position: Int get() = pos
+    val isAtEnd: Boolean get() = pos >= tokens.size
+
+    private fun peek(): Token? = tokens.getOrNull(pos)
+    private fun advance(): Token = tokens[pos++]
+
+    fun parseExpression(): Int {
+        var result = parseTerm()
+        while (true) {
+            val token = peek() ?: break
+            if (token is Token.Op && (token.kind == OpKind.PLUS || token.kind == OpKind.MINUS)) {
+                advance()
+                val term = parseTerm()
+                result = if (token.kind == OpKind.PLUS) result + term else result - term
+            } else {
+                break
+            }
+        }
+        return result
+    }
+
+    private fun parseTerm(): Int {
+        var result = parseFactor()
+        while (true) {
+            val token = peek() ?: break
+            if (token is Token.Op && token.kind == OpKind.MULTIPLY) {
+                advance()
+                val factor = parseFactor()
+                result *= factor
+            } else {
+                break
+            }
+        }
+        return result
+    }
+
+    private fun parseFactor(): Int {
+        if (isAtEnd) throw EvalError.UnexpectedToken(pos, "<end>")
+        val token = advance()
+        return when {
+            token is Token.Number -> token.value
+            token is Token.LParen -> {
+                val result = parseExpression()
+                expect(Token.RParen)
+                result
+            }
+
+            else -> throw EvalError.UnexpectedToken(pos - 1, token.toString())
         }
     }
 
-    // Pass 2: resolve addition and subtraction left-to-right
-    var result = multNumbers[0]
-    for (i in 1 until multNumbers.size) {
-        result = if (multOps[i - 1] == OpKind.PLUS) result + multNumbers[i] else result - multNumbers[i]
+    private fun expect(expected: Token) {
+        if (isAtEnd) throw EvalError.UnexpectedToken(pos, "<end>")
+        val token = advance()
+        if (token != expected) {
+            throw EvalError.UnexpectedToken(pos - 1, token.toString())
+        }
     }
-    return Result.success(result)
 }

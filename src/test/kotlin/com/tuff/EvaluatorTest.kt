@@ -42,6 +42,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate parenthesized expression`() {
+        assertEquals(20, evaluate("(2 + 3) * 4").getOrThrow())
+    }
+
+    @Test
     fun `evaluate non-numeric token returns failure`() {
         assertIs<EvalError.NonNumericToken>(evaluate("abc").exceptionOrNull())
     }
