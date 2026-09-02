@@ -12,7 +12,7 @@ export interface Parser {
 
 export function parseExpr(s: string): ParseResult {
   const p: Parser = { src: s.trim(), pos: 0 };
-  const expr = parseBinary(p);
+  const expr = parseLogical(p);
   if (isCompileError(expr)) return expr;
   skipWs(p);
   if (p.pos < p.src.length) {
@@ -23,6 +23,29 @@ export function parseExpr(s: string): ParseResult {
     };
   }
   return expr;
+}
+
+function parseLogical(p: Parser): ParseResult {
+  const leftResult = parseBinary(p);
+  if (isCompileError(leftResult)) return leftResult;
+  let left: Expr = leftResult;
+  for (;;) {
+    skipWs(p);
+    const rest = p.src.slice(p.pos);
+    let op: string | null = null;
+    if (rest.startsWith("||")) {
+      p.pos += 2;
+      op = "||";
+    } else if (rest.startsWith("&&")) {
+      p.pos += 2;
+      op = "&&";
+    }
+    if (!op) break;
+    const rightResult = parseBinary(p);
+    if (isCompileError(rightResult)) return rightResult;
+    left = { kind: "binary", op, left, right: rightResult };
+  }
+  return left;
 }
 
 function parseBinary(p: Parser): ParseResult {
@@ -123,13 +146,13 @@ function parsePostfix(p: Parser): ParseResult {
       const args: Expr[] = [];
       skipWs(p);
       if (p.src[p.pos] !== ")") {
-        const argResult = parseBinary(p);
+        const argResult = parseLogical(p);
         if (isCompileError(argResult)) return argResult;
         args.push(argResult);
         while (p.src[p.pos] === ",") {
           p.pos += 1;
           skipWs(p);
-          const argResult = parseBinary(p);
+          const argResult = parseLogical(p);
           if (isCompileError(argResult)) return argResult;
           args.push(argResult);
         }
@@ -155,7 +178,7 @@ function parsePrimary(p: Parser): ParseResult {
   const ch = p.src[p.pos]!;
   if (ch === "(") {
     p.pos += 1;
-    const expr = parseBinary(p);
+    const expr = parseLogical(p);
     if (isCompileError(expr)) return expr;
     skipWs(p);
     if (p.src[p.pos] !== ")")
