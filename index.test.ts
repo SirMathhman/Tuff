@@ -17,7 +17,6 @@ export function expectValid(
   expectedExitCode: number,
   args: string[] = [],
 ) {
-
   const compiledTS = compileTuffToTypeScript(PRELUDE + tuffSource);
   const compiledJS = ts.transpile(compiledTS);
 
@@ -46,4 +45,8 @@ export function expectInvalid(tuffSource: string) {
 
 test("empty source", () => {
   expectValid("", 0, []);
+});
+
+test("args.length", () => {
+  expectValid("args.length", 1, []);
 });
