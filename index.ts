@@ -37,8 +37,9 @@ export function compileTuffToTypeScript(tuffSource: string): CompileResult {
     return { ok: false, error: typeError };
   }
 
-  const lines = parsedStatements.map((s) => `${emitStatement(s)};`);
-  lines.push(`process.exit(${emitStatement(parsedFinal)});`);
+  const refMap = buildRefMap(parsedStatements);
+  const lines = parsedStatements.map((s) => `${emitStatement(s, refMap)};`);
+  lines.push(`process.exit(${emitStatement(parsedFinal, refMap)});`);
   return { ok: true, value: lines.join("\n") };
 }
 
@@ -47,32 +48,179 @@ type Expr =
   | { kind: "lit"; value: string }
   | { kind: "addressOf"; target: Expr }
   | { kind: "deref"; target: Expr }
-  | { kind: "raw"; text: string };
+  | { kind: "binary"; op: string; left: Expr; right: Expr }
+  | { kind: "member"; object: Expr; property: string }
+  | { kind: "call"; callee: Expr; args: Expr[] };
 
 type Statement =
   | { kind: "let"; name: string; init: Expr }
   | { kind: "letMut"; name: string; init: Expr }
   | { kind: "assign"; name: string; value: Expr }
+  | { kind: "derefAssign"; target: Expr; value: Expr }
   | { kind: "expr"; value: Expr };
 
+interface Parser {
+  src: string;
+  pos: number;
+}
+
 function parseExpr(s: string): Expr {
-  const trimmed = s.trim();
-  if (trimmed.startsWith("&")) {
-    return { kind: "addressOf", target: parseExpr(trimmed.slice(1)) };
+  const p: Parser = { src: s.trim(), pos: 0 };
+  const expr = parseBinary(p);
+  skipWs(p);
+  if (p.pos < p.src.length) {
+    throw new Error(`Unexpected trailing input at position ${p.pos}`);
   }
-  if (trimmed.startsWith("*")) {
-    return { kind: "deref", target: parseExpr(trimmed.slice(1)) };
+  return expr;
+}
+
+function parseBinary(p: Parser): Expr {
+  let left = parseUnary(p);
+  for (;;) {
+    const op = tryBinaryOp(p);
+    if (!op) break;
+    const right = parseUnary(p);
+    left = { kind: "binary", op, left, right };
   }
-  if (/^\w+$/.test(trimmed)) {
-    return { kind: "ident", name: trimmed };
+  return left;
+}
+
+function tryBinaryOp(p: Parser): string | null {
+  skipWs(p);
+  const rest = p.src.slice(p.pos);
+  if (rest.startsWith("==")) {
+    p.pos += 2;
+    return "==";
   }
-  if (/^\d+$/.test(trimmed)) {
-    return { kind: "lit", value: trimmed };
+  if (rest.startsWith("!=")) {
+    p.pos += 2;
+    return "!=";
   }
-  if (/^".*"$/.test(trimmed)) {
-    return { kind: "lit", value: trimmed };
+  if (rest.startsWith("<=")) {
+    p.pos += 2;
+    return "<=";
   }
-  return { kind: "raw", text: trimmed };
+  if (rest.startsWith(">=")) {
+    p.pos += 2;
+    return ">=";
+  }
+  if (rest.startsWith("+")) {
+    p.pos += 1;
+    return "+";
+  }
+  if (rest.startsWith("-")) {
+    p.pos += 1;
+    return "-";
+  }
+  if (rest.startsWith("*")) {
+    p.pos += 1;
+    return "*";
+  }
+  if (rest.startsWith("/")) {
+    p.pos += 1;
+    return "/";
+  }
+  if (rest.startsWith("<")) {
+    p.pos += 1;
+    return "<";
+  }
+  if (rest.startsWith(">")) {
+    p.pos += 1;
+    return ">";
+  }
+  return null;
+}
+
+function parseUnary(p: Parser): Expr {
+  skipWs(p);
+  if (p.src.startsWith("&mut ", p.pos)) {
+    p.pos += 5;
+    return { kind: "addressOf", target: parseUnary(p) };
+  }
+  if (p.src[p.pos] === "&") {
+    p.pos += 1;
+    return { kind: "addressOf", target: parseUnary(p) };
+  }
+  if (p.src[p.pos] === "*") {
+    p.pos += 1;
+    return { kind: "deref", target: parseUnary(p) };
+  }
+  return parsePostfix(p);
+}
+
+function parsePostfix(p: Parser): Expr {
+  let expr = parsePrimary(p);
+  for (;;) {
+    skipWs(p);
+    if (p.src[p.pos] === ".") {
+      p.pos += 1;
+      const property = parseIdent(p);
+      expr = { kind: "member", object: expr, property };
+    } else if (p.src[p.pos] === "(") {
+      p.pos += 1;
+      const args: Expr[] = [];
+      skipWs(p);
+      if (p.src[p.pos] !== ")") {
+        args.push(parseBinary(p));
+        while (p.src[p.pos] === ",") {
+          p.pos += 1;
+          skipWs(p);
+          args.push(parseBinary(p));
+        }
+      }
+      skipWs(p);
+      if (p.src[p.pos] !== ")") throw new Error("Expected ')'");
+      p.pos += 1;
+      expr = { kind: "call", callee: expr, args };
+    } else {
+      break;
+    }
+  }
+  return expr;
+}
+
+function parsePrimary(p: Parser): Expr {
+  skipWs(p);
+  const ch = p.src[p.pos]!;
+  if (ch === "(") {
+    p.pos += 1;
+    const expr = parseBinary(p);
+    skipWs(p);
+    if (p.src[p.pos] !== ")") throw new Error("Expected ')'");
+    p.pos += 1;
+    return expr;
+  }
+  if (ch === '"') {
+    const end = p.src.indexOf('"', p.pos + 1);
+    if (end === -1) throw new Error("Unterminated string literal");
+    const value = p.src.slice(p.pos, end + 1);
+    p.pos = end + 1;
+    return { kind: "lit", value };
+  }
+  if (/[0-9]/.test(ch)) {
+    let end = p.pos;
+    while (end < p.src.length && /[0-9]/.test(p.src[end]!)) end++;
+    const value = p.src.slice(p.pos, end);
+    p.pos = end;
+    return { kind: "lit", value };
+  }
+  if (/[a-zA-Z_]/.test(ch)) {
+    const name = parseIdent(p);
+    return { kind: "ident", name };
+  }
+  throw new Error(`Unexpected character '${ch}' at position ${p.pos}`);
+}
+
+function parseIdent(p: Parser): string {
+  let end = p.pos;
+  while (end < p.src.length && /[\w]/.test(p.src[end]!)) end++;
+  const name = p.src.slice(p.pos, end);
+  p.pos = end;
+  return name;
+}
+
+function skipWs(p: Parser) {
+  while (p.pos < p.src.length && /\s/.test(p.src[p.pos]!)) p.pos++;
 }
 
 function emitExpr(e: Expr): string {
@@ -85,8 +233,12 @@ function emitExpr(e: Expr): string {
       return emitExpr(e.target);
     case "deref":
       return emitExpr(e.target);
-    case "raw":
-      return e.text;
+    case "binary":
+      return `${emitExpr(e.left)} ${e.op} ${emitExpr(e.right)}`;
+    case "member":
+      return `${emitExpr(e.object)}.${e.property}`;
+    case "call":
+      return `${emitExpr(e.callee)}(${e.args.map(emitExpr).join(", ")})`;
   }
 }
 
@@ -94,20 +246,52 @@ function parseStatement(s: string): Statement {
   const trimmed = s.trim();
   const letMutMatch = trimmed.match(/^let\s+mut\s+(\w+)\s*=\s*(.*)$/);
   if (letMutMatch) {
-    return { kind: "letMut", name: letMutMatch[1]!, init: parseExpr(letMutMatch[2]!) };
+    return {
+      kind: "letMut",
+      name: letMutMatch[1]!,
+      init: parseExpr(letMutMatch[2]!),
+    };
   }
   const letMatch = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
   if (letMatch) {
     return { kind: "let", name: letMatch[1]!, init: parseExpr(letMatch[2]!) };
   }
+  const derefAssignMatch = trimmed.match(/^\*(\w+)\s*=\s*(.*)$/);
+  if (derefAssignMatch) {
+    return {
+      kind: "derefAssign",
+      target: { kind: "ident", name: derefAssignMatch[1]! },
+      value: parseExpr(derefAssignMatch[2]!),
+    };
+  }
   const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.*)$/);
   if (assignMatch) {
-    return { kind: "assign", name: assignMatch[1]!, value: parseExpr(assignMatch[2]!) };
+    return {
+      kind: "assign",
+      name: assignMatch[1]!,
+      value: parseExpr(assignMatch[2]!),
+    };
   }
   return { kind: "expr", value: parseExpr(trimmed) };
 }
 
-function emitStatement(s: Statement): string {
+function buildRefMap(statements: Statement[]): Map<string, string> {
+  const refMap = new Map<string, string>();
+  for (const stmt of statements) {
+    if (
+      (stmt.kind === "let" || stmt.kind === "letMut") &&
+      stmt.init.kind === "addressOf"
+    ) {
+      const target = stmt.init.target;
+      if (target.kind === "ident") {
+        refMap.set(stmt.name, target.name);
+      }
+    }
+  }
+  return refMap;
+}
+
+function emitStatement(s: Statement, refMap: Map<string, string>): string {
   switch (s.kind) {
     case "let":
       return `let ${s.name} = ${emitExpr(s.init)}`;
@@ -115,6 +299,12 @@ function emitStatement(s: Statement): string {
       return `let ${s.name} = ${emitExpr(s.init)}`;
     case "assign":
       return `${s.name} = ${emitExpr(s.value)}`;
+    case "derefAssign": {
+      const targetName =
+        s.target.kind === "ident" ? s.target.name : emitExpr(s.target);
+      const pointee = refMap.get(targetName) ?? targetName;
+      return `${pointee} = ${emitExpr(s.value)}`;
+    }
     case "expr":
       return emitExpr(s.value);
   }

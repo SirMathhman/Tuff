@@ -82,6 +82,10 @@ test("string literal containing '&' survives", () => {
   expectValid('let msg = "a & b"; msg.length', 5, []);
 });
 
+test("let mut x = 0; let y = &mut x; *y = 1; x", () => {
+  expectValid("let mut x = 0; let y = &mut x; *y = 1; x", 1, []);
+});
+
 test("unbalanced parens", () => {
   expectInvalid("args.length (");
 });
