@@ -71,9 +71,14 @@ private class ParserImpl(private val tokens: List<Token>) {
             }
 
             is Token.Ref -> {
+                val mutable = if (peek() is Token.Mut) {
+                    advance(); true
+                } else {
+                    false
+                }
                 val ident = advance() as? Token.Identifier
                     ?: throw EvalError.UnexpectedToken(pos - 1, token.toString())
-                Ast.Ref(ident.name)
+                Ast.Ref(ident.name, mutable)
             }
 
             is Token.Star -> {
@@ -114,6 +119,19 @@ private class ParserImpl(private val tokens: List<Token>) {
                 expect(Token.Semicolon)
                 val body = parseBindingOrExpression()
                 return Ast.Assign(ident.name, value, body)
+            }
+            pos = saved
+        }
+        if (next is Token.Star) {
+            val saved = pos
+            advance() // consume '*'
+            val ref = parseFactor()
+            if (peek() is Token.Equals) {
+                advance() // consume '='
+                val value = parseExpression()
+                expect(Token.Semicolon)
+                val body = parseBindingOrExpression()
+                return Ast.DerefAssign(ref, value, body)
             }
             pos = saved
         }

@@ -77,6 +77,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate mutable reference write-through`() {
+        assertEquals(1, evaluate("let mut x = 0; let y = &mut x; *y = 1; x").getOrThrow())
+    }
+
+    @Test
     fun `evaluate unknown variable returns failure`() {
         assertIs<EvalError.UnknownVariable>(evaluate("abc").exceptionOrNull())
     }
