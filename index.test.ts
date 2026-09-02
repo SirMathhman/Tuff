@@ -35,12 +35,13 @@ export function expectValid(
 }
 
 export function expectInvalid(tuffSource: string) {
+  let threw = false;
   try {
-    const compiledTS = compileTuffToTypeScript(tuffSource);
-    throw new Error(
-      "Expected test to fail but compiled to: '" + compiledTS + "'",
-    );
-  } catch (e) {}
+    compileTuffToTypeScript(tuffSource);
+  } catch {
+    threw = true;
+  }
+  expect(threw).toBe(true);
 }
 
 test("empty source", () => {
@@ -49,4 +50,8 @@ test("empty source", () => {
 
 test("args.length", () => {
   expectValid("args.length", 1, []);
+});
+
+test("args.length + 1", () => {
+  expectValid("args.length + 1", 2, []);
 });
