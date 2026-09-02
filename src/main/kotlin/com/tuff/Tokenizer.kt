@@ -3,12 +3,14 @@ package com.tuff
 fun tokenize(input: String): Result<List<Token>> {
     if (input.isBlank()) return Result.failure(EvalError.EmptyExpression(0))
 
-    // Insert spaces around grouping delimiters so they become standalone tokens
+    // Insert spaces around delimiters and operators so they become standalone tokens
     val normalized = input
         .replace("(", " ( ")
         .replace(")", " ) ")
         .replace("{", " { ")
         .replace("}", " } ")
+        .replace(";", " ; ")
+        .replace("=", " = ")
     val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
 
     val result = mutableListOf<Token>()
@@ -22,15 +24,22 @@ fun tokenize(input: String): Result<List<Token>> {
             "+" -> result.add(Token.Op(OpKind.PLUS))
             "-" -> result.add(Token.Op(OpKind.MINUS))
             "*" -> result.add(Token.Op(OpKind.MULTIPLY))
+            "=" -> result.add(Token.Equals)
+            ";" -> result.add(Token.Semicolon)
+            "let" -> result.add(Token.Let)
             else -> {
-                val value = rawTokens[i].toIntOrNull()
-                    ?: return Result.failure(
-                        if (rawTokens[i].length == 1 && !rawTokens[i][0].isLetterOrDigit())
-                            EvalError.UnexpectedToken(i, rawTokens[i])
-                        else
-                            EvalError.NonNumericToken(i, rawTokens[i])
-                    )
-                result.add(Token.Number(value))
+                if (rawTokens[i].all { it.isLetterOrDigit() } && rawTokens[i].first().isLetter()) {
+                    result.add(Token.Identifier(rawTokens[i]))
+                } else {
+                    val value = rawTokens[i].toIntOrNull()
+                        ?: return Result.failure(
+                            if (rawTokens[i].length == 1 && !rawTokens[i][0].isLetterOrDigit())
+                                EvalError.UnexpectedToken(i, rawTokens[i])
+                            else
+                                EvalError.NonNumericToken(i, rawTokens[i])
+                        )
+                    result.add(Token.Number(value))
+                }
             }
         }
     }

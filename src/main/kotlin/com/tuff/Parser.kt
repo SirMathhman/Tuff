@@ -62,13 +62,32 @@ private class ParserImpl(private val tokens: List<Token>) {
                 expect(Token.RParen)
                 ast
             }
+
             is Token.LBrace -> {
-                val ast = parseExpression()
+                val ast = parseBlockBody()
                 expect(Token.RBrace)
                 ast
             }
-            is Token.Op, is Token.RParen, is Token.RBrace -> throw EvalError.UnexpectedToken(pos - 1, token.toString())
+
+            is Token.Identifier -> Ast.VarRef(token.name)
+            is Token.Op, is Token.RParen, is Token.RBrace, is Token.Let, is Token.Equals, is Token.Semicolon ->
+                throw EvalError.UnexpectedToken(pos - 1, token.toString())
         }
+    }
+
+    private fun parseBlockBody(): Ast {
+        val next = peek()
+        if (next is Token.Let) {
+            advance() // consume 'let'
+            val ident = advance() as? Token.Identifier
+                ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
+            expect(Token.Equals)
+            val value = parseExpression()
+            expect(Token.Semicolon)
+            val body = parseExpression()
+            return Ast.Let(ident.name, value, body)
+        }
+        return parseExpression()
     }
 
     private fun expect(expected: Token) {

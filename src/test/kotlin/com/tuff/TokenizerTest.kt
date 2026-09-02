@@ -37,8 +37,8 @@ class TokenizerTest {
     }
 
     @Test
-    fun `tokenize non-numeric returns failure`() {
-        assertIs<EvalError.NonNumericToken>(tokenize("a + 1").exceptionOrNull())
+    fun `tokenize invalid symbol returns failure`() {
+        assertIs<EvalError.UnexpectedToken>(tokenize("@ + 1").exceptionOrNull())
     }
 
     @Test

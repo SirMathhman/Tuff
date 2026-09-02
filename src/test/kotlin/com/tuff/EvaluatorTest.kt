@@ -52,8 +52,13 @@ class EvaluatorTest {
     }
 
     @Test
-    fun `evaluate non-numeric token returns failure`() {
-        assertIs<EvalError.NonNumericToken>(evaluate("abc").exceptionOrNull())
+    fun `evaluate let binding in braced block`() {
+        assertEquals(20, evaluate("{ let x = 2 + 3; x } * 4").getOrThrow())
+    }
+
+    @Test
+    fun `evaluate unknown variable returns failure`() {
+        assertIs<EvalError.UnexpectedToken>(evaluate("abc").exceptionOrNull())
     }
 
     @Test
