@@ -10,7 +10,9 @@ fun tokenize(input: String): Result<List<Token>> {
         val c = input[i]
 
         // Skip whitespace
-        if (c.isWhitespace()) { i++; continue }
+        if (c.isWhitespace()) {
+            i++; continue
+        }
 
         // Multi-char operators (try before single-char)
         if (c == '=' && i + 1 < input.length && input[i + 1] == '=') {
@@ -22,16 +24,46 @@ fun tokenize(input: String): Result<List<Token>> {
 
         // Single-char tokens
         when (c) {
-            '(' -> { result.add(Token.LParen); i++ }
-            ')' -> { result.add(Token.RParen); i++ }
-            '{' -> { result.add(Token.LBrace); i++ }
-            '}' -> { result.add(Token.RBrace); i++ }
-            '+' -> { result.add(Token.Op(OpKind.PLUS)); i++ }
-            '-' -> { result.add(Token.Op(OpKind.MINUS)); i++ }
-            '*' -> { result.add(Token.Star); i++ }
-            '=' -> { result.add(Token.Equals); i++ }
-            ';' -> { result.add(Token.Semicolon); i++ }
-            '&' -> { result.add(Token.Ref); i++ }
+            '(' -> {
+                result.add(Token.LParen); i++
+            }
+
+            ')' -> {
+                result.add(Token.RParen); i++
+            }
+
+            '{' -> {
+                result.add(Token.LBrace); i++
+            }
+
+            '}' -> {
+                result.add(Token.RBrace); i++
+            }
+
+            '+' -> {
+                result.add(Token.Op(OpKind.PLUS)); i++
+            }
+
+            '-' -> {
+                result.add(Token.Op(OpKind.MINUS)); i++
+            }
+
+            '*' -> {
+                result.add(Token.Star); i++
+            }
+
+            '=' -> {
+                result.add(Token.Equals); i++
+            }
+
+            ';' -> {
+                result.add(Token.Semicolon); i++
+            }
+
+            '&' -> {
+                result.add(Token.Ref); i++
+            }
+
             else -> {
                 if (!c.isLetterOrDigit()) {
                     return Result.failure(EvalError.UnexpectedToken(i, c.toString()))
