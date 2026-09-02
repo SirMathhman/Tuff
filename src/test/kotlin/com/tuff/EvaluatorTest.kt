@@ -126,4 +126,21 @@ class EvaluatorTest {
     fun `evaluate whitespace only returns failure`() {
         assertIs<EvalError.EmptyExpression>(evaluate("   ").exceptionOrNull())
     }
+
+    @Test
+    fun `evaluate variable declared in braced block does not leak`() {
+        assertIs<EvalError.UnknownVariable>(
+            evaluate("{ let x = 1; x } + x").exceptionOrNull()
+        )
+    }
+
+    @Test
+    fun `evaluate nested block can read outer variable`() {
+        assertEquals(5, evaluate("let x = 5; { x }").getOrThrow())
+    }
+
+    @Test
+    fun `evaluate nested block can assign outer mutable variable`() {
+        assertEquals(3, evaluate("let mut x = 1; { x = 3; } x").getOrThrow())
+    }
 }

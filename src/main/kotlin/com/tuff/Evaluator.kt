@@ -60,7 +60,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
                 Binding(ast.name, value.getOrThrow(), mutable = ast.mutable)
             }
             scope.bind(binding)
-            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
+            value
         }
 
         is Ast.Assign -> {
@@ -72,7 +72,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
             val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
             scope.assign(ast.name, value.getOrThrow())
-            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
+            value
         }
 
         is Ast.DerefAssign -> {
@@ -88,13 +88,22 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
             val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
             scope.assign(pointee, value.getOrThrow())
-            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
+            value
         }
 
-        is Ast.Sequence -> {
-            val first = evaluate(ast.first, scope)
-            if (first.isFailure) return first
-            evaluate(ast.second, scope)
+        is Ast.Block -> {
+            scope.enter()
+            var last: Result<Int> = Result.success(0)
+            for (stmt in ast.stmts) {
+                last = evaluate(stmt, scope)
+                if (last.isFailure) {
+                    scope.exit()
+                    return last
+                }
+            }
+            val result = ast.result?.let { evaluate(it, scope) } ?: last
+            scope.exit()
+            result
         }
     }
 }
@@ -103,7 +112,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
 private fun refName(ref: Ast): String = when (ref) {
     is Ast.VarRef -> ref.name
     is Ast.Deref -> refName(ref.inner)
-    is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Sequence -> ref.toString()
+    is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Block -> ref.toString()
 }
 
 /**
@@ -115,6 +124,6 @@ private fun resolvePointee(ref: Ast, scope: Scope): String? {
     return when (ref) {
         is Ast.VarRef -> scope.lookup(ref.name)?.refTarget
         is Ast.Deref -> resolvePointee(ref.inner, scope)
-        is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Sequence -> null
+        is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Block -> null
     }
 }
