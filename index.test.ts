@@ -74,6 +74,14 @@ test("reassign immutable variable is an error", () => {
   expectInvalid("let x = 0; x = args.length; x");
 });
 
+test("let x = 1; let y = &x; *y", () => {
+  expectValid("let x = 1; let y = &x; *y", 1, []);
+});
+
+test("string literal containing '&' survives", () => {
+  expectValid('let msg = "a & b"; msg.length', 5, []);
+});
+
 test("unbalanced parens", () => {
   expectInvalid("args.length (");
 });

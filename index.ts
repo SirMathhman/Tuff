@@ -42,39 +42,81 @@ export function compileTuffToTypeScript(tuffSource: string): CompileResult {
   return { ok: true, value: lines.join("\n") };
 }
 
+type Expr =
+  | { kind: "ident"; name: string }
+  | { kind: "lit"; value: string }
+  | { kind: "addressOf"; target: Expr }
+  | { kind: "deref"; target: Expr }
+  | { kind: "raw"; text: string };
+
 type Statement =
-  | { kind: "let"; name: string; init: string }
-  | { kind: "letMut"; name: string; init: string }
-  | { kind: "assign"; name: string; value: string }
-  | { kind: "expr"; text: string };
+  | { kind: "let"; name: string; init: Expr }
+  | { kind: "letMut"; name: string; init: Expr }
+  | { kind: "assign"; name: string; value: Expr }
+  | { kind: "expr"; value: Expr };
+
+function parseExpr(s: string): Expr {
+  const trimmed = s.trim();
+  if (trimmed.startsWith("&")) {
+    return { kind: "addressOf", target: parseExpr(trimmed.slice(1)) };
+  }
+  if (trimmed.startsWith("*")) {
+    return { kind: "deref", target: parseExpr(trimmed.slice(1)) };
+  }
+  if (/^\w+$/.test(trimmed)) {
+    return { kind: "ident", name: trimmed };
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return { kind: "lit", value: trimmed };
+  }
+  if (/^".*"$/.test(trimmed)) {
+    return { kind: "lit", value: trimmed };
+  }
+  return { kind: "raw", text: trimmed };
+}
+
+function emitExpr(e: Expr): string {
+  switch (e.kind) {
+    case "ident":
+      return e.name;
+    case "lit":
+      return e.value;
+    case "addressOf":
+      return emitExpr(e.target);
+    case "deref":
+      return emitExpr(e.target);
+    case "raw":
+      return e.text;
+  }
+}
 
 function parseStatement(s: string): Statement {
   const trimmed = s.trim();
   const letMutMatch = trimmed.match(/^let\s+mut\s+(\w+)\s*=\s*(.*)$/);
   if (letMutMatch) {
-    return { kind: "letMut", name: letMutMatch[1]!, init: letMutMatch[2]! };
+    return { kind: "letMut", name: letMutMatch[1]!, init: parseExpr(letMutMatch[2]!) };
   }
   const letMatch = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
   if (letMatch) {
-    return { kind: "let", name: letMatch[1]!, init: letMatch[2]! };
+    return { kind: "let", name: letMatch[1]!, init: parseExpr(letMatch[2]!) };
   }
   const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.*)$/);
   if (assignMatch) {
-    return { kind: "assign", name: assignMatch[1]!, value: assignMatch[2]! };
+    return { kind: "assign", name: assignMatch[1]!, value: parseExpr(assignMatch[2]!) };
   }
-  return { kind: "expr", text: trimmed };
+  return { kind: "expr", value: parseExpr(trimmed) };
 }
 
 function emitStatement(s: Statement): string {
   switch (s.kind) {
     case "let":
-      return `let ${s.name} = ${s.init}`;
+      return `let ${s.name} = ${emitExpr(s.init)}`;
     case "letMut":
-      return `let ${s.name} = ${s.init}`;
+      return `let ${s.name} = ${emitExpr(s.init)}`;
     case "assign":
-      return `${s.name} = ${s.value}`;
+      return `${s.name} = ${emitExpr(s.value)}`;
     case "expr":
-      return s.text;
+      return emitExpr(s.value);
   }
 }
 
