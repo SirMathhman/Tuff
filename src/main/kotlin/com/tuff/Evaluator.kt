@@ -13,17 +13,21 @@ fun evaluate(ast: Ast, env: Map<String, Int>): Result<Int> {
         is Ast.Number -> Result.success(ast.value)
         is Ast.VarRef -> env[ast.name]?.let { Result.success(it) }
             ?: Result.failure(EvalError.UnknownVariable(ast.name, 0))
+
         is Ast.BinaryOp -> {
             val left = evaluate(ast.left, env)
             if (left.isFailure) return left
             val right = evaluate(ast.right, env)
             if (right.isFailure) return right
-            Result.success(when (ast.op) {
-                OpKind.PLUS -> left.getOrThrow() + right.getOrThrow()
-                OpKind.MINUS -> left.getOrThrow() - right.getOrThrow()
-                OpKind.MULTIPLY -> left.getOrThrow() * right.getOrThrow()
-            })
+            Result.success(
+                when (ast.op) {
+                    OpKind.PLUS -> left.getOrThrow() + right.getOrThrow()
+                    OpKind.MINUS -> left.getOrThrow() - right.getOrThrow()
+                    OpKind.MULTIPLY -> left.getOrThrow() * right.getOrThrow()
+                }
+            )
         }
+
         is Ast.Let -> {
             val value = evaluate(ast.value, env)
             if (value.isFailure) return value

@@ -3,7 +3,7 @@ package com.tuff
 fun parse(tokens: List<Token>): Result<Ast> {
     val parser = ParserImpl(tokens)
     return try {
-        val ast = parser.parseExpression()
+        val ast = parser.parseTopLevel()
         if (!parser.isAtEnd) {
             Result.failure(EvalError.UnexpectedToken(parser.position, tokens[parser.position].toString()))
         } else {
@@ -75,6 +75,21 @@ private class ParserImpl(private val tokens: List<Token>) {
         }
     }
 
+    fun parseTopLevel(): Ast {
+        val next = peek()
+        if (next is Token.Let) {
+            advance() // consume 'let'
+            val ident = advance() as? Token.Identifier
+                ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
+            expect(Token.Equals)
+            val value = parseExpression()
+            expect(Token.Semicolon)
+            val body = parseTopLevel()
+            return Ast.Let(ident.name, value, body)
+        }
+        return parseExpression()
+    }
+
     private fun parseBlockBody(): Ast {
         val next = peek()
         if (next is Token.Let) {
@@ -84,7 +99,7 @@ private class ParserImpl(private val tokens: List<Token>) {
             expect(Token.Equals)
             val value = parseExpression()
             expect(Token.Semicolon)
-            val body = parseExpression()
+            val body = parseBlockBody()
             return Ast.Let(ident.name, value, body)
         }
         return parseExpression()

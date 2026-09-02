@@ -57,6 +57,16 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate multiple let bindings in braced block`() {
+        assertEquals(20, evaluate("{ let x = 2 + 3; let y = x; y } * 4").getOrThrow())
+    }
+
+    @Test
+    fun `evaluate top-level let with nested braced block`() {
+        assertEquals(20, evaluate("let z = { let x = 2 + 3; let y = x; y } * 4; z").getOrThrow())
+    }
+
+    @Test
     fun `evaluate unknown variable returns failure`() {
         assertIs<EvalError.UnknownVariable>(evaluate("abc").exceptionOrNull())
     }
