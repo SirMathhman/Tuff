@@ -18,4 +18,9 @@ class EvaluatorTest {
     fun `evaluate addition expression`() {
         assertEquals(3, evaluate("1 + 2"))
     }
+
+    @Test
+    fun `evaluate multi-term addition`() {
+        assertEquals(6, evaluate("1 + 2 + 3"))
+    }
 }
