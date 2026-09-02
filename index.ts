@@ -29,14 +29,23 @@ export function compileTuffToTypeScript(tuffSource: string): CompileResult {
     };
   }
 
-  const lines = statements.map((s) => `${emitStatement(parseStatement(s))};`);
-  lines.push(`process.exit(${emitStatement(parseStatement(finalExpr))});`);
+  const parsedStatements = statements.map(parseStatement);
+  const parsedFinal = parseStatement(finalExpr);
+
+  const typeError = checkMutability(parsedStatements, parsedFinal);
+  if (typeError) {
+    return { ok: false, error: typeError };
+  }
+
+  const lines = parsedStatements.map((s) => `${emitStatement(s)};`);
+  lines.push(`process.exit(${emitStatement(parsedFinal)});`);
   return { ok: true, value: lines.join("\n") };
 }
 
 type Statement =
   | { kind: "let"; name: string; init: string }
   | { kind: "letMut"; name: string; init: string }
+  | { kind: "assign"; name: string; value: string }
   | { kind: "expr"; text: string };
 
 function parseStatement(s: string): Statement {
@@ -49,6 +58,10 @@ function parseStatement(s: string): Statement {
   if (letMatch) {
     return { kind: "let", name: letMatch[1]!, init: letMatch[2]! };
   }
+  const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.*)$/);
+  if (assignMatch) {
+    return { kind: "assign", name: assignMatch[1]!, value: assignMatch[2]! };
+  }
   return { kind: "expr", text: trimmed };
 }
 
@@ -58,9 +71,47 @@ function emitStatement(s: Statement): string {
       return `let ${s.name} = ${s.init}`;
     case "letMut":
       return `let ${s.name} = ${s.init}`;
+    case "assign":
+      return `${s.name} = ${s.value}`;
     case "expr":
       return s.text;
   }
+}
+
+function checkMutability(
+  statements: Statement[],
+  finalExpr: Statement,
+): CompileError | null {
+  const immutable = new Set<string>();
+  const mutable = new Set<string>();
+
+  for (const stmt of statements) {
+    if (stmt.kind === "let") immutable.add(stmt.name);
+    else if (stmt.kind === "letMut") mutable.add(stmt.name);
+    else if (stmt.kind === "assign") {
+      if (immutable.has(stmt.name) && !mutable.has(stmt.name)) {
+        return {
+          kind: "type",
+          location: { line: 1, column: 1 },
+          message: `Cannot assign to immutable variable '${stmt.name}'`,
+          fix: `Use 'let mut ${stmt.name}' to declare a mutable variable`,
+        };
+      }
+    }
+  }
+
+  if (finalExpr.kind === "assign") {
+    if (immutable.has(finalExpr.name) && !mutable.has(finalExpr.name)) {
+      return {
+        kind: "type",
+        location: { line: 1, column: 1 },
+        message: `Cannot assign to immutable variable '${finalExpr.name}'`,
+        fix: `Use 'let mut ${finalExpr.name}' to declare a mutable variable`,
+      };
+    }
+  }
+
+  return null;
 }
 
 function findUnbalancedParen(

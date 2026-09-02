@@ -70,6 +70,10 @@ test("string literal containing 'let mut' survives", () => {
   expectValid('let msg = "let mut x"; msg.length', 9, []);
 });
 
+test("reassign immutable variable is an error", () => {
+  expectInvalid("let x = 0; x = args.length; x");
+});
+
 test("unbalanced parens", () => {
   expectInvalid("args.length (");
 });
