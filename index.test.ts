@@ -17,8 +17,11 @@ export function expectValid(
   expectedExitCode: number,
   args: string[] = [],
 ) {
-  const compiledTS = compileTuffToTypeScript(PRELUDE + tuffSource);
-  const compiledJS = ts.transpile(compiledTS);
+  const result = compileTuffToTypeScript(PRELUDE + tuffSource);
+  if (!result.ok) {
+    throw new Error("Compilation failed: " + result.error.message);
+  }
+  const compiledJS = ts.transpile(result.value);
 
   let actualExitCode = 0;
   let process = {
@@ -35,13 +38,8 @@ export function expectValid(
 }
 
 export function expectInvalid(tuffSource: string) {
-  let threw = false;
-  try {
-    compileTuffToTypeScript(tuffSource);
-  } catch {
-    threw = true;
-  }
-  expect(threw).toBe(true);
+  const result = compileTuffToTypeScript(PRELUDE + tuffSource);
+  expect(result.ok).toBe(false);
 }
 
 test("empty source", () => {
@@ -58,4 +56,20 @@ test("args.length + 1", () => {
 
 test("let x = args; x.length", () => {
   expectValid("let x = args; x.length", 1, []);
+});
+
+test("let x = args; let y = x; y.length", () => {
+  expectValid("let x = args; let y = x; y.length", 1, []);
+});
+
+test("let mut x = 0; x = args.length; x", () => {
+  expectValid("let mut x = 0; x = args.length; x", 1, []);
+});
+
+test("string literal containing 'let mut' survives", () => {
+  expectValid('let msg = "let mut x"; msg.length', 9, []);
+});
+
+test("unbalanced parens", () => {
+  expectInvalid("args.length (");
 });
