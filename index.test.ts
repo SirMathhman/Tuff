@@ -55,3 +55,7 @@ test("args.length", () => {
 test("args.length + 1", () => {
   expectValid("args.length + 1", 2, []);
 });
+
+test("let x = args; x.length", () => {
+  expectValid("let x = args; x.length", 1, []);
+});
