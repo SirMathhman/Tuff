@@ -29,8 +29,15 @@ export function compileTuffToTypeScript(tuffSource: string): CompileResult {
     };
   }
 
-  const parsedStatements = statements.map(parseStatement);
-  const parsedFinal = parseStatement(finalExpr);
+  const parsedStatements: Statement[] = [];
+  for (const s of statements) {
+    const result = parseStatement(s);
+    if (isStatementError(result)) return { ok: false, error: result };
+    parsedStatements.push(result);
+  }
+  const parsedFinalResult = parseStatement(finalExpr);
+  if (isStatementError(parsedFinalResult)) return { ok: false, error: parsedFinalResult };
+  const parsedFinal = parsedFinalResult;
 
   const typeError = checkMutability(parsedStatements, parsedFinal);
   if (typeError) {
@@ -57,6 +64,7 @@ type Statement =
   | { kind: "letMut"; name: string; init: Expr }
   | { kind: "assign"; name: string; value: Expr }
   | { kind: "derefAssign"; target: Expr; value: Expr }
+  | { kind: "block"; statements: Statement[] }
   | { kind: "expr"; value: Expr };
 
 interface Parser {
@@ -64,23 +72,35 @@ interface Parser {
   pos: number;
 }
 
-function parseExpr(s: string): Expr {
+type ParseResult = Expr | CompileError;
+
+type StatementResult = Statement | CompileError;
+
+function parseExpr(s: string): ParseResult {
   const p: Parser = { src: s.trim(), pos: 0 };
   const expr = parseBinary(p);
+  if (isCompileError(expr)) return expr;
   skipWs(p);
   if (p.pos < p.src.length) {
-    throw new Error(`Unexpected trailing input at position ${p.pos}`);
+    return { kind: "parse", location: { line: 1, column: p.pos }, message: `Unexpected trailing input at position ${p.pos}` };
   }
   return expr;
 }
 
-function parseBinary(p: Parser): Expr {
-  let left = parseUnary(p);
+function isCompileError(v: ParseResult): v is CompileError {
+  return (v as CompileError).kind === "parse" || (v as CompileError).kind === "type" || (v as CompileError).kind === "emit";
+}
+
+function parseBinary(p: Parser): ParseResult {
+  const leftResult = parseUnary(p);
+  if (isCompileError(leftResult)) return leftResult;
+  let left: Expr = leftResult;
   for (;;) {
     const op = tryBinaryOp(p);
     if (!op) break;
-    const right = parseUnary(p);
-    left = { kind: "binary", op, left, right };
+    const rightResult = parseUnary(p);
+    if (isCompileError(rightResult)) return rightResult;
+    left = { kind: "binary", op, left, right: rightResult };
   }
   return left;
 }
@@ -131,25 +151,33 @@ function tryBinaryOp(p: Parser): string | null {
   return null;
 }
 
-function parseUnary(p: Parser): Expr {
+function parseUnary(p: Parser): ParseResult {
   skipWs(p);
   if (p.src.startsWith("&mut ", p.pos)) {
     p.pos += 5;
-    return { kind: "addressOf", target: parseUnary(p) };
+    const target = parseUnary(p);
+    if (isCompileError(target)) return target;
+    return { kind: "addressOf", target };
   }
   if (p.src[p.pos] === "&") {
     p.pos += 1;
-    return { kind: "addressOf", target: parseUnary(p) };
+    const target = parseUnary(p);
+    if (isCompileError(target)) return target;
+    return { kind: "addressOf", target };
   }
   if (p.src[p.pos] === "*") {
     p.pos += 1;
-    return { kind: "deref", target: parseUnary(p) };
+    const target = parseUnary(p);
+    if (isCompileError(target)) return target;
+    return { kind: "deref", target };
   }
   return parsePostfix(p);
 }
 
-function parsePostfix(p: Parser): Expr {
-  let expr = parsePrimary(p);
+function parsePostfix(p: Parser): ParseResult {
+  const primaryResult = parsePrimary(p);
+  if (isCompileError(primaryResult)) return primaryResult;
+  let expr: Expr = primaryResult;
   for (;;) {
     skipWs(p);
     if (p.src[p.pos] === ".") {
@@ -161,15 +189,19 @@ function parsePostfix(p: Parser): Expr {
       const args: Expr[] = [];
       skipWs(p);
       if (p.src[p.pos] !== ")") {
-        args.push(parseBinary(p));
+        const argResult = parseBinary(p);
+        if (isCompileError(argResult)) return argResult;
+        args.push(argResult);
         while (p.src[p.pos] === ",") {
           p.pos += 1;
           skipWs(p);
-          args.push(parseBinary(p));
+          const argResult = parseBinary(p);
+          if (isCompileError(argResult)) return argResult;
+          args.push(argResult);
         }
       }
       skipWs(p);
-      if (p.src[p.pos] !== ")") throw new Error("Expected ')'");
+      if (p.src[p.pos] !== ")") return { kind: "parse", location: { line: 1, column: p.pos }, message: "Expected ')'" };
       p.pos += 1;
       expr = { kind: "call", callee: expr, args };
     } else {
@@ -179,20 +211,21 @@ function parsePostfix(p: Parser): Expr {
   return expr;
 }
 
-function parsePrimary(p: Parser): Expr {
+function parsePrimary(p: Parser): ParseResult {
   skipWs(p);
   const ch = p.src[p.pos]!;
   if (ch === "(") {
     p.pos += 1;
     const expr = parseBinary(p);
+    if (isCompileError(expr)) return expr;
     skipWs(p);
-    if (p.src[p.pos] !== ")") throw new Error("Expected ')'");
+    if (p.src[p.pos] !== ")") return { kind: "parse", location: { line: 1, column: p.pos }, message: "Expected ')'" };
     p.pos += 1;
     return expr;
   }
   if (ch === '"') {
     const end = p.src.indexOf('"', p.pos + 1);
-    if (end === -1) throw new Error("Unterminated string literal");
+    if (end === -1) return { kind: "parse", location: { line: 1, column: p.pos }, message: "Unterminated string literal" };
     const value = p.src.slice(p.pos, end + 1);
     p.pos = end + 1;
     return { kind: "lit", value };
@@ -208,7 +241,7 @@ function parsePrimary(p: Parser): Expr {
     const name = parseIdent(p);
     return { kind: "ident", name };
   }
-  throw new Error(`Unexpected character '${ch}' at position ${p.pos}`);
+  return { kind: "parse", location: { line: 1, column: p.pos }, message: `Unexpected character '${ch}'` };
 }
 
 function parseIdent(p: Parser): string {
@@ -242,37 +275,53 @@ function emitExpr(e: Expr): string {
   }
 }
 
-function parseStatement(s: string): Statement {
+function parseStatement(s: string): StatementResult {
   const trimmed = s.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner === "") return { kind: "block", statements: [] };
+    const parts = splitTopLevel(inner, ";")
+      .map((p) => p.trim())
+      .filter((p) => p !== "");
+    const stmts: Statement[] = [];
+    for (const part of parts) {
+      const r = parseStatement(part);
+      if (isStatementError(r)) return r;
+      stmts.push(r);
+    }
+    return { kind: "block", statements: stmts };
+  }
   const letMutMatch = trimmed.match(/^let\s+mut\s+(\w+)\s*=\s*(.*)$/);
   if (letMutMatch) {
-    return {
-      kind: "letMut",
-      name: letMutMatch[1]!,
-      init: parseExpr(letMutMatch[2]!),
-    };
+    const init = parseExpr(letMutMatch[2]!);
+    if (isCompileError(init)) return init;
+    return { kind: "letMut", name: letMutMatch[1]!, init };
   }
   const letMatch = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
   if (letMatch) {
-    return { kind: "let", name: letMatch[1]!, init: parseExpr(letMatch[2]!) };
+    const init = parseExpr(letMatch[2]!);
+    if (isCompileError(init)) return init;
+    return { kind: "let", name: letMatch[1]!, init };
   }
   const derefAssignMatch = trimmed.match(/^\*(\w+)\s*=\s*(.*)$/);
   if (derefAssignMatch) {
-    return {
-      kind: "derefAssign",
-      target: { kind: "ident", name: derefAssignMatch[1]! },
-      value: parseExpr(derefAssignMatch[2]!),
-    };
+    const value = parseExpr(derefAssignMatch[2]!);
+    if (isCompileError(value)) return value;
+    return { kind: "derefAssign", target: { kind: "ident", name: derefAssignMatch[1]! }, value };
   }
   const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.*)$/);
   if (assignMatch) {
-    return {
-      kind: "assign",
-      name: assignMatch[1]!,
-      value: parseExpr(assignMatch[2]!),
-    };
+    const value = parseExpr(assignMatch[2]!);
+    if (isCompileError(value)) return value;
+    return { kind: "assign", name: assignMatch[1]!, value };
   }
-  return { kind: "expr", value: parseExpr(trimmed) };
+  const expr = parseExpr(trimmed);
+  if (isCompileError(expr)) return expr;
+  return { kind: "expr", value: expr };
+}
+
+function isStatementError(v: StatementResult): v is CompileError {
+  return (v as CompileError).kind === "parse" || (v as CompileError).kind === "type" || (v as CompileError).kind === "emit";
 }
 
 function buildRefMap(statements: Statement[]): Map<string, string> {
@@ -286,6 +335,8 @@ function buildRefMap(statements: Statement[]): Map<string, string> {
       if (target.kind === "ident") {
         refMap.set(stmt.name, target.name);
       }
+    } else if (stmt.kind === "block") {
+      for (const [k, v] of buildRefMap(stmt.statements)) refMap.set(k, v);
     }
   }
   return refMap;
@@ -304,6 +355,12 @@ function emitStatement(s: Statement, refMap: Map<string, string>): string {
         s.target.kind === "ident" ? s.target.name : emitExpr(s.target);
       const pointee = refMap.get(targetName) ?? targetName;
       return `${pointee} = ${emitExpr(s.value)}`;
+    }
+    case "block": {
+      const inner = s.statements
+        .map((st) => emitStatement(st, refMap))
+        .join("; ");
+      return `{ ${inner} }`;
     }
     case "expr":
       return emitExpr(s.value);
@@ -329,6 +386,12 @@ function checkMutability(
           fix: `Use 'let mut ${stmt.name}' to declare a mutable variable`,
         };
       }
+    } else if (stmt.kind === "block") {
+      const err = checkMutability(
+        stmt.statements,
+        stmt.statements[stmt.statements.length - 1]!,
+      );
+      if (err) return err;
     }
   }
 
@@ -387,6 +450,10 @@ function splitTopLevel(source: string, delimiter: string): string[] {
     else if (ch === ")" || ch === "]" || ch === "}") depth--;
 
     if (ch === delimiter && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else if (ch === "}" && depth === 0) {
+      current += ch;
       parts.push(current);
       current = "";
     } else {
