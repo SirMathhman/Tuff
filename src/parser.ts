@@ -1,25 +1,49 @@
 import type { Expr, Statement } from "./ast";
 import type { CompileError } from "./errors";
 import { isCompileError } from "./errors";
+import type { Token, Loc } from "./lexer";
 
 export type ParseResult = Expr | CompileError;
 export type StatementResult = Statement | CompileError;
 
 export interface Parser {
-  src: string;
+  tokens: Token[];
   pos: number;
 }
 
-export function parseExpr(s: string): ParseResult {
-  const p: Parser = { src: s.trim(), pos: 0 };
+function peek(p: Parser): Token {
+  return p.tokens[p.pos]!;
+}
+
+function advance(p: Parser): Token {
+  const t = p.tokens[p.pos]!;
+  p.pos++;
+  return t;
+}
+
+function expectPunct(p: Parser, value: string): CompileError | null {
+  const t = peek(p);
+  if (t.kind === "punct" && t.value === value) {
+    advance(p);
+    return null;
+  }
+  return {
+    kind: "parse",
+    location: t.loc,
+    message: `Expected '${value}' but got '${t.kind === "punct" ? t.value : t.kind}'`,
+  };
+}
+
+export function parseExpr(tokens: Token[]): ParseResult {
+  const p: Parser = { tokens, pos: 0 };
   const expr = parseLogical(p);
   if (isCompileError(expr)) return expr;
-  skipWs(p);
-  if (p.pos < p.src.length) {
+  const t = peek(p);
+  if (t.kind !== "eof") {
     return {
       kind: "parse",
-      location: { line: 1, column: p.pos },
-      message: `Unexpected trailing input at position ${p.pos}`,
+      location: t.loc,
+      message: `Unexpected trailing token '${t.kind === "punct" ? t.value : t.kind}'`,
     };
   }
   return expr;
@@ -30,100 +54,55 @@ function parseLogical(p: Parser): ParseResult {
   if (isCompileError(leftResult)) return leftResult;
   let left: Expr = leftResult;
   for (;;) {
-    skipWs(p);
-    const rest = p.src.slice(p.pos);
-    let op: string | null = null;
-    if (rest.startsWith("||")) {
-      p.pos += 2;
-      op = "||";
-    } else if (rest.startsWith("&&")) {
-      p.pos += 2;
-      op = "&&";
+    const t = peek(p);
+    if (t.kind === "punct" && (t.value === "||" || t.value === "&&")) {
+      advance(p);
+      const rightResult = parseBinary(p);
+      if (isCompileError(rightResult)) return rightResult;
+      left = { kind: "binary", op: t.value, left, right: rightResult };
+    } else {
+      break;
     }
-    if (!op) break;
-    const rightResult = parseBinary(p);
-    if (isCompileError(rightResult)) return rightResult;
-    left = { kind: "binary", op, left, right: rightResult };
   }
   return left;
 }
+
+const BINARY_OPS = new Set(["==", "!=", "<=", ">=", "+", "-", "*", "/", "<", ">"]);
 
 function parseBinary(p: Parser): ParseResult {
   const leftResult = parseUnary(p);
   if (isCompileError(leftResult)) return leftResult;
   let left: Expr = leftResult;
   for (;;) {
-    const op = tryBinaryOp(p);
-    if (!op) break;
-    const rightResult = parseUnary(p);
-    if (isCompileError(rightResult)) return rightResult;
-    left = { kind: "binary", op, left, right: rightResult };
+    const t = peek(p);
+    if (t.kind === "punct" && BINARY_OPS.has(t.value)) {
+      advance(p);
+      const rightResult = parseUnary(p);
+      if (isCompileError(rightResult)) return rightResult;
+      left = { kind: "binary", op: t.value, left, right: rightResult };
+    } else {
+      break;
+    }
   }
   return left;
 }
 
-function tryBinaryOp(p: Parser): string | null {
-  skipWs(p);
-  const rest = p.src.slice(p.pos);
-  if (rest.startsWith("==")) {
-    p.pos += 2;
-    return "==";
-  }
-  if (rest.startsWith("!=")) {
-    p.pos += 2;
-    return "!=";
-  }
-  if (rest.startsWith("<=")) {
-    p.pos += 2;
-    return "<=";
-  }
-  if (rest.startsWith(">=")) {
-    p.pos += 2;
-    return ">=";
-  }
-  if (rest.startsWith("+")) {
-    p.pos += 1;
-    return "+";
-  }
-  if (rest.startsWith("-")) {
-    p.pos += 1;
-    return "-";
-  }
-  if (rest.startsWith("*")) {
-    p.pos += 1;
-    return "*";
-  }
-  if (rest.startsWith("/")) {
-    p.pos += 1;
-    return "/";
-  }
-  if (rest.startsWith("<")) {
-    p.pos += 1;
-    return "<";
-  }
-  if (rest.startsWith(">")) {
-    p.pos += 1;
-    return ">";
-  }
-  return null;
-}
-
 function parseUnary(p: Parser): ParseResult {
-  skipWs(p);
-  if (p.src.startsWith("&mut ", p.pos)) {
-    p.pos += 5;
+  const t = peek(p);
+  if (t.kind === "punct" && t.value === "&mut") {
+    advance(p);
     const target = parseUnary(p);
     if (isCompileError(target)) return target;
     return { kind: "addressOf", target };
   }
-  if (p.src[p.pos] === "&") {
-    p.pos += 1;
+  if (t.kind === "punct" && t.value === "&") {
+    advance(p);
     const target = parseUnary(p);
     if (isCompileError(target)) return target;
     return { kind: "addressOf", target };
   }
-  if (p.src[p.pos] === "*") {
-    p.pos += 1;
+  if (t.kind === "punct" && t.value === "*") {
+    advance(p);
     const target = parseUnary(p);
     if (isCompileError(target)) return target;
     return { kind: "deref", target };
@@ -136,35 +115,31 @@ function parsePostfix(p: Parser): ParseResult {
   if (isCompileError(primaryResult)) return primaryResult;
   let expr: Expr = primaryResult;
   for (;;) {
-    skipWs(p);
-    if (p.src[p.pos] === ".") {
-      p.pos += 1;
-      const property = parseIdent(p);
-      expr = { kind: "member", object: expr, property };
-    } else if (p.src[p.pos] === "(") {
-      p.pos += 1;
+    const t = peek(p);
+    if (t.kind === "punct" && t.value === ".") {
+      advance(p);
+      const nameTok = peek(p);
+      if (nameTok.kind !== "ident") {
+        return { kind: "parse", location: nameTok.loc, message: "Expected identifier after '.'" };
+      }
+      advance(p);
+      expr = { kind: "member", object: expr, property: nameTok.name };
+    } else if (t.kind === "punct" && t.value === "(") {
+      advance(p);
       const args: Expr[] = [];
-      skipWs(p);
-      if (p.src[p.pos] !== ")") {
+      if (peek(p).kind !== "punct" || peek(p).value !== ")") {
         const argResult = parseLogical(p);
         if (isCompileError(argResult)) return argResult;
         args.push(argResult);
-        while (p.src[p.pos] === ",") {
-          p.pos += 1;
-          skipWs(p);
+        while (peek(p).kind === "punct" && peek(p).value === ",") {
+          advance(p);
           const argResult = parseLogical(p);
           if (isCompileError(argResult)) return argResult;
           args.push(argResult);
         }
       }
-      skipWs(p);
-      if (p.src[p.pos] !== ")")
-        return {
-          kind: "parse",
-          location: { line: 1, column: p.pos },
-          message: "Expected ')'",
-        };
-      p.pos += 1;
+      const err = expectPunct(p, ")");
+      if (err) return err;
       expr = { kind: "call", callee: expr, args };
     } else {
       break;
@@ -174,166 +149,152 @@ function parsePostfix(p: Parser): ParseResult {
 }
 
 function parsePrimary(p: Parser): ParseResult {
-  skipWs(p);
-  const ch = p.src[p.pos]!;
-  if (ch === "(") {
-    p.pos += 1;
+  const t = peek(p);
+  if (t.kind === "punct" && t.value === "(") {
+    advance(p);
     const expr = parseLogical(p);
     if (isCompileError(expr)) return expr;
-    skipWs(p);
-    if (p.src[p.pos] !== ")")
-      return {
-        kind: "parse",
-        location: { line: 1, column: p.pos },
-        message: "Expected ')'",
-      };
-    p.pos += 1;
+    const err = expectPunct(p, ")");
+    if (err) return err;
     return expr;
   }
-  if (ch === '"') {
-    const end = p.src.indexOf('"', p.pos + 1);
-    if (end === -1)
-      return {
-        kind: "parse",
-        location: { line: 1, column: p.pos },
-        message: "Unterminated string literal",
-      };
-    const value = p.src.slice(p.pos, end + 1);
-    p.pos = end + 1;
-    return { kind: "lit", value };
+  if (t.kind === "string") {
+    advance(p);
+    return { kind: "lit", value: t.value };
   }
-  if (/[0-9]/.test(ch)) {
-    let end = p.pos;
-    while (end < p.src.length && /[0-9]/.test(p.src[end]!)) end++;
-    const value = p.src.slice(p.pos, end);
-    p.pos = end;
-    return { kind: "lit", value };
+  if (t.kind === "number") {
+    advance(p);
+    return { kind: "lit", value: t.value };
   }
-  if (/[a-zA-Z_]/.test(ch)) {
-    const name = parseIdent(p);
-    return { kind: "ident", name };
+  if (t.kind === "ident") {
+    advance(p);
+    return { kind: "ident", name: t.name };
+  }
+  if (t.kind === "keyword" && (t.value === "true" || t.value === "false")) {
+    advance(p);
+    return { kind: "ident", name: t.value };
   }
   return {
     kind: "parse",
-    location: { line: 1, column: p.pos },
-    message: `Unexpected character '${ch}'`,
+    location: t.loc,
+    message: `Unexpected token '${t.kind === "punct" ? t.value : t.kind}'`,
   };
 }
 
-function parseIdent(p: Parser): string {
-  let end = p.pos;
-  while (end < p.src.length && /[\w]/.test(p.src[end]!)) end++;
-  const name = p.src.slice(p.pos, end);
-  p.pos = end;
-  return name;
-}
+export function parseStatement(p: Parser): StatementResult {
+  const t = peek(p);
 
-function skipWs(p: Parser) {
-  while (p.pos < p.src.length && /\s/.test(p.src[p.pos]!)) p.pos++;
-}
-
-export function parseStatement(s: string): StatementResult {
-  const trimmed = s.trim();
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    const inner = trimmed.slice(1, -1).trim();
-    if (inner === "") return { kind: "block", statements: [] };
-    const parts = splitTopLevel(inner, ";")
-      .map((p) => p.trim())
-      .filter((p) => p !== "");
+  // Block
+  if (t.kind === "punct" && t.value === "{") {
+    advance(p);
     const stmts: Statement[] = [];
-    for (const part of parts) {
-      const r = parseStatement(part);
+    while (peek(p).kind !== "punct" || peek(p).value !== "}") {
+      if (peek(p).kind === "eof") {
+        return { kind: "parse", location: peek(p).loc, message: "Unexpected end of input, expected '}'" };
+      }
+      const r = parseStatement(p);
       if (isCompileError(r)) return r;
       stmts.push(r);
+      // Consume optional semicolon
+      if (peek(p).kind === "punct" && peek(p).value === ";") {
+        advance(p);
+      }
     }
+    const err = expectPunct(p, "}");
+    if (err) return err;
     return { kind: "block", statements: stmts };
   }
-  const letMutMatch = trimmed.match(/^let\s+mut\s+(\w+)\s*=\s*(.*)$/);
-  if (letMutMatch) {
-    const init = parseExpr(letMutMatch[2]!);
+
+  // let mut
+  if (t.kind === "keyword" && t.value === "let") {
+    advance(p);
+    const next = peek(p);
+    if (next.kind === "keyword" && next.value === "mut") {
+      advance(p);
+      const nameTok = peek(p);
+      if (nameTok.kind !== "ident") {
+        return { kind: "parse", location: nameTok.loc, message: "Expected identifier after 'let mut'" };
+      }
+      advance(p);
+      const err = expectPunct(p, "=");
+      if (err) return err;
+      const init = parseLogical(p);
+      if (isCompileError(init)) return init;
+      return { kind: "letMut", name: nameTok.name, init };
+    }
+    // let
+    const nameTok = peek(p);
+    if (nameTok.kind !== "ident") {
+      return { kind: "parse", location: nameTok.loc, message: "Expected identifier after 'let'" };
+    }
+    advance(p);
+    const err = expectPunct(p, "=");
+    if (err) return err;
+    const init = parseLogical(p);
     if (isCompileError(init)) return init;
-    return { kind: "letMut", name: letMutMatch[1]!, init };
+    return { kind: "let", name: nameTok.name, init };
   }
-  const letMatch = trimmed.match(/^let\s+(\w+)\s*=\s*(.*)$/);
-  if (letMatch) {
-    const init = parseExpr(letMatch[2]!);
-    if (isCompileError(init)) return init;
-    return { kind: "let", name: letMatch[1]!, init };
+
+  // *x = value (derefAssign)
+  if (t.kind === "punct" && t.value === "*") {
+    const save = p.pos;
+    advance(p);
+    const nameTok = peek(p);
+    if (nameTok.kind === "ident") {
+      advance(p);
+      const eq = peek(p);
+      if (eq.kind === "punct" && eq.value === "=") {
+        advance(p);
+        const value = parseLogical(p);
+        if (isCompileError(value)) return value;
+        return { kind: "derefAssign", target: { kind: "ident", name: nameTok.name }, value };
+      }
+    }
+    p.pos = save;
   }
-  const derefAssignMatch = trimmed.match(/^\*(\w+)\s*=\s*(.*)$/);
-  if (derefAssignMatch) {
-    const value = parseExpr(derefAssignMatch[2]!);
-    if (isCompileError(value)) return value;
-    return {
-      kind: "derefAssign",
-      target: { kind: "ident", name: derefAssignMatch[1]! },
-      value,
-    };
+
+  // x = value (assign)
+  if (t.kind === "ident") {
+    const save = p.pos;
+    advance(p);
+    const eq = peek(p);
+    if (eq.kind === "punct" && eq.value === "=") {
+      advance(p);
+      const value = parseLogical(p);
+      if (isCompileError(value)) return value;
+      return { kind: "assign", name: t.name, value };
+    }
+    p.pos = save;
   }
-  const assignMatch = trimmed.match(/^(\w+)\s*=\s*(.*)$/);
-  if (assignMatch) {
-    const value = parseExpr(assignMatch[2]!);
-    if (isCompileError(value)) return value;
-    return { kind: "assign", name: assignMatch[1]!, value };
-  }
-  const expr = parseExpr(trimmed);
+
+  // Expression statement
+  const expr = parseLogical(p);
   if (isCompileError(expr)) return expr;
   return { kind: "expr", value: expr };
 }
 
-export function splitStatements(source: string): {
-  statements: string[];
-  finalExpr: string;
-} {
-  const parts = splitTopLevel(source, ";");
-  const statements = parts
-    .slice(0, -1)
-    .map((s) => s.trim())
-    .filter((s) => s !== "");
-  const finalExpr = parts[parts.length - 1]!.trim();
-  return { statements, finalExpr };
-}
+export function parseProgram(tokens: Token[]): {
+  statements: Statement[];
+  finalExpr: Statement;
+} | CompileError {
+  const p: Parser = { tokens, pos: 0 };
+  const statements: Statement[] = [];
 
-export function splitTopLevel(source: string, delimiter: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let current = "";
-
-  for (const ch of source) {
-    if (ch === "(" || ch === "[" || ch === "{") depth++;
-    else if (ch === ")" || ch === "]" || ch === "}") depth--;
-
-    if (ch === delimiter && depth === 0) {
-      parts.push(current);
-      current = "";
-    } else if (ch === "}" && depth === 0) {
-      current += ch;
-      parts.push(current);
-      current = "";
-    } else {
-      current += ch;
+  while (peek(p).kind !== "eof") {
+    const r = parseStatement(p);
+    if (isCompileError(r)) return r;
+    statements.push(r);
+    if (peek(p).kind === "punct" && peek(p).value === ";") {
+      advance(p);
     }
   }
-  parts.push(current);
-  return parts;
-}
 
-export function findUnbalancedParen(
-  s: string,
-): { line: number; column: number } | null {
-  let depth = 0;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i]!;
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    if (depth < 0) {
-      return { line: 1, column: i + 1 };
-    }
+  if (statements.length === 0) {
+    return { statements: [], finalExpr: { kind: "expr", value: { kind: "lit", value: "0" } } };
   }
-  if (depth !== 0) {
-    return { line: 1, column: s.length };
-  }
-  return null;
+
+  const finalExpr = statements[statements.length - 1]!;
+  return { statements: statements.slice(0, -1), finalExpr };
 }
 
 export function extractExpression(source: string): string {

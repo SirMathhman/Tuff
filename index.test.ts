@@ -98,6 +98,10 @@ test("let x = true; let y = false; x || y", () => {
   expectValid("let x = true; let y = false; x || y", 1, []);
 });
 
+test("let x = 1; let y = 2; x == y", () => {
+  expectValid("let x = 1; let y = 2; x == y", 0, []);
+});
+
 test("unbalanced parens", () => {
   expectInvalid("args.length (");
 });
