@@ -28,4 +28,9 @@ class EvaluatorTest {
     fun `evaluate mixed addition and subtraction`() {
         assertEquals(1, evaluate("2 + 3 - 4"))
     }
+
+    @Test
+    fun `evaluate multiplication has precedence over addition`() {
+        assertEquals(10, evaluate("2 * 3 + 4"))
+    }
 }
