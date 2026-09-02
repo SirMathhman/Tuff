@@ -67,7 +67,15 @@ private class ParserImpl(private val tokens: List<Token>) {
             is Token.LBrace -> {
                 val ast = parseBindingOrExpression()
                 expect(Token.RBrace)
-                ast
+                val next = peek()
+                if (next is Token.Number || next is Token.Identifier ||
+                    next is Token.LParen || next is Token.LBrace ||
+                    next is Token.Ref) {
+                    val right = parseExpression()
+                    Ast.Sequence(ast, right)
+                } else {
+                    ast
+                }
             }
 
             is Token.Ref -> {
@@ -107,7 +115,8 @@ private class ParserImpl(private val tokens: List<Token>) {
             expect(Token.Equals)
             val value = parseExpression()
             expect(Token.Semicolon)
-            val body = parseBindingOrExpression()
+            val body = if (peek() is Token.RBrace || peek() is Token.RParen) null
+                       else parseBindingOrExpression()
             return Ast.Let(ident.name, value, body, mutable)
         }
         if (next is Token.Identifier) {
@@ -117,7 +126,8 @@ private class ParserImpl(private val tokens: List<Token>) {
                 advance() // consume '='
                 val value = parseExpression()
                 expect(Token.Semicolon)
-                val body = parseBindingOrExpression()
+                val body = if (peek() is Token.RBrace || peek() is Token.RParen) null
+                           else parseBindingOrExpression()
                 return Ast.Assign(ident.name, value, body)
             }
             pos = saved
@@ -130,7 +140,8 @@ private class ParserImpl(private val tokens: List<Token>) {
                 advance() // consume '='
                 val value = parseExpression()
                 expect(Token.Semicolon)
-                val body = parseBindingOrExpression()
+                val body = if (peek() is Token.RBrace || peek() is Token.RParen) null
+                           else parseBindingOrExpression()
                 return Ast.DerefAssign(ref, value, body)
             }
             pos = saved

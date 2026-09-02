@@ -72,6 +72,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate mutable variable with assignment in braced block`() {
+        assertEquals(1, evaluate("let mut x = 0; { x = 1; } x").getOrThrow())
+    }
+
+    @Test
     fun `evaluate reference and dereference`() {
         assertEquals(1, evaluate("let x = 1; let y = &x; *y").getOrThrow())
     }

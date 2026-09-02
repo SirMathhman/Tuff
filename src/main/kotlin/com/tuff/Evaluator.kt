@@ -60,7 +60,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
                 Binding(ast.name, value.getOrThrow(), mutable = ast.mutable)
             }
             scope.bind(binding)
-            evaluate(ast.body, scope)
+            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
         }
 
         is Ast.Assign -> {
@@ -72,7 +72,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
             val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
             scope.assign(ast.name, value.getOrThrow())
-            evaluate(ast.body, scope)
+            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
         }
 
         is Ast.DerefAssign -> {
@@ -88,7 +88,13 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
             val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
             scope.assign(pointee, value.getOrThrow())
-            evaluate(ast.body, scope)
+            ast.body?.let { evaluate(it, scope) } ?: Result.success(value.getOrThrow())
+        }
+
+        is Ast.Sequence -> {
+            val first = evaluate(ast.first, scope)
+            if (first.isFailure) return first
+            evaluate(ast.second, scope)
         }
     }
 }
@@ -97,7 +103,7 @@ fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
 private fun refName(ref: Ast): String = when (ref) {
     is Ast.VarRef -> ref.name
     is Ast.Deref -> refName(ref.inner)
-    is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign -> ref.toString()
+    is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Sequence -> ref.toString()
 }
 
 /**
@@ -109,6 +115,6 @@ private fun resolvePointee(ref: Ast, scope: Scope): String? {
     return when (ref) {
         is Ast.VarRef -> scope.lookup(ref.name)?.refTarget
         is Ast.Deref -> resolvePointee(ref.inner, scope)
-        is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign -> null
+        is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign, is Ast.Sequence -> null
     }
 }
