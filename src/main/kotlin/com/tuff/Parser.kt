@@ -62,6 +62,7 @@ private class ParserImpl(private val tokens: List<Token>) {
                 expect(Token.RParen)
                 ast
             }
+
             is Token.Op, is Token.RParen -> throw EvalError.UnexpectedToken(pos - 1, token.toString())
         }
     }
