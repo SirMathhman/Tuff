@@ -5,19 +5,23 @@ fun evaluate(input: String): Result<Int> {
     if (tokens.isFailure) return Result.failure(tokens.exceptionOrNull()!!)
     val ast = parse(tokens.getOrThrow())
     if (ast.isFailure) return Result.failure(ast.exceptionOrNull()!!)
-    return evaluate(ast.getOrThrow(), mutableMapOf())
+    return evaluate(ast.getOrThrow(), Scope())
 }
 
-fun evaluate(ast: Ast, env: MutableMap<String, Int>, refs: MutableMap<String, String> = mutableMapOf()): Result<Int> {
+fun evaluate(ast: Ast, scope: Scope = Scope()): Result<Int> {
     return when (ast) {
         is Ast.Number -> Result.success(ast.value)
-        is Ast.VarRef -> env[ast.name]?.let { Result.success(it) }
-            ?: Result.failure(EvalError.UnknownVariable(ast.name, 0))
+
+        is Ast.VarRef -> {
+            val binding = scope.lookup(ast.name)
+                ?: return Result.failure(EvalError.UnknownVariable(ast.name, 0))
+            Result.success(binding.value)
+        }
 
         is Ast.BinaryOp -> {
-            val left = evaluate(ast.left, env, refs)
+            val left = evaluate(ast.left, scope)
             if (left.isFailure) return left
-            val right = evaluate(ast.right, env, refs)
+            val right = evaluate(ast.right, scope)
             if (right.isFailure) return right
             Result.success(
                 when (ast.op) {
@@ -29,54 +33,82 @@ fun evaluate(ast: Ast, env: MutableMap<String, Int>, refs: MutableMap<String, St
         }
 
         is Ast.Ref -> {
-            val value = env[ast.name]
+            // Forming a reference requires the target to exist.
+            val target = scope.lookup(ast.name)
                 ?: return Result.failure(EvalError.UnknownVariable(ast.name, 0))
-            Result.success(value)
+            Result.success(target.value)
         }
 
         is Ast.Deref -> {
-            val inner = evaluate(ast.inner, env, refs)
-            if (inner.isFailure) return inner
-            // Dereference resolves to the value pointed to; in this simplified model,
-            // references are just names that resolve to their bound value.
-            inner
+            // Dereference reads the *current* value of the pointee (a live reference).
+            val pointee = resolvePointee(ast.inner, scope)
+                ?: return Result.failure(EvalError.UnknownVariable(refName(ast.inner), 0))
+            val target = scope.lookup(pointee)
+                ?: return Result.failure(EvalError.UnknownVariable(pointee, 0))
+            Result.success(target.value)
         }
 
         is Ast.Let -> {
-            val value = evaluate(ast.value, env, refs)
+            val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
-            env[ast.name] = value.getOrThrow()
-            if (ast.value is Ast.Ref) {
-                refs[ast.name] = ast.value.name
+            val binding = if (ast.value is Ast.Ref) {
+                val ref = ast.value
+                val target = scope.lookup(ref.name)
+                    ?: return Result.failure(EvalError.UnknownVariable(ref.name, 0))
+                Binding(ast.name, target.value, mutable = false, refTarget = ref.name, refMutable = ref.mutable)
+            } else {
+                Binding(ast.name, value.getOrThrow(), mutable = ast.mutable)
             }
-            evaluate(ast.body, env, refs)
+            scope.bind(binding)
+            evaluate(ast.body, scope)
         }
 
         is Ast.Assign -> {
-            if (ast.name !in env) {
-                return Result.failure(EvalError.UnknownVariable(ast.name, 0))
+            val binding = scope.lookup(ast.name)
+                ?: return Result.failure(EvalError.UnknownVariable(ast.name, 0))
+            if (!binding.mutable) {
+                return Result.failure(EvalError.AssignmentToImmutable(ast.name, 0))
             }
-            val value = evaluate(ast.value, env, refs)
+            val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
-            env[ast.name] = value.getOrThrow()
-            evaluate(ast.body, env, refs)
+            scope.assign(ast.name, value.getOrThrow())
+            evaluate(ast.body, scope)
         }
 
         is Ast.DerefAssign -> {
-            val pointee = resolvePointee(ast.ref, refs)
-                ?: return Result.failure(EvalError.UnknownVariable(ast.ref.toString(), 0))
-            val value = evaluate(ast.value, env, refs)
+            // Write-through: only permitted for references formed with `&mut`.
+            val refVar = refName(ast.ref)
+            val refBinding = scope.lookup(refVar)
+                ?: return Result.failure(EvalError.UnknownVariable(refVar, 0))
+            val pointee = refBinding.refTarget
+                ?: return Result.failure(EvalError.UnknownVariable(refVar, 0))
+            if (!refBinding.refMutable) {
+                return Result.failure(EvalError.WriteThroughImmutableReference(refVar, 0))
+            }
+            val value = evaluate(ast.value, scope)
             if (value.isFailure) return value
-            env[pointee] = value.getOrThrow()
-            evaluate(ast.body, env, refs)
+            scope.assign(pointee, value.getOrThrow())
+            evaluate(ast.body, scope)
         }
     }
 }
 
-private fun resolvePointee(ref: Ast, refs: MutableMap<String, String>): String? {
+/** Extracts a human-readable variable name from a reference AST node for error messages. */
+private fun refName(ref: Ast): String = when (ref) {
+    is Ast.VarRef -> ref.name
+    is Ast.Deref -> refName(ref.inner)
+    is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign -> ref.toString()
+}
+
+/**
+ * Resolves the variable that [ref] points to, or `null` if [ref] is not a reference.
+ * A reference is a [Ast.VarRef] whose binding carries a [Binding.refTarget], or a
+ * [Ast.Deref] wrapping such a reference.
+ */
+private fun resolvePointee(ref: Ast, scope: Scope): String? {
     return when (ref) {
-        is Ast.VarRef -> refs[ref.name]
-        is Ast.Deref -> resolvePointee(ref.inner, refs)
+        is Ast.VarRef -> scope.lookup(ref.name)?.refTarget
+        is Ast.Deref -> resolvePointee(ref.inner, scope)
         is Ast.Number, is Ast.BinaryOp, is Ast.Let, is Ast.Assign, is Ast.Ref, is Ast.DerefAssign -> null
     }
 }

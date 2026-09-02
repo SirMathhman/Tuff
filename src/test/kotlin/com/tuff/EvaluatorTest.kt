@@ -82,6 +82,32 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate write-through via immutable reference fails`() {
+        assertIs<EvalError.WriteThroughImmutableReference>(
+            evaluate("let mut x = 0; let y = &x; *y = 1; x").exceptionOrNull()
+        )
+    }
+
+    @Test
+    fun `evaluate write-through to undeclared reference fails`() {
+        assertIs<EvalError.UnknownVariable>(
+            evaluate("let mut x = 0; *y = 1; x").exceptionOrNull()
+        )
+    }
+
+    @Test
+    fun `evaluate dereference reads live pointee value`() {
+        assertEquals(5, evaluate("let mut x = 0; let y = &mut x; x = 5; *y").getOrThrow())
+    }
+
+    @Test
+    fun `evaluate assignment to immutable binding fails`() {
+        assertIs<EvalError.AssignmentToImmutable>(
+            evaluate("let x = 0; x = 1; x").exceptionOrNull()
+        )
+    }
+
+    @Test
     fun `evaluate unknown variable returns failure`() {
         assertIs<EvalError.UnknownVariable>(evaluate("abc").exceptionOrNull())
     }
