@@ -3,55 +3,57 @@ package com.tuff
 fun tokenize(input: String): Result<List<Token>> {
     if (input.isBlank()) return Result.failure(EvalError.EmptyExpression(0))
 
-    // Insert spaces around delimiters and operators so they become standalone tokens.
-    // Multi-char operators use a placeholder to avoid being split by single-char replacements.
-    val normalized = input
-        .replace("==", "\u0001")
-        .replace("||", "\u0002")
-        .replace("(", " ( ")
-        .replace(")", " ) ")
-        .replace("{", " { ")
-        .replace("}", " } ")
-        .replace(";", " ; ")
-        .replace("=", " = ")
-        .replace("&", " & ")
-        .replace("*", " * ")
-        .replace("\u0001", " == ")
-        .replace("\u0002", " || ")
-    val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
-
     val result = mutableListOf<Token>()
+    var i = 0
 
-    for (i in rawTokens.indices) {
-        when (rawTokens[i]) {
-            "(" -> result.add(Token.LParen)
-            ")" -> result.add(Token.RParen)
-            "{" -> result.add(Token.LBrace)
-            "}" -> result.add(Token.RBrace)
-            "+" -> result.add(Token.Op(OpKind.PLUS))
-            "-" -> result.add(Token.Op(OpKind.MINUS))
-            "*" -> result.add(Token.Star)
-            "||" -> result.add(Token.Op(OpKind.OR))
-            "==" -> result.add(Token.Op(OpKind.EQ))
-            "=" -> result.add(Token.Equals)
-            ";" -> result.add(Token.Semicolon)
-            "let" -> result.add(Token.Let)
-            "mut" -> result.add(Token.Mut)
-            "&" -> result.add(Token.Ref)
-            "true" -> result.add(Token.Number(1))
-            "false" -> result.add(Token.Number(0))
+    while (i < input.length) {
+        val c = input[i]
+
+        // Skip whitespace
+        if (c.isWhitespace()) { i++; continue }
+
+        // Multi-char operators (try before single-char)
+        if (c == '=' && i + 1 < input.length && input[i + 1] == '=') {
+            result.add(Token.Op(OpKind.EQ)); i += 2; continue
+        }
+        if (c == '|' && i + 1 < input.length && input[i + 1] == '|') {
+            result.add(Token.Op(OpKind.OR)); i += 2; continue
+        }
+
+        // Single-char tokens
+        when (c) {
+            '(' -> { result.add(Token.LParen); i++ }
+            ')' -> { result.add(Token.RParen); i++ }
+            '{' -> { result.add(Token.LBrace); i++ }
+            '}' -> { result.add(Token.RBrace); i++ }
+            '+' -> { result.add(Token.Op(OpKind.PLUS)); i++ }
+            '-' -> { result.add(Token.Op(OpKind.MINUS)); i++ }
+            '*' -> { result.add(Token.Star); i++ }
+            '=' -> { result.add(Token.Equals); i++ }
+            ';' -> { result.add(Token.Semicolon); i++ }
+            '&' -> { result.add(Token.Ref); i++ }
             else -> {
-                if (rawTokens[i].all { it.isLetterOrDigit() } && rawTokens[i].first().isLetter()) {
-                    result.add(Token.Identifier(rawTokens[i]))
-                } else {
-                    val value = rawTokens[i].toIntOrNull()
-                        ?: return Result.failure(
-                            if (rawTokens[i].length == 1 && !rawTokens[i][0].isLetterOrDigit())
-                                EvalError.UnexpectedToken(i, rawTokens[i])
-                            else
-                                EvalError.NonNumericToken(i, rawTokens[i])
-                        )
-                    result.add(Token.Number(value))
+                if (!c.isLetterOrDigit()) {
+                    return Result.failure(EvalError.UnexpectedToken(i, c.toString()))
+                }
+                // Identifier or number run
+                val start = i
+                while (i < input.length && input[i].isLetterOrDigit()) i++
+                val word = input.substring(start, i)
+                when (word) {
+                    "let" -> result.add(Token.Let)
+                    "mut" -> result.add(Token.Mut)
+                    "true" -> result.add(Token.Number(1))
+                    "false" -> result.add(Token.Number(0))
+                    else -> {
+                        if (word.first().isLetter()) {
+                            result.add(Token.Identifier(word))
+                        } else {
+                            val value = word.toIntOrNull()
+                                ?: return Result.failure(EvalError.NonNumericToken(start, word))
+                            result.add(Token.Number(value))
+                        }
+                    }
                 }
             }
         }
