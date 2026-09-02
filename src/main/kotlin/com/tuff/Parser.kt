@@ -60,7 +60,7 @@ private class ParserImpl(private val tokens: List<Token>) {
         var left = parseTerm()
         while (true) {
             val token = peek() ?: break
-            if (token is Token.Op && (token.kind == OpKind.PLUS || token.kind == OpKind.MINUS)) {
+            if (token is Token.Op && (token.kind == OpKind.PLUS || token.kind == OpKind.MINUS || token.kind == OpKind.OR)) {
                 advance()
                 val right = parseTerm()
                 left = Ast.BinaryOp(token.kind, left, right)
@@ -202,7 +202,7 @@ private class ParserImpl(private val tokens: List<Token>) {
         findMatchingRBrace()
         val after = peek()
         val isExprContinuation = after is Token.Star ||
-                (after is Token.Op && (after.kind == OpKind.PLUS || after.kind == OpKind.MINUS))
+                (after is Token.Op && (after.kind == OpKind.PLUS || after.kind == OpKind.MINUS || after.kind == OpKind.OR))
         pos = saved
         return !isExprContinuation
     }

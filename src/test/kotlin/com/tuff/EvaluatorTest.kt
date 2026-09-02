@@ -148,4 +148,9 @@ class EvaluatorTest {
     fun `evaluate nested block can assign outer mutable variable`() {
         assertEquals(3, evaluate("let mut x = 1; { x = 3; } x").getOrThrow())
     }
+
+    @Test
+    fun `evaluate logical or with true and false`() {
+        assertEquals(1, evaluate("let x = true; let y = false; x || y").getOrThrow())
+    }
 }
