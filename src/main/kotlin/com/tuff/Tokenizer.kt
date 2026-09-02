@@ -3,8 +3,12 @@ package com.tuff
 fun tokenize(input: String): Result<List<Token>> {
     if (input.isBlank()) return Result.failure(EvalError.EmptyExpression(0))
 
-    // Insert spaces around parentheses so they become standalone tokens
-    val normalized = input.replace("(", " ( ").replace(")", " ) ")
+    // Insert spaces around grouping delimiters so they become standalone tokens
+    val normalized = input
+        .replace("(", " ( ")
+        .replace(")", " ) ")
+        .replace("{", " { ")
+        .replace("}", " } ")
     val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
 
     val result = mutableListOf<Token>()
@@ -13,6 +17,8 @@ fun tokenize(input: String): Result<List<Token>> {
         when (rawTokens[i]) {
             "(" -> result.add(Token.LParen)
             ")" -> result.add(Token.RParen)
+            "{" -> result.add(Token.LBrace)
+            "}" -> result.add(Token.RBrace)
             "+" -> result.add(Token.Op(OpKind.PLUS))
             "-" -> result.add(Token.Op(OpKind.MINUS))
             "*" -> result.add(Token.Op(OpKind.MULTIPLY))
@@ -29,7 +35,7 @@ fun tokenize(input: String): Result<List<Token>> {
         }
     }
 
-    // Validate: must start with Number or LParen, end with Number or RParen
+    // Validate: must start with Number or opening delimiter, end with Number or closing delimiter
     if (result.isEmpty()) return Result.failure(EvalError.EmptyExpression(0))
     val first = result.first()
     if (first is Token.Op) {

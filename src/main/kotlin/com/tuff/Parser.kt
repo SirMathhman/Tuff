@@ -62,8 +62,12 @@ private class ParserImpl(private val tokens: List<Token>) {
                 expect(Token.RParen)
                 ast
             }
-
-            is Token.Op, is Token.RParen -> throw EvalError.UnexpectedToken(pos - 1, token.toString())
+            is Token.LBrace -> {
+                val ast = parseExpression()
+                expect(Token.RBrace)
+                ast
+            }
+            is Token.Op, is Token.RParen, is Token.RBrace -> throw EvalError.UnexpectedToken(pos - 1, token.toString())
         }
     }
 

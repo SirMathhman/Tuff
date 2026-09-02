@@ -7,4 +7,6 @@ sealed class Token {
     data class Op(val kind: OpKind) : Token()
     object LParen : Token()
     object RParen : Token()
+    object LBrace : Token()
+    object RBrace : Token()
 }
