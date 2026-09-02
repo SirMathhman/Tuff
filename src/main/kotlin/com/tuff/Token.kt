@@ -15,5 +15,5 @@ sealed class Token {
     object LBrace : Token()
     object RBrace : Token()
     object Ref : Token()   // &
-    object Deref : Token() // *
+    object Star : Token()  // * (multiplication infix, dereference prefix)
 }

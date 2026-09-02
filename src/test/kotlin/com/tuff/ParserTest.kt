@@ -23,7 +23,7 @@ class ParserTest {
     @Test
     fun `parse multiplication precedence`() {
         val tokens =
-            listOf(Token.Number(2), Token.Op(OpKind.PLUS), Token.Number(3), Token.Deref, Token.Number(4))
+            listOf(Token.Number(2), Token.Op(OpKind.PLUS), Token.Number(3), Token.Star, Token.Number(4))
         assertEquals(
             Ast.BinaryOp(OpKind.PLUS, Ast.Number(2), Ast.BinaryOp(OpKind.MULTIPLY, Ast.Number(3), Ast.Number(4))),
             parse(tokens).getOrThrow()
@@ -34,7 +34,7 @@ class ParserTest {
     fun `parse parenthesized expression`() {
         val tokens = listOf(
             Token.LParen, Token.Number(2), Token.Op(OpKind.PLUS), Token.Number(3), Token.RParen,
-            Token.Deref, Token.Number(4)
+            Token.Star, Token.Number(4)
         )
         assertEquals(
             Ast.BinaryOp(OpKind.MULTIPLY, Ast.BinaryOp(OpKind.PLUS, Ast.Number(2), Ast.Number(3)), Ast.Number(4)),

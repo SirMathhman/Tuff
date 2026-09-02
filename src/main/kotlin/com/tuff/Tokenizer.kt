@@ -25,7 +25,7 @@ fun tokenize(input: String): Result<List<Token>> {
             "}" -> result.add(Token.RBrace)
             "+" -> result.add(Token.Op(OpKind.PLUS))
             "-" -> result.add(Token.Op(OpKind.MINUS))
-            "*" -> result.add(Token.Deref)
+            "*" -> result.add(Token.Star)
             "=" -> result.add(Token.Equals)
             ";" -> result.add(Token.Semicolon)
             "let" -> result.add(Token.Let)

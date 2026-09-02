@@ -42,7 +42,8 @@ private class ParserImpl(private val tokens: List<Token>) {
         var left = parseFactor()
         while (true) {
             val token = peek() ?: break
-            if (token is Token.Deref) {
+            if (token is Token.Star) {
+                // '*' as infix multiplication
                 advance()
                 val right = parseFactor()
                 left = Ast.BinaryOp(OpKind.MULTIPLY, left, right)
@@ -75,7 +76,8 @@ private class ParserImpl(private val tokens: List<Token>) {
                 Ast.Ref(ident.name)
             }
 
-            is Token.Deref -> {
+            is Token.Star -> {
+                // '*' as prefix dereference
                 val inner = parseFactor()
                 Ast.Deref(inner)
             }
