@@ -1,6 +1,6 @@
 package com.tuff
 
 fun evaluate(input: String): Int {
-    // TODO: implement
-    return 0
+    if (input.isEmpty()) return 0
+    return input.toInt()
 }
