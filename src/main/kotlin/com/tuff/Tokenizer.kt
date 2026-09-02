@@ -31,6 +31,8 @@ fun tokenize(input: String): Result<List<Token>> {
             "let" -> result.add(Token.Let)
             "mut" -> result.add(Token.Mut)
             "&" -> result.add(Token.Ref)
+            "true" -> result.add(Token.Number(1))
+            "false" -> result.add(Token.Number(0))
             else -> {
                 if (rawTokens[i].all { it.isLetterOrDigit() } && rawTokens[i].first().isLetter()) {
                     result.add(Token.Identifier(rawTokens[i]))

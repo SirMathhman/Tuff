@@ -17,6 +17,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate true literal returns one`() {
+        assertEquals(1, evaluate("let x = true; x").getOrThrow())
+    }
+
+    @Test
     fun `evaluate addition expression`() {
         assertEquals(3, evaluate("1 + 2").getOrThrow())
     }
