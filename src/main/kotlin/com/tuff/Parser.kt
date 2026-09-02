@@ -3,7 +3,7 @@ package com.tuff
 fun parse(tokens: List<Token>): Result<Ast> {
     val parser = ParserImpl(tokens)
     return try {
-        val ast = parser.parseTopLevel()
+        val ast = parser.parseBindingOrExpression()
         if (!parser.isAtEnd) {
             Result.failure(EvalError.UnexpectedToken(parser.position, tokens[parser.position].toString()))
         } else {
@@ -42,10 +42,10 @@ private class ParserImpl(private val tokens: List<Token>) {
         var left = parseFactor()
         while (true) {
             val token = peek() ?: break
-            if (token is Token.Op && token.kind == OpKind.MULTIPLY) {
+            if (token is Token.Deref) {
                 advance()
                 val right = parseFactor()
-                left = Ast.BinaryOp(token.kind, left, right)
+                left = Ast.BinaryOp(OpKind.MULTIPLY, left, right)
             } else {
                 break
             }
@@ -64,9 +64,20 @@ private class ParserImpl(private val tokens: List<Token>) {
             }
 
             is Token.LBrace -> {
-                val ast = parseBlockBody()
+                val ast = parseBindingOrExpression()
                 expect(Token.RBrace)
                 ast
+            }
+
+            is Token.Ref -> {
+                val ident = advance() as? Token.Identifier
+                    ?: throw EvalError.UnexpectedToken(pos - 1, token.toString())
+                Ast.Ref(ident.name)
+            }
+
+            is Token.Deref -> {
+                val inner = parseFactor()
+                Ast.Deref(inner)
             }
 
             is Token.Identifier -> Ast.VarRef(token.name)
@@ -75,45 +86,21 @@ private class ParserImpl(private val tokens: List<Token>) {
         }
     }
 
-    fun parseTopLevel(): Ast {
+    fun parseBindingOrExpression(): Ast {
         val next = peek()
         if (next is Token.Let) {
             advance() // consume 'let'
-            val mutable = if (peek() is Token.Mut) { advance(); true } else { false }
-            val ident = advance() as? Token.Identifier
-                ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
-            expect(Token.Equals)
-            val value = parseExpression()
-            expect(Token.Semicolon)
-            val body = parseTopLevel()
-            return Ast.Let(ident.name, value, body, mutable)
-        }
-        if (next is Token.Identifier) {
-            val saved = pos
-            val ident = advance() as Token.Identifier
-            if (peek() is Token.Equals) {
-                advance() // consume '='
-                val value = parseExpression()
-                expect(Token.Semicolon)
-                val body = parseTopLevel()
-                return Ast.Assign(ident.name, value, body)
+            val mutable = if (peek() is Token.Mut) {
+                advance(); true
+            } else {
+                false
             }
-            pos = saved
-        }
-        return parseExpression()
-    }
-
-    private fun parseBlockBody(): Ast {
-        val next = peek()
-        if (next is Token.Let) {
-            advance() // consume 'let'
-            val mutable = if (peek() is Token.Mut) { advance(); true } else { false }
             val ident = advance() as? Token.Identifier
                 ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
             expect(Token.Equals)
             val value = parseExpression()
             expect(Token.Semicolon)
-            val body = parseBlockBody()
+            val body = parseBindingOrExpression()
             return Ast.Let(ident.name, value, body, mutable)
         }
         if (next is Token.Identifier) {
@@ -123,7 +110,7 @@ private class ParserImpl(private val tokens: List<Token>) {
                 advance() // consume '='
                 val value = parseExpression()
                 expect(Token.Semicolon)
-                val body = parseBlockBody()
+                val body = parseBindingOrExpression()
                 return Ast.Assign(ident.name, value, body)
             }
             pos = saved

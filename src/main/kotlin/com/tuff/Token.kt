@@ -14,4 +14,6 @@ sealed class Token {
     object RParen : Token()
     object LBrace : Token()
     object RBrace : Token()
+    object Ref : Token()   // &
+    object Deref : Token() // *
 }

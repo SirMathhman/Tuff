@@ -72,6 +72,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate reference and dereference`() {
+        assertEquals(1, evaluate("let x = 1; let y = &x; *y").getOrThrow())
+    }
+
+    @Test
     fun `evaluate unknown variable returns failure`() {
         assertIs<EvalError.UnknownVariable>(evaluate("abc").exceptionOrNull())
     }

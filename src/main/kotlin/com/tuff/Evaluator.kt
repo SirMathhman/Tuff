@@ -28,6 +28,20 @@ fun evaluate(ast: Ast, env: MutableMap<String, Int>): Result<Int> {
             )
         }
 
+        is Ast.Ref -> {
+            val value = env[ast.name]
+                ?: return Result.failure(EvalError.UnknownVariable(ast.name, 0))
+            Result.success(value)
+        }
+
+        is Ast.Deref -> {
+            val inner = evaluate(ast.inner, env)
+            if (inner.isFailure) return inner
+            // Dereference resolves to the value pointed to; in this simplified model,
+            // references are just names that resolve to their bound value.
+            inner
+        }
+
         is Ast.Let -> {
             val value = evaluate(ast.value, env)
             if (value.isFailure) return value

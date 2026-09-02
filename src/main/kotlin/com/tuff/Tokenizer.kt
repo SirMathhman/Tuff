@@ -11,6 +11,8 @@ fun tokenize(input: String): Result<List<Token>> {
         .replace("}", " } ")
         .replace(";", " ; ")
         .replace("=", " = ")
+        .replace("&", " & ")
+        .replace("*", " * ")
     val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
 
     val result = mutableListOf<Token>()
@@ -23,11 +25,12 @@ fun tokenize(input: String): Result<List<Token>> {
             "}" -> result.add(Token.RBrace)
             "+" -> result.add(Token.Op(OpKind.PLUS))
             "-" -> result.add(Token.Op(OpKind.MINUS))
-            "*" -> result.add(Token.Op(OpKind.MULTIPLY))
+            "*" -> result.add(Token.Deref)
             "=" -> result.add(Token.Equals)
             ";" -> result.add(Token.Semicolon)
             "let" -> result.add(Token.Let)
             "mut" -> result.add(Token.Mut)
+            "&" -> result.add(Token.Ref)
             else -> {
                 if (rawTokens[i].all { it.isLetterOrDigit() } && rawTokens[i].first().isLetter()) {
                     result.add(Token.Identifier(rawTokens[i]))

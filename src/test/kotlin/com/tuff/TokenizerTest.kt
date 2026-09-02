@@ -19,7 +19,7 @@ class TokenizerTest {
                 Token.Number(1),
                 Token.Op(OpKind.PLUS),
                 Token.Number(2),
-                Token.Op(OpKind.MULTIPLY),
+                Token.Deref,
                 Token.Number(3)
             ),
             tokens
