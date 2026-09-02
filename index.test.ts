@@ -2,12 +2,23 @@ import { test, expect } from "bun:test";
 import { compileTuffToTypeScript } from ".";
 import ts from "typescript";
 
+const PRELUDE = `
+module NodeJS {
+  declare type Process;
+  declare fn exit(this : Process, code : I32) : Void;
+}
+
+declare let process : NodeJS::Process;
+
+in let args : *[*Str];
+`;
 export function expectValid(
   tuffSource: string,
   expectedExitCode: number,
   args: string[] = [],
 ) {
-  const compiledTS = compileTuffToTypeScript(tuffSource);
+
+  const compiledTS = compileTuffToTypeScript(PRELUDE + tuffSource);
   const compiledJS = ts.transpile(compiledTS);
 
   let actualExitCode = 0;
