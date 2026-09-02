@@ -26,7 +26,7 @@ export function expectValid(
   let actualExitCode = 0;
   let process = {
     exit(code: number) {
-      actualExitCode = code;
+      actualExitCode = Number(code);
     },
   };
 
@@ -88,6 +88,10 @@ test("let mut x = 0; let y = &mut x; *y = 1; x", () => {
 
 test("let mut x = 0; { let y = &mut x; *y = 1; } x", () => {
   expectValid("let mut x = 0; { let y = &mut x; *y = 1; } x", 1, []);
+});
+
+test("let x = true; x", () => {
+  expectValid("let x = true; x", 1, []);
 });
 
 test("unbalanced parens", () => {
