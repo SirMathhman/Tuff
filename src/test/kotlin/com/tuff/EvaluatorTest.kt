@@ -13,4 +13,9 @@ class EvaluatorTest {
     fun `evaluate single digit returns that digit`() {
         assertEquals(1, evaluate("1"))
     }
+
+    @Test
+    fun `evaluate addition expression`() {
+        assertEquals(3, evaluate("1 + 2"))
+    }
 }
