@@ -37,6 +37,11 @@ class EvaluatorTest {
     }
 
     @Test
+    fun `evaluate addition before multiplication`() {
+        assertEquals(14, evaluate("2 + 3 * 4").getOrThrow())
+    }
+
+    @Test
     fun `evaluate non-numeric token returns failure`() {
         assertIs<EvalError.NonNumericToken>(evaluate("abc").exceptionOrNull())
     }
