@@ -27,6 +27,7 @@ fun tokenize(input: String): Result<List<Token>> {
             "=" -> result.add(Token.Equals)
             ";" -> result.add(Token.Semicolon)
             "let" -> result.add(Token.Let)
+            "mut" -> result.add(Token.Mut)
             else -> {
                 if (rawTokens[i].all { it.isLetterOrDigit() } && rawTokens[i].first().isLetter()) {
                     result.add(Token.Identifier(rawTokens[i]))

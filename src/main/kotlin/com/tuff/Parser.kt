@@ -70,7 +70,7 @@ private class ParserImpl(private val tokens: List<Token>) {
             }
 
             is Token.Identifier -> Ast.VarRef(token.name)
-            is Token.Op, is Token.RParen, is Token.RBrace, is Token.Let, is Token.Equals, is Token.Semicolon ->
+            is Token.Op, is Token.RParen, is Token.RBrace, is Token.Let, is Token.Mut, is Token.Equals, is Token.Semicolon ->
                 throw EvalError.UnexpectedToken(pos - 1, token.toString())
         }
     }
@@ -79,13 +79,26 @@ private class ParserImpl(private val tokens: List<Token>) {
         val next = peek()
         if (next is Token.Let) {
             advance() // consume 'let'
+            val mutable = if (peek() is Token.Mut) { advance(); true } else { false }
             val ident = advance() as? Token.Identifier
                 ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
             expect(Token.Equals)
             val value = parseExpression()
             expect(Token.Semicolon)
             val body = parseTopLevel()
-            return Ast.Let(ident.name, value, body)
+            return Ast.Let(ident.name, value, body, mutable)
+        }
+        if (next is Token.Identifier) {
+            val saved = pos
+            val ident = advance() as Token.Identifier
+            if (peek() is Token.Equals) {
+                advance() // consume '='
+                val value = parseExpression()
+                expect(Token.Semicolon)
+                val body = parseTopLevel()
+                return Ast.Assign(ident.name, value, body)
+            }
+            pos = saved
         }
         return parseExpression()
     }
@@ -94,13 +107,26 @@ private class ParserImpl(private val tokens: List<Token>) {
         val next = peek()
         if (next is Token.Let) {
             advance() // consume 'let'
+            val mutable = if (peek() is Token.Mut) { advance(); true } else { false }
             val ident = advance() as? Token.Identifier
                 ?: throw EvalError.UnexpectedToken(pos - 1, next.toString())
             expect(Token.Equals)
             val value = parseExpression()
             expect(Token.Semicolon)
             val body = parseBlockBody()
-            return Ast.Let(ident.name, value, body)
+            return Ast.Let(ident.name, value, body, mutable)
+        }
+        if (next is Token.Identifier) {
+            val saved = pos
+            val ident = advance() as Token.Identifier
+            if (peek() is Token.Equals) {
+                advance() // consume '='
+                val value = parseExpression()
+                expect(Token.Semicolon)
+                val body = parseBlockBody()
+                return Ast.Assign(ident.name, value, body)
+            }
+            pos = saved
         }
         return parseExpression()
     }

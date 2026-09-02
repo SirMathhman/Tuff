@@ -5,10 +5,10 @@ fun evaluate(input: String): Result<Int> {
     if (tokens.isFailure) return Result.failure(tokens.exceptionOrNull()!!)
     val ast = parse(tokens.getOrThrow())
     if (ast.isFailure) return Result.failure(ast.exceptionOrNull()!!)
-    return evaluate(ast.getOrThrow(), emptyMap())
+    return evaluate(ast.getOrThrow(), mutableMapOf())
 }
 
-fun evaluate(ast: Ast, env: Map<String, Int>): Result<Int> {
+fun evaluate(ast: Ast, env: MutableMap<String, Int>): Result<Int> {
     return when (ast) {
         is Ast.Number -> Result.success(ast.value)
         is Ast.VarRef -> env[ast.name]?.let { Result.success(it) }
@@ -31,7 +31,18 @@ fun evaluate(ast: Ast, env: Map<String, Int>): Result<Int> {
         is Ast.Let -> {
             val value = evaluate(ast.value, env)
             if (value.isFailure) return value
-            evaluate(ast.body, env + (ast.name to value.getOrThrow()))
+            env[ast.name] = value.getOrThrow()
+            evaluate(ast.body, env)
+        }
+
+        is Ast.Assign -> {
+            if (ast.name !in env) {
+                return Result.failure(EvalError.UnknownVariable(ast.name, 0))
+            }
+            val value = evaluate(ast.value, env)
+            if (value.isFailure) return value
+            env[ast.name] = value.getOrThrow()
+            evaluate(ast.body, env)
         }
     }
 }

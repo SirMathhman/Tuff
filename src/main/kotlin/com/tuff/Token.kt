@@ -7,6 +7,7 @@ sealed class Token {
     data class Identifier(val name: String) : Token()
     data class Op(val kind: OpKind) : Token()
     object Let : Token()
+    object Mut : Token()
     object Equals : Token()
     object Semicolon : Token()
     object LParen : Token()
