@@ -2,46 +2,30 @@ package com.tuff
 
 fun tokenize(input: String): Result<List<Token>> {
     if (input.isBlank()) return Result.failure(EvalError.EmptyExpression(0))
-    val rawTokens = input.trim().split(" ")
+
+    // Insert spaces around parentheses so they become standalone tokens
+    val normalized = input.replace("(", " ( ").replace(")", " ) ")
+    val rawTokens = normalized.trim().split(" ").filter { it.isNotEmpty() }
 
     val result = mutableListOf<Token>()
 
     for (i in rawTokens.indices) {
-        var token = rawTokens[i]
-
-        // Strip leading paren
-        if (token.startsWith("(")) {
-            result.add(Token.LParen)
-            token = token.substring(1)
-        }
-
-        // Strip trailing paren
-        if (token.endsWith(")")) {
-            token = token.dropLast(1)
-            // We'll add RParen after processing the rest
-        }
-
-        if (token.isNotEmpty()) {
-            when (token) {
-                "+" -> result.add(Token.Op(OpKind.PLUS))
-                "-" -> result.add(Token.Op(OpKind.MINUS))
-                "*" -> result.add(Token.Op(OpKind.MULTIPLY))
-                else -> {
-                    val value = token.toIntOrNull()
-                        ?: return Result.failure(
-                            if (token.length == 1 && !token[0].isLetterOrDigit())
-                                EvalError.UnexpectedToken(i, token)
-                            else
-                                EvalError.NonNumericToken(i, rawTokens[i])
-                        )
-                    result.add(Token.Number(value))
-                }
+        when (rawTokens[i]) {
+            "(" -> result.add(Token.LParen)
+            ")" -> result.add(Token.RParen)
+            "+" -> result.add(Token.Op(OpKind.PLUS))
+            "-" -> result.add(Token.Op(OpKind.MINUS))
+            "*" -> result.add(Token.Op(OpKind.MULTIPLY))
+            else -> {
+                val value = rawTokens[i].toIntOrNull()
+                    ?: return Result.failure(
+                        if (rawTokens[i].length == 1 && !rawTokens[i][0].isLetterOrDigit())
+                            EvalError.UnexpectedToken(i, rawTokens[i])
+                        else
+                            EvalError.NonNumericToken(i, rawTokens[i])
+                    )
+                result.add(Token.Number(value))
             }
-        }
-
-        // Add trailing paren
-        if (rawTokens[i].endsWith(")")) {
-            result.add(Token.RParen)
         }
     }
 
