@@ -58,7 +58,7 @@ class EvaluatorTest {
 
     @Test
     fun `evaluate unknown variable returns failure`() {
-        assertIs<EvalError.UnexpectedToken>(evaluate("abc").exceptionOrNull())
+        assertIs<EvalError.UnknownVariable>(evaluate("abc").exceptionOrNull())
     }
 
     @Test

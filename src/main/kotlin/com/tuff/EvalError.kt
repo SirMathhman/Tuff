@@ -14,4 +14,8 @@ sealed class EvalError(override val message: String) : Exception(message) {
     data class EmptyExpression(override val position: Int) : EvalError(
         "Empty expression"
     )
+
+    data class UnknownVariable(val name: String, override val position: Int) : EvalError(
+        "Unknown variable '$name' at position $position"
+    )
 }
