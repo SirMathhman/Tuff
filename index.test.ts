@@ -367,6 +367,25 @@ test("interpretTuff rejects a literal too large for its suffix", () => {
   expect(interpretTuff("128I8").ok).toBe(false);
 });
 
+test("interpretTuff('let x : U8 = 1; x') => 1", () => {
+  expect(interpretTuff("let x : U8 = 1; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff rejects a typed declaration whose value does not fit", () => {
+  expect(interpretTuff("let x: U8 = 256; x").ok).toBe(false);
+  expect(interpretTuff("let x: U8 = true; x").ok).toBe(false);
+});
+
+test("interpretTuff rejects an unknown type annotation", () => {
+  expect(interpretTuff("let x: Foo = 1; x").ok).toBe(false);
+});
+
+test("interpretTuff checks compound assignments against the declared type", () => {
+  expect(interpretTuff("let mut x: U8 = 1; x = 300; x").ok).toBe(false);
+  expect(interpretTuff("let mut x: U8 = 250; x += 10; x").ok).toBe(false);
+  expect(interpretTuff("let mut x: I8 = 100; x += 27; x")).toEqual({ ok: true, value: 127 });
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

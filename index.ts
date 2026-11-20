@@ -11,23 +11,22 @@ import {
   type Problem,
   findTopLevel,
 } from "./src/tuff-lexing";
-import {
-  type Value,
-  type Binding,
-  type FunctionDef,
-  type Cursor,
-  type NamedVariable,
-  type StatementStep,
-} from "./src/tuff-types";
+import { type Value, type FunctionDef, type Cursor, type NamedVariable, type StatementStep } from "./src/tuff-types";
 import {
   lookup,
   lookupFunction,
   newScope,
   findFunctionBodyEnd,
   escapes,
-  kindOf,
   isSuppressed,
   takeExit,
+  fitsIntegerType,
+  isIntegerType,
+  checkStore,
+  checkDeclaration,
+  applyCompound,
+  valuesEqual,
+  OUTLIVES_MESSAGE,
 } from "./src/tuff-scope";
 
 /**
@@ -50,11 +49,6 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "break",
   "fn",
 ]);
-
-/**
- * Message for a value that would make a reference outlive the variable it points to.
- */
-const OUTLIVES_MESSAGE = "a value that does not refer to a variable declared inside a deeper block";
 
 /**
  * Interprets a Tuff program and returns its result.
@@ -505,26 +499,6 @@ function parseInitializer(
 }
 
 /**
- * Checks that a value may be stored in a variable: it must have the variable's type, and
- * a reference must not outlive the variable it points to.
- *
- * @param value - The value to store.
- * @param offset - Offset of the value's first character, for error reporting.
- * @param target - The variable that will receive the value.
- * @param description - How the variable is named in the error message.
- * @returns The problem found, or undefined if the value may be stored.
- */
-function checkStore(value: Value, offset: number, target: Binding, description: string): Problem | undefined {
-  if (typeof value !== typeof target.value) {
-    return { offset, expected: `${kindOf(target.value)} to match the type of ${description}` };
-  }
-  if (escapes(value, target.depth)) {
-    return { offset, expected: OUTLIVES_MESSAGE };
-  }
-  return undefined;
-}
-
-/**
  * Parses the statements and final expression inside a block or program.
  *
  * @param text - The source being parsed.
@@ -928,15 +902,25 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     return { offset: cursor.pos, expected: "a variable name" };
   }
   cursor.pos += name.length;
+  let type: string | undefined;
+  if (peek(text, cursor) === ":") {
+    cursor.pos++;
+    peek(text, cursor);
+    const typeStart = cursor.pos;
+    const typeName = peekName(text, cursor);
+    if (!isIntegerType(typeName)) {
+      return { offset: typeStart, expected: "an integer type such as U8 or I32" };
+    }
+    cursor.pos += typeName.length;
+    type = typeName;
+  }
   const { depth } = cursor.scope;
-  const init = parseInitializer(text, cursor, (value, offset) =>
-    escapes(value, depth) ? { offset, expected: OUTLIVES_MESSAGE } : undefined,
-  );
+  const init = parseInitializer(text, cursor, (value, offset) => checkDeclaration(value, offset, depth, type));
   if (!init.ok) {
     return init.error;
   }
   const { vars } = cursor.scope;
-  vars.set(name, { value: init.value, mutable, depth });
+  vars.set(name, { value: init.value, mutable, depth, type });
   return undefined;
 }
 
@@ -1001,24 +985,6 @@ function findMutableTarget(text: string, cursor: Cursor): Result<NamedVariable, 
 }
 
 /**
- * Applies a compound-assignment operator to two numbers.
- *
- * @param op - The operator: "+", "-" or "*".
- * @param left - The variable's current value.
- * @param right - The value of the right-hand side.
- * @returns The result to store back in the variable.
- */
-function applyCompound(op: string, left: number, right: number): number {
-  if (op === "+") {
-    return left + right;
-  }
-  if (op === "-") {
-    return left - right;
-  }
-  return left * right;
-}
-
-/**
  * Parses a compound assignment such as "x += expression;" to a mutable numeric variable.
  *
  * @param text - The source being parsed.
@@ -1046,35 +1012,13 @@ function parseCompoundAssignment(text: string, cursor: Cursor): Problem | undefi
   const current = binding.value;
   const rhs = init.value;
   if (typeof current === "number" && typeof rhs === "number" && !isSuppressed(cursor)) {
-    binding.value = applyCompound(op, current, rhs);
+    const result = applyCompound(op, current, rhs);
+    if (binding.type !== undefined && !fitsIntegerType(BigInt(result), binding.type)) {
+      return { offset: start, expected: `a value that fits in ${binding.type}` };
+    }
+    binding.value = result;
   }
   return undefined;
-}
-
-/**
- * Compares two values with "==". They must have the same type. References are compared by the
- * values they point to, which must also have the same type.
- *
- * @param left - The left-hand value.
- * @param right - The right-hand value.
- * @param offset - Offset of the operator, for error reporting.
- * @returns An Ok result with whether the values are equal, or an Err result with the first problem found.
- */
-function valuesEqual(left: Value, right: Value, offset: number): Result<boolean, Problem> {
-  if (typeof left !== typeof right) {
-    return err({ offset, expected: `a value of the same type as the left side of "=="` });
-  }
-  if (typeof left === "object" && typeof right === "object") {
-    const { target: leftTarget } = left;
-    const { target: rightTarget } = right;
-    const leftPointee = leftTarget.value;
-    const rightPointee = rightTarget.value;
-    if (typeof leftPointee !== typeof rightPointee) {
-      return err({ offset, expected: `references to values of the same type on each side of "=="` });
-    }
-    return ok(leftPointee === rightPointee);
-  }
-  return ok(left === right);
 }
 
 /**
@@ -1433,11 +1377,9 @@ function parseNumberSuffix(text: string, cursor: Cursor, digits: string, start: 
   if (match === null) {
     return ok(Number(digits));
   }
-  const [suffix = "", sign = "", bits = ""] = match;
+  const [suffix = ""] = match;
   cursor.pos += suffix.length;
-  const width = BigInt(bits);
-  const max = sign === "U" ? 2n ** width - 1n : 2n ** (width - 1n) - 1n;
-  if (BigInt(digits) > max) {
+  if (!fitsIntegerType(BigInt(digits), suffix)) {
     return err({ offset: start, expected: `a value that fits in ${suffix}` });
   }
   return ok(Number(digits));

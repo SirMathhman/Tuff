@@ -38,6 +38,8 @@ export interface Binding {
    * Nesting depth of the scope that declares the variable; the program's scope is 0.
    */
   readonly depth: number;
+  /** The integer type declared for the variable, such as "U8"; undefined if the variable is untyped. */
+  readonly type?: string;
 }
 /**
  * A set of variables introduced by one block, linked to the enclosing block.
