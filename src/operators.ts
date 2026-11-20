@@ -35,6 +35,7 @@ import {
   innermostNonOperator,
   isLenient,
   lookupCell,
+  attachRef,
 } from "./helpers";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
@@ -184,6 +185,7 @@ function closeBracket(
   const failure = closeGroup(values, ops, isLenient(state));
   if (failure !== undefined) return failure;
   if (group.bracket === Bracket.Brace) scopes.pop();
+  attachRef(ops, group.ref);
   state.depth--;
   state.pos++;
   flags.atStatementStart = false;

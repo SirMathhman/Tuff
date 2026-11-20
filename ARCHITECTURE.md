@@ -14,7 +14,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### References
 
-`let y = &x;` binds `y` to the cell of `x`, so `*y` reads the current value of `x`. `let y = &mut x;` (`x` must be `let mut`) also allows `*y = v;`, and a `&mut` cannot overlap another reference to `x`. A reference cannot be `let mut`, reassigned, read without `*`, or pointed at another reference. `&` is valid only as the whole value of a `let`.
+`let y = &x;` binds `y` to the cell of `x`, so `*y` reads `x`. `let y = &mut x;` (`x` must be `let mut`) also allows `*y = v;`, and a `&mut` cannot overlap another reference to `x`. A reference cannot be `let mut`, reassigned, read without `*`, or pointed at another reference. `&` is valid only as the whole value of a `let`, or as the last item of a braced block or if-branch that is one; its target must be outside the block.
 
 ### Lenient branches
 
@@ -84,7 +84,7 @@ A `lenient` flag reaches every reduction and sign call. Value errors pass throug
 
 ### Cell kinds
 
-A `Cell` is a value or a reference in one shape. A reference keeps an unused `value`, and `let y = &x;` pushes a placeholder 0 onto the value stack.
+A reference cell keeps an unused `value`, and a `let` with `&` pushes a placeholder 0.
 
 ### Failure detection
 

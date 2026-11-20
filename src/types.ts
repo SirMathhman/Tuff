@@ -57,6 +57,16 @@ export interface OperatorEntry {
 }
 
 /**
+ * A reference yielded by a block or if-branch, to be bound by the enclosing let.
+ */
+export interface BindingRef {
+  /** The variable the reference points to. */
+  target: Cell;
+  /** Whether the reference is a `&mut` one. */
+  exclusive: boolean;
+}
+
+/**
  * An open bracket, remembering its kind, the sign written before it, and its offset.
  */
 export interface GroupEntry {
@@ -70,6 +80,8 @@ export interface GroupEntry {
   where: number;
   /** Whether this bracket opens the condition of an if. */
   ifCondition: boolean;
+  /** A reference that is the block's final value, if any. */
+  ref?: BindingRef;
 }
 
 /**
@@ -110,6 +122,8 @@ export interface IfEntry {
   skipping: boolean;
   /** The value of the chosen branch, once known. */
   value: Value | undefined;
+  /** A reference yielded by the chosen branch, if any. */
+  ref?: BindingRef;
 }
 
 /**

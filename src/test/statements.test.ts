@@ -438,6 +438,13 @@ test('interpretTuff("let x = { let y = 0; &y }; *x") => error', () => {
   });
 });
 
+test('interpretTuff("let z = 1; let x = { &z }; *x") => 1', () => {
+  expect(interpretTuff("let z = 1; let x = { &z }; *x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,

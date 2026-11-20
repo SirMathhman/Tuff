@@ -3,6 +3,7 @@ import {
   Bracket,
   blockEndsWithStatement,
   elseNotAllowed,
+  expectedClose,
   expectedEquals,
   expectedIfParen,
   expectedNumber,
@@ -29,7 +30,15 @@ import {
   skipSpaces,
   toBracket,
 } from "./scanner";
-import type { Cell, ParserState, Scope, Value } from "./types";
+import type {
+  BindingEntry,
+  Cell,
+  GroupEntry,
+  ParserState,
+  Scope,
+  StackEntry,
+  Value,
+} from "./types";
 import { EntryKind, IfPhase, Step } from "./types";
 import { completeBranch, isLenient, lookupCell } from "./helpers";
 
@@ -199,18 +208,57 @@ function conflictsWithReference(
   return false;
 }
 
-// Reads `&NAME` or `&mut NAME`, which must be the whole value of a `let`. The reference
-// is recorded on the binding, and a placeholder goes on the value stack for the statement end.
+/**
+ * The `let` a reference would bind, and the block or branch that yields it, if any.
+ */
+interface LetOwner {
+  /** The let that binds the reference. */
+  binding: BindingEntry;
+  /** The braced block or if-branch whose final value is the reference, if any. */
+  carrier?: GroupEntry;
+}
+
+// Finds the `let` that a reference here would bind. The reference is the whole value of
+// a `let`, or the final value of a braced block or if-branch that is the whole value of a `let`.
+function letOwner(ops: StackEntry[]): LetOwner | undefined {
+  const top = ops[ops.length - 1];
+  if (top?.kind === EntryKind.Binding) {
+    return top.assign ? undefined : { binding: top };
+  }
+  if (
+    top?.kind !== EntryKind.Group ||
+    top.bracket !== Bracket.Brace ||
+    top.ifCondition
+  ) {
+    return undefined;
+  }
+  const below = ops[ops.length - 2];
+  if (below?.kind === EntryKind.Binding) {
+    return below.assign ? undefined : { binding: below, carrier: top };
+  }
+  const owner = ops[ops.length - 3];
+  if (
+    below?.kind === EntryKind.If &&
+    (below.phase === IfPhase.Then || below.phase === IfPhase.Else) &&
+    owner?.kind === EntryKind.Binding &&
+    !owner.assign
+  ) {
+    return { binding: owner, carrier: top };
+  }
+  return undefined;
+}
+
+// Reads `&NAME` or `&mut NAME`. It is recorded on the `let` it binds, or on the block or
+// if-branch that yields it, and a placeholder goes on the value stack.
 function operandRef(
   state: ParserState,
   signed: boolean,
 ): Failure<TuffError> | Step {
   const { source, ops, scopes } = state;
-  const top = ops[ops.length - 1];
-  if (signed || top?.kind !== EntryKind.Binding || top.assign) {
-    return referenceNotLet(state.pos);
-  }
-  if (top.mutable) return mutableReference(top.where, top.name);
+  const owner = letOwner(ops);
+  if (signed || owner === undefined) return referenceNotLet(state.pos);
+  const { binding, carrier } = owner;
+  if (binding.mutable) return mutableReference(binding.where, binding.name);
   let nameStart = skipSpaces(source, state.pos + 1);
   let end = readName(source, nameStart);
   const exclusive = source.slice(nameStart, end) === "mut";
@@ -227,12 +275,21 @@ function operandRef(
   if (conflictsWithReference(scopes, cell, exclusive)) {
     return referenceOverlap(nameStart, name);
   }
-  const semicolon = skipSpaces(source, end);
-  if (source.charAt(semicolon) !== ";") {
-    return expectedSemicolon(source, semicolon);
+  const innermost = scopes[scopes.length - 1];
+  if (carrier !== undefined && innermost?.get(name) === cell) {
+    return referenceNotLet(state.pos);
   }
-  top.target = cell;
-  top.exclusive = exclusive;
+  const after = skipSpaces(source, end);
+  if (carrier === undefined) {
+    if (source.charAt(after) !== ";") return expectedSemicolon(source, after);
+    binding.target = cell;
+    binding.exclusive = exclusive;
+  } else {
+    if (source.charAt(after) !== "}") {
+      return expectedClose(source, after, Bracket.Brace);
+    }
+    carrier.ref = { target: cell, exclusive };
+  }
   return pushOperand(state, 0, end);
 }
 

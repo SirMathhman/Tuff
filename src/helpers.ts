@@ -1,7 +1,35 @@
 import type { Failure, TuffError } from "./errors";
 import { applySign } from "./operations";
-import type { Cell, GroupEntry, ParserState, Scope, StackEntry } from "./types";
+import type {
+  BindingRef,
+  Cell,
+  GroupEntry,
+  ParserState,
+  Scope,
+  StackEntry,
+} from "./types";
 import { EntryKind, IfPhase } from "./types";
+
+/**
+ * Passes a reference yielded by a just-closed block or branch to the entry now on top:
+ * a `let` takes it as its target, and an if-branch holds it until the if completes.
+ *
+ * @param ops - the operator stack, after the block or branch was removed.
+ * @param ref - the reference the block or branch yielded, if any.
+ */
+export function attachRef(
+  ops: StackEntry[],
+  ref: BindingRef | undefined,
+): void {
+  const top = ops[ops.length - 1];
+  if (ref === undefined || top === undefined) return;
+  if (top.kind === EntryKind.Binding) {
+    top.target = ref.target;
+    top.exclusive = ref.exclusive;
+  } else if (top.kind === EntryKind.If && !top.skipping) {
+    top.ref = ref;
+  }
+}
 
 /**
  * Reports whether the parser is inside an unchosen if branch, where errors are suppressed.
@@ -87,6 +115,7 @@ export function completeBranch(
       return undefined;
     }
     ops.pop();
+    attachRef(ops, entry.ref);
     const result = applySign(
       entry.value ?? 0,
       entry.sign,
