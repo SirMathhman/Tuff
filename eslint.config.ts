@@ -5,6 +5,7 @@ const { configs: jsConfigs } = eslint;
 const { configs: tsConfigs } = tseslint;
 import jsdoc from "eslint-plugin-jsdoc";
 import maxInterfaceMembers from "./eslint-rules/max-interface-members";
+import exportReferencedTypes from "./eslint-rules/export-referenced-types";
 import requireMemberDocs from "./eslint-rules/require-member-docs";
 import noRecursion from "./eslint-rules/no-recursion";
 
@@ -19,6 +20,7 @@ export default tseslint.config(
           "no-recursion": noRecursion,
           "max-interface-members": maxInterfaceMembers,
           "require-member-docs": requireMemberDocs,
+          "export-referenced-types": exportReferencedTypes,
         },
       },
       jsdoc,
@@ -27,6 +29,7 @@ export default tseslint.config(
       "local/no-recursion": "error",
       "local/max-interface-members": "error",
       "local/require-member-docs": "error",
+      "local/export-referenced-types": "error",
       "id-length": ["error", { min: 2 }],
       "max-lines": [
         "error",

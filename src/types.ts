@@ -47,9 +47,12 @@ export type Value = number | boolean;
 /**
  * A pending binary operator, with the offset where it was written.
  */
-interface OperatorEntry {
+export interface OperatorEntry {
+  /** Discriminates this entry as an operator. */
   kind: EntryKind.Operator;
+  /** The binary operator. */
   operator: Operator;
+  /** Offset of the operator. */
   where: number;
 }
 
@@ -131,9 +134,12 @@ export type Scope = Map<string, Cell>;
 /**
  * Where the parser stands among statements.
  */
-interface StatementFlags {
+export interface StatementFlags {
+  /** Whether the parser is at the start of a statement. */
   atStatementStart: boolean;
+  /** Whether the last top-level statement was a let or assignment. */
   afterLet: boolean; // the last top-level statement was a `let` or an assignment
+  /** Whether the most recent item was a statement. */
   lastStatementEnded: boolean; // the most recent item was a statement, not an expression
 }
 

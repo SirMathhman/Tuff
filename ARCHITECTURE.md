@@ -109,7 +109,7 @@ Exported top-level functions, classes, interfaces, type aliases, and enums need 
 
 #### Exports and Markdown
 
-Unused exports fail lint. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
+Types used by exports must be exported. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
 
 ## Potential Problems
 

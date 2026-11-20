@@ -12,8 +12,13 @@ export interface TuffError {
   fix: string;
 }
 
-interface Success<T> {
+/**
+ * A successful result, holding a value.
+ */
+export interface Success<T> {
+  /** Always true for a success. */
   ok: true;
+  /** The value on success. */
   value: T;
 }
 
