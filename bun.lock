@@ -7,6 +7,7 @@
       "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/bun": "latest",
+        "@typescript-eslint/utils": "^8",
         "eslint": "^10.15.0",
         "eslint-plugin-jsdoc": "^65.5.0",
         "markdownlint": "^0.42.2",

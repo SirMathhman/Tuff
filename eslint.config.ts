@@ -4,8 +4,8 @@ import tseslint from "typescript-eslint";
 const { configs: jsConfigs } = eslint;
 const { configs: tsConfigs } = tseslint;
 import jsdoc from "eslint-plugin-jsdoc";
-import maxInterfaceMembers from "./eslint-rules/max-interface-members.js";
-import noRecursion from "./eslint-rules/no-recursion.js";
+import maxInterfaceMembers from "./eslint-rules/max-interface-members";
+import noRecursion from "./eslint-rules/no-recursion";
 
 export default tseslint.config(
   { ignores: ["node_modules/**"] },
