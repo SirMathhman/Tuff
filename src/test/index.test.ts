@@ -337,3 +337,23 @@ test('interpretTuff("fn get() => { 1 } get()") => 1', () => {
     value: 1,
   });
 });
+
+test('interpretTuff("fn get() => { let mut x = 0; x = true; x }") => error', () => {
+  expect(interpretTuff("fn get() => { let mut x = 0; x = true; x }")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign a boolean to 'x', which holds a number",
+      where: 29,
+      why: "A variable keeps the type of the value it holds.",
+      fix: "Assign a value of the same type, or declare a new variable.",
+    },
+  });
+});
+
+test('interpretTuff("let mut counter = 0; fn increment() => { counter += 1; } increment(); counter") => 1', () => {
+  expect(
+    interpretTuff(
+      "let mut counter = 0; fn increment() => { counter += 1; } increment(); counter",
+    ),
+  ).toEqual({ ok: true, value: 1 });
+});

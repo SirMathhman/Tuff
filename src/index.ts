@@ -4,7 +4,7 @@ import type { ParserState } from "./types";
 import { Step } from "./types";
 import { stepOperand } from "./parse/operands";
 import { stepOperator } from "./parse/operators";
-import { finishCall } from "./parse/calls";
+import { finishCalls } from "./parse/calls";
 
 /**
  * Evaluates a Tuff program: `let NAME = value;` statements followed by an
@@ -37,7 +37,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     },
   };
   for (;;) {
-    const failure = finishCall(state);
+    const failure = finishCalls(state);
     if (failure !== undefined) return failure;
     const outcome = state.expectOperand
       ? stepOperand(state)

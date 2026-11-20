@@ -197,6 +197,10 @@ export interface CallEntry {
   scopes: Scope[];
   /** The caller's bracket depth, restored when the call finishes. */
   depth: number;
+  /** Whether this checks a declaration's body (its value is discarded) rather than a call. */
+  check: boolean;
+  /** Whether the call starts a statement, so a following ';' discards its value. */
+  statement: boolean;
 }
 
 /**

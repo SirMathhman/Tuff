@@ -46,7 +46,7 @@ export function startFn(
   state: ParserState,
   keywordEnd: number,
 ): Failure<TuffError> | Step {
-  const { source, scopes, flags } = state;
+  const { source, ops, scopes, flags } = state;
   const nameStart = skipSpaces(source, keywordEnd);
   const nameEnd = readName(source, nameStart);
   if (nameEnd === nameStart)
@@ -74,12 +74,24 @@ export function startFn(
   func.scopes = scopes.map((visible) => new Map(visible));
   // A braced body needs no ';' after it; otherwise the ';' is consumed.
   const terminator = skipSpaces(source, end);
-  state.pos = source.charAt(terminator) === ";" ? terminator + 1 : end;
+  const after = source.charAt(terminator) === ";" ? terminator + 1 : end;
+  // The body is checked now, in lenient mode: errors are reported and writes have no effect.
+  ops.push({
+    kind: EntryKind.Call,
+    sign: 1,
+    where: nameStart,
+    returnPos: after,
+    end,
+    scopes: state.scopes,
+    depth: state.depth,
+    check: true,
+    statement: false,
+  });
+  state.skipDepth++;
+  state.pos = start;
   state.expectOperand = true;
-  flags.atStatementStart = true;
-  flags.lastStatementEnded = true;
-  flags.lastAssign = false;
-  if (state.depth === 0) flags.afterLet = true;
+  flags.atStatementStart = source.charAt(start) === "{";
+  flags.lastStatementEnded = false;
   return Step.Continue;
 }
 
@@ -109,6 +121,7 @@ export function startCall(
   if (source.charAt(close) !== ")") return expectedText(source, close, ")");
   const openCalls = ops.filter((entry) => entry.kind === EntryKind.Call);
   if (openCalls.length >= MAX_CALL_DEPTH) return recursionTooDeep(nameStart);
+  const statement = flags.atStatementStart && state.depth === 0 && sign === 1;
   ops.push({
     kind: EntryKind.Call,
     sign,
@@ -117,6 +130,8 @@ export function startCall(
     end: func.end,
     scopes: state.scopes,
     depth: state.depth,
+    check: false,
+    statement,
   });
   // A copy, so that the body's own blocks never change the stored scopes.
   const { scopes: captured } = func;
@@ -124,18 +139,22 @@ export function startCall(
   state.depth = 0;
   state.pos = func.start;
   state.expectOperand = true;
-  flags.atStatementStart = false;
+  // A braced body is a block, so it can end in a statement and then has no value.
+  flags.atStatementStart = source.charAt(func.start) === "{";
   flags.lastStatementEnded = false;
   return Step.Continue;
 }
 
 /**
- * Ends the innermost call once its body has been parsed, restoring the caller's state.
+ * Ends the innermost call or declaration check once its body has been parsed,
+ * restoring the caller's state.
  *
  * @param state - the parser state.
- * @returns a failure from reducing the body, or undefined.
+ * @returns a failure, a Continue step when a call finished, or undefined when none did.
  */
-export function finishCall(state: ParserState): Failure<TuffError> | undefined {
+export function finishCall(
+  state: ParserState,
+): Failure<TuffError> | Step | undefined {
   const { source, ops, values, flags } = state;
   const call = innermostNonOperator(ops);
   if (call?.kind !== EntryKind.Call) return undefined;
@@ -143,14 +162,40 @@ export function finishCall(state: ParserState): Failure<TuffError> | undefined {
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   ops.pop();
-  const signed = applySign(values.pop() ?? 0, call.sign, call.where);
-  if (typeof signed === "object") return signed;
-  values.push(signed);
   state.scopes = call.scopes;
   state.depth = call.depth;
   state.pos = call.returnPos;
+  const value = values.pop() ?? 0;
+  const next = skipSpaces(source, call.returnPos);
+  if (call.check || (call.statement && source.charAt(next) === ";")) {
+    if (call.check) state.skipDepth--;
+    else state.pos = next + 1;
+    state.expectOperand = true;
+    flags.atStatementStart = true;
+    flags.lastStatementEnded = true;
+    flags.lastAssign = false;
+    if (state.depth === 0) flags.afterLet = true;
+    return Step.Continue;
+  }
+  const signed = applySign(value, call.sign, call.where);
+  if (typeof signed === "object") return signed;
+  values.push(signed);
   state.expectOperand = false;
   flags.atStatementStart = false;
   flags.lastStatementEnded = false;
-  return completeBranch(state);
+  return completeBranch(state) ?? Step.Continue;
+}
+
+/**
+ * Ends every call whose body has been fully parsed, innermost first.
+ *
+ * @param state - the parser state.
+ * @returns a failure from reducing a body, or undefined.
+ */
+export function finishCalls(
+  state: ParserState,
+): Failure<TuffError> | undefined {
+  let outcome = finishCall(state);
+  while (outcome === Step.Continue) outcome = finishCall(state);
+  return typeof outcome === "object" ? outcome : undefined;
 }
