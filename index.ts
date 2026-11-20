@@ -11,6 +11,8 @@ export enum TuffErrorKind {
   DivisionByZero = "DivisionByZero",
   NumericOverflow = "NumericOverflow",
   NestingTooDeep = "NestingTooDeep",
+  UnknownName = "UnknownName",
+  DuplicateName = "DuplicateName",
 }
 
 export interface TuffErrorOf<K extends TuffErrorKind> {
@@ -25,7 +27,9 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.ExpectedClosingParen>
   | TuffErrorOf<TuffErrorKind.DivisionByZero>
   | TuffErrorOf<TuffErrorKind.NumericOverflow>
-  | TuffErrorOf<TuffErrorKind.NestingTooDeep>;
+  | TuffErrorOf<TuffErrorKind.NestingTooDeep>
+  | TuffErrorOf<TuffErrorKind.UnknownName>
+  | TuffErrorOf<TuffErrorKind.DuplicateName>;
 
 export interface Ok<T> {
   ok: true;
@@ -54,8 +58,13 @@ interface Parsed<T> {
   next: number;
 }
 
+interface Scope {
+  locals: Map<string, number>;
+  outer: Scope | undefined;
+}
+
 type Step<T> = Result<Parsed<T>, TuffError>;
-type Parser = (input: Input, pos: number, depth: number) => Step<number>;
+type Parser = (input: Input, pos: number, depth: number, scope: Scope | undefined) => Step<number>;
 type OperatorError = TuffErrorKind.DivisionByZero | TuffErrorKind.NumericOverflow;
 type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
 
@@ -84,7 +93,7 @@ const MULTIPLICATIVE = new Map<string, BinaryOp>([
 
 function tokenize(source: string): Result<Token[], TuffError> {
   const tokens: Token[] = [];
-  const pattern = /\s*(\d+|[-+*/(){}])/y;
+  const pattern = /\s*(\d+|[A-Za-z]+|[-+*/(){}=;])/y;
   let index = 0;
   while (index < source.length) {
     pattern.lastIndex = index;
@@ -103,13 +112,70 @@ function tokenize(source: string): Result<Token[], TuffError> {
   return ok(tokens);
 }
 
-function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser): Step<number> {
+function isName(text: string): boolean {
+  return /^[A-Za-z]+$/.test(text) && text !== "let";
+}
+
+function lookup(scope: Scope | undefined, name: string): number | undefined {
+  let current = scope;
+  while (current !== undefined) {
+    const value = current.locals.get(name);
+    if (value !== undefined) return value;
+    current = current.outer;
+  }
+  return undefined;
+}
+
+function parseBlock(
+  input: Input,
+  pos: number,
+  depth: number,
+  scope: Scope | undefined,
+  parseExpr: Parser,
+): Step<number> {
+  const locals = new Map<string, number>();
+  const inner: Scope = { locals, outer: scope };
+  let cursor = pos;
+  for (;;) {
+    const token = input.tokens[cursor];
+    if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (token.text !== "let") return parseExpr(input, cursor, depth, inner);
+
+    const nameToken = input.tokens[cursor + 1];
+    if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
+    if (locals.has(nameToken.text)) return err({ kind: TuffErrorKind.DuplicateName, span: nameToken.span });
+
+    const equals = input.tokens[cursor + 2];
+    if (equals === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (equals.text !== "=") return err({ kind: TuffErrorKind.UnexpectedToken, span: equals.span });
+
+    const rhs = parseExpr(input, cursor + 3, depth, inner);
+    if (!rhs.ok) return rhs;
+    const semicolon = input.tokens[rhs.value.next];
+    if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
+    locals.set(nameToken.text, rhs.value.value);
+    cursor = rhs.value.next + 1;
+  }
+}
+
+function parseFactor(
+  input: Input,
+  pos: number,
+  depth: number,
+  scope: Scope | undefined,
+  parseExpr: Parser,
+): Step<number> {
   const token = input.tokens[pos];
   if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
   if (token.text === "(" || token.text === "{") {
     if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: token.span });
-    const closer = token.text === "(" ? ")" : "}";
-    const inner = parseExpr(input, pos + 1, depth + 1);
+    const isBlock = token.text === "{";
+    const closer = isBlock ? "}" : ")";
+    const inner = isBlock
+      ? parseBlock(input, pos + 1, depth + 1, scope, parseExpr)
+      : parseExpr(input, pos + 1, depth + 1, scope);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
     if (close === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
@@ -123,6 +189,11 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     if (!Number.isFinite(value)) return err({ kind: TuffErrorKind.NumericOverflow, span: token.span });
     return ok({ value, next: pos + 1 });
   }
+  if (isName(token.text)) {
+    const value = lookup(scope, token.text);
+    if (value === undefined) return err({ kind: TuffErrorKind.UnknownName, span: token.span });
+    return ok({ value, next: pos + 1 });
+  }
   return err({ kind: TuffErrorKind.UnexpectedToken, span: token.span });
 }
 
@@ -130,10 +201,11 @@ function parseBinary(
   input: Input,
   pos: number,
   depth: number,
+  scope: Scope | undefined,
   level: Map<string, BinaryOp>,
   operand: Parser,
 ): Step<number> {
-  const first = operand(input, pos, depth);
+  const first = operand(input, pos, depth, scope);
   if (!first.ok) return first;
   let { value, next } = first.value;
   for (;;) {
@@ -141,7 +213,7 @@ function parseBinary(
     if (op === undefined) return ok({ value, next });
     const fn = level.get(op.text);
     if (fn === undefined) return ok({ value, next });
-    const right = operand(input, next + 1, depth);
+    const right = operand(input, next + 1, depth, scope);
     if (!right.ok) return right;
     const applied = fn(value, right.value.value);
     if (!applied.ok) return err({ kind: applied.error, span: op.span });
@@ -150,19 +222,19 @@ function parseBinary(
   }
 }
 
-function parseTerm(input: Input, pos: number, depth: number, parseExpr: Parser): Step<number> {
-  return parseBinary(input, pos, depth, MULTIPLICATIVE, (i, p, d) => parseFactor(i, p, d, parseExpr));
+function parseTerm(input: Input, pos: number, depth: number, scope: Scope | undefined, parseExpr: Parser): Step<number> {
+  return parseBinary(input, pos, depth, scope, MULTIPLICATIVE, (i, p, d, s) => parseFactor(i, p, d, s, parseExpr));
 }
 
-function parseExpression(input: Input, pos: number, depth: number): Step<number> {
-  return parseBinary(input, pos, depth, ADDITIVE, (i, p, d) => parseTerm(i, p, d, parseExpression));
+function parseExpression(input: Input, pos: number, depth: number, scope: Scope | undefined): Step<number> {
+  return parseBinary(input, pos, depth, scope, ADDITIVE, (i, p, d, s) => parseTerm(i, p, d, s, parseExpression));
 }
 
 export function evaluateTuff(source: string): Result<number, TuffError> {
   const tokenized = tokenize(source);
   if (!tokenized.ok) return tokenized;
   const input: Input = { tokens: tokenized.value, end: { start: source.length, end: source.length } };
-  const parsed = parseExpression(input, 0, 0);
+  const parsed = parseExpression(input, 0, 0, undefined);
   if (!parsed.ok) return parsed;
   const extra = input.tokens[parsed.value.next];
   if (extra !== undefined) return err({ kind: TuffErrorKind.UnexpectedToken, span: extra.span });

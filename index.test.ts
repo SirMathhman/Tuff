@@ -14,8 +14,8 @@ test("empty and whitespace-only input is an UnexpectedEnd error, not 0", () => {
   expect(evaluateTuff("  ")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedEnd, span: { start: 2, end: 2 } } });
 });
 
-test('evaluateTuff("abc") reports an UnexpectedCharacter error spanning "a"', () => {
-  expect(evaluateTuff("abc")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedCharacter, span: { start: 0, end: 1 } } });
+test('evaluateTuff("abc") is an UnknownName error spanning "abc"', () => {
+  expect(evaluateTuff("abc")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 0, end: 3 } } });
 });
 
 test('evaluateTuff("1 / 0") is a DivisionByZero error spanning the "/"', () => {
@@ -44,7 +44,19 @@ test("nesting deeper than 256 groups is a NestingTooDeep error, not a stack cras
   expect(evaluateTuff(source)).toEqual({ ok: false, error: { kind: TuffErrorKind.NestingTooDeep, span: { start: 256, end: 257 } } });
 });
 
+test('evaluateTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(evaluateTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test('evaluateTuff("x") is an UnknownName error spanning "x"', () => {
+  expect(evaluateTuff("x")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 0, end: 1 } } });
+});
+
+test("re-declaring a name in the same block is a DuplicateName error", () => {
+  expect(evaluateTuff("{ let x = 1; let x = 2; x }")).toEqual({ ok: false, error: { kind: TuffErrorKind.DuplicateName, span: { start: 17, end: 18 } } });
+});
+
 test("hex and exponent forms are rejected", () => {
-  expect(evaluateTuff("0x10")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedCharacter, span: { start: 1, end: 2 } } });
-  expect(evaluateTuff("1e3")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedCharacter, span: { start: 1, end: 2 } } });
+  expect(evaluateTuff("0x10")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 1, end: 2 } } });
+  expect(evaluateTuff("1e3")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 1, end: 2 } } });
 });
