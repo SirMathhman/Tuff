@@ -8,15 +8,15 @@ import {
   type BorrowNode,
   type ChainNode,
   type DerefNode,
-  type IfNode,
-  type MatchNode,
   type Expr,
   type NameNode,
 } from "./ast.ts";
+import { evaluateIf, evaluateMatch } from "./eval/branch.ts";
+import type { Env } from "./eval/env.ts";
+import { spanOf } from "./eval/span-of.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { Frame, NameRefs } from "./scope.ts";
-import type { Span } from "./span.ts";
 import { isReference, type Value } from "./value.ts";
 
 type OperatorError =
@@ -25,14 +25,6 @@ type OperatorError =
   | TuffErrorKind.BooleanOperand
   | TuffErrorKind.ReferenceAsValue;
 type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
-
-/** The state of one evaluation: the resolver's name bindings and the values of the open blocks. */
-interface Env {
-  /** The binding of every name use, from the resolver. */
-  refs: NameRefs;
-  /** Values of the open blocks, outermost first; each block's values are in binding order. */
-  frames: Frame<Value>[];
-}
 
 function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
   return Number.isFinite(n) ? ok(n) : err(TuffErrorKind.NumericOverflow);
@@ -57,29 +49,6 @@ function applyOperator(operator: Operator, a: Value, b: Value): Result<number, O
   if (typeof a === "number" && typeof b === "number") return OPERATORS[operator](a, b);
   if (isReference(a) || isReference(b)) return err(TuffErrorKind.ReferenceAsValue);
   return err(TuffErrorKind.BooleanOperand);
-}
-
-/**
- * Finds the source span of an expression, for errors that point at its value.
- *
- * @param expr - The expression.
- * @returns The span of the expression's leading token. A block without a final expression has no value, so it gets an empty span.
- */
-function spanOf(expr: Expr): Span {
-  switch (expr.kind) {
-    case NodeKind.Literal:
-    case NodeKind.Boolean:
-    case NodeKind.Name:
-    case NodeKind.Borrow:
-    case NodeKind.Deref:
-    case NodeKind.If:
-    case NodeKind.Match:
-      return expr.span;
-    case NodeKind.Chain:
-      return spanOf(expr.first);
-    case NodeKind.Block:
-      return expr.result === undefined ? { start: 0, end: 0 } : spanOf(expr.result);
-  }
 }
 
 /**
@@ -129,9 +98,9 @@ function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
     case NodeKind.Chain:
       return evaluateChain(expr, env);
     case NodeKind.If:
-      return evaluateIf(expr, env);
+      return evaluateIf(expr, env, evaluateIn);
     case NodeKind.Match:
-      return evaluateMatch(expr, env);
+      return evaluateMatch(expr, env, evaluateIn);
     case NodeKind.Block:
       return evaluateBlock(expr, env);
   }
@@ -165,84 +134,6 @@ function evaluateDeref(deref: DerefNode, env: Env): Result<Value, TuffError> {
   // Unreachable: a live reference always points at a bound slot.
   if (value === undefined) return err({ kind: TuffErrorKind.InternalError, span: deref.span });
   return ok(value);
-}
-
-/**
- * Evaluates both branches, reports an error from either, and returns the chosen branch's value.
- *
- * @param node - The conditional.
- * @param env - The current evaluation state.
- * @returns The selected branch's value, or an error if the condition is not a boolean or the branch fails.
- */
-function evaluateIf(node: IfNode, env: Env): Result<Value, TuffError> {
-  const condition = evaluateIn(node.condition, env);
-  if (!condition.ok) return condition;
-  if (typeof condition.value !== "boolean") {
-    return err({ kind: TuffErrorKind.NotABoolean, span: spanOf(node.condition) });
-  }
-  const thenResult = evaluateBranch(node.thenBranch, env, condition.value);
-  const elseResult = evaluateBranch(node.elseBranch, env, !condition.value);
-  if (!thenResult.ok) return thenResult;
-  if (!elseResult.ok) return elseResult;
-  return condition.value ? thenResult : elseResult;
-}
-
-/**
- * Evaluates one branch. If the branch is not the chosen one, the writes it made are undone.
- *
- * @param branch - The branch to evaluate.
- * @param env - The current evaluation state.
- * @param chosen - Whether the condition selected this branch.
- * @returns The branch's value, or its error.
- */
-function evaluateBranch(branch: Expr, env: Env, chosen: boolean): Result<Value, TuffError> {
-  const snapshot = env.frames.map((frame) => [...frame]);
-  const result = evaluateIn(branch, env);
-  if (!chosen) restoreFrames(env.frames, snapshot);
-  return result;
-}
-
-/**
- * Restores every open block's values to a snapshot taken earlier, in place.
- *
- * @param frames - The open blocks' values, outermost first.
- * @param snapshot - Copies of the same blocks' values, taken earlier.
- */
-function restoreFrames(frames: Frame<Value>[], snapshot: Frame<Value>[]): void {
-  for (const [index, frame] of frames.entries()) {
-    const saved = snapshot[index];
-    if (saved === undefined) continue;
-    frame.length = 0;
-    frame.push(...saved);
-  }
-}
-
-/**
- * Evaluates every arm, then returns the value of the first arm whose pattern equals the scrutinee.
- * The arms that are not selected have their writes undone.
- *
- * @param node - The match.
- * @param env - The current evaluation state.
- * @returns The selected arm's value, or an error: a pattern of the wrong kind, a failing arm, or no matching arm.
- */
-function evaluateMatch(node: MatchNode, env: Env): Result<Value, TuffError> {
-  const scrutinee = evaluateIn(node.scrutinee, env);
-  if (!scrutinee.ok) return scrutinee;
-  for (const arm of node.arms) {
-    if (arm.pattern !== undefined && typeof arm.pattern.value !== typeof scrutinee.value) {
-      return err({ kind: TuffErrorKind.TypeMismatch, span: arm.patternSpan });
-    }
-  }
-  const matched = node.arms.findIndex((arm) => arm.pattern === undefined || arm.pattern.value === scrutinee.value);
-  const results = node.arms.map((arm, index) => evaluateBranch(arm.body, env, index === matched));
-  for (const result of results) {
-    if (!result.ok) return result;
-  }
-  if (matched === -1) return err({ kind: TuffErrorKind.NoMatchingArm, span: node.span });
-  const chosen = results[matched];
-  // Unreachable: matched indexes an arm, and every arm produced a result.
-  if (chosen === undefined) return err({ kind: TuffErrorKind.InternalError, span: node.span });
-  return chosen;
 }
 
 function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
