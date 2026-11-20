@@ -385,3 +385,10 @@ test("parentheses and prefix stars share one nesting budget", () => {
     error: { kind: TuffErrorKind.NestingTooDeep, span: { start: 256, end: 257 } },
   });
 });
+
+test('evaluateTuff("*(3) = 1;") is a NotAReference error at the *', () => {
+  expect(evaluateTuff("*(3) = 1;")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NotAReference, span: { start: 0, end: 1 } },
+  });
+});
