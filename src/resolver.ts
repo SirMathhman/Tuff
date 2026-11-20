@@ -1,47 +1,88 @@
-import { NodeKind, type BlockNode, type ChainNode, type Expr } from "./ast.ts";
+import { NodeKind, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
-import { createScope, lookup, type Scope } from "./scope.ts";
+
+/** Where a name use is bound: how many blocks out, and its position in that block. */
+export interface NameRef {
+  /** Number of blocks to walk outward; 0 means the innermost block. */
+  depth: number;
+  /** Position of the binding within its block. */
+  index: number;
+}
+
+/** The binding of every name use in the program, keyed by the use's AST node. */
+export type NameRefs = Map<NameNode, NameRef>;
+
+/** The names bound so far in one block, mapped to their positions. */
+type NameTable = Map<string, number>;
 
 /**
- * Checks that every name is bound in scope. Computes no values.
+ * Binds every name use to its binding. Computes no values.
  *
- * @param expr - The expression to check.
- * @param scope - The names bound by enclosing blocks, or `undefined` at the top level.
- * @returns `ok(undefined)` if every name resolves, otherwise an `UnknownName` error at the first unbound name.
+ * @param program - The program's top-level block.
+ * @returns The binding of each name use, or an `UnknownName` error at the first unbound name.
  */
-export function resolve(expr: Expr, scope: Scope<boolean> | undefined): Result<undefined, TuffError> {
+export function resolve(program: BlockNode): Result<NameRefs, TuffError> {
+  const refs: NameRefs = new Map();
+  const blocks: NameTable[] = [];
+  const checked = resolveExpr(program, blocks, refs);
+  if (!checked.ok) return checked;
+  return ok(refs);
+}
+
+function findName(blocks: NameTable[], name: string): NameRef | undefined {
+  for (let level = blocks.length - 1; level >= 0; level--) {
+    const index = blocks[level]?.get(name);
+    if (index !== undefined) return { depth: blocks.length - 1 - level, index };
+  }
+  return undefined;
+}
+
+function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:
       return ok(undefined);
-    case NodeKind.Name:
-      if (lookup(scope, expr.name) === undefined) {
-        return err({ kind: TuffErrorKind.UnknownName, span: expr.span });
-      }
+    case NodeKind.Name: {
+      const ref = findName(blocks, expr.name);
+      if (ref === undefined) return err({ kind: TuffErrorKind.UnknownName, span: expr.span });
+      refs.set(expr, ref);
       return ok(undefined);
+    }
     case NodeKind.Chain:
-      return resolveChain(expr, scope);
+      return resolveChain(expr, blocks, refs);
     case NodeKind.Block:
-      return resolveBlock(expr, scope);
+      return resolveBlock(expr, blocks, refs);
   }
 }
 
-function resolveChain(chain: ChainNode, scope: Scope<boolean> | undefined): Result<undefined, TuffError> {
-  const first = resolve(chain.first, scope);
+function resolveChain(chain: ChainNode, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
+  const first = resolveExpr(chain.first, blocks, refs);
   if (!first.ok) return first;
   for (const step of chain.steps) {
-    const operand = resolve(step.operand, scope);
+    const operand = resolveExpr(step.operand, blocks, refs);
     if (!operand.ok) return operand;
   }
   return ok(undefined);
 }
 
-function resolveBlock(block: BlockNode, scope: Scope<boolean> | undefined): Result<undefined, TuffError> {
-  const inner = createScope<boolean>(scope);
-  for (const binding of block.bindings) {
-    const value = resolve(binding.value, inner);
+function resolveBlock(block: BlockNode, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
+  const names: NameTable = new Map();
+  blocks.push(names);
+  const checked = resolveBlockBody(block, names, blocks, refs);
+  blocks.pop();
+  return checked;
+}
+
+function resolveBlockBody(
+  block: BlockNode,
+  names: NameTable,
+  blocks: NameTable[],
+  refs: NameRefs,
+): Result<undefined, TuffError> {
+  for (const [index, binding] of block.bindings.entries()) {
+    const value = resolveExpr(binding.value, blocks, refs);
     if (!value.ok) return value;
-    inner.locals.set(binding.name, true);
+    names.set(binding.name, index);
   }
-  return resolve(block.result, inner);
+  return resolveExpr(block.result, blocks, refs);
 }

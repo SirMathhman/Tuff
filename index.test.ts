@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { evaluateTuff, TuffErrorKind } from "./index.ts";
+import { describeError, evaluateTuff, TuffErrorKind } from "./index.ts";
 
 test('evaluateTuff("1") => 1', () => {
   expect(evaluateTuff("1")).toEqual({ ok: true, value: 1 });
@@ -98,6 +98,16 @@ test("a block without a closing brace is an UnexpectedEnd error", () => {
 
 test("a let whose right-hand side uses its own name is UnknownName", () => {
   expect(evaluateTuff("{ let x = x; x }")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 10, end: 11 } } });
+});
+
+test("every error kind has a what, why, and fix, and where is its span", () => {
+  for (const kind of Object.values(TuffErrorKind)) {
+    const explanation = describeError({ kind, span: { start: 0, end: 1 } });
+    expect(explanation.what).not.toBe("");
+    expect(explanation.why).not.toBe("");
+    expect(explanation.fix).not.toBe("");
+    expect(explanation.where).toEqual({ start: 0, end: 1 });
+  }
 });
 
 test("hex and exponent forms are rejected", () => {

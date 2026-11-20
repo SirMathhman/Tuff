@@ -8,7 +8,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Public API**: the exports of `index.ts`. Only these are stable. Everything else is internal.
 - **Evaluation**: a pure function from Tuff source to a `Result`. It performs no I/O, reads no environment, and never executes host JavaScript (no `eval`, no `new Function`).
 - **Result**: the only error channel. A function returns `{ ok: true, value }` or `{ ok: false, error }`. Exceptions are not used for expected failures, and a function never returns `NaN` or another sentinel to signal failure.
-- **TuffError**: a discriminated union (error enum) of failure kinds. Each variant carries enough data to answer: what the error is, where in the source it occurred (span: start and end offsets), why it is an error, and what the caller can change to fix it.
+- **TuffError**: a discriminated union (error enum) of failure kinds. Each variant carries its kind and the span where it occurred (start and end offsets). `describeError` answers what the error is, where it is, why it is an error, and what the caller can change to fix it. It derives the wording from the kind, so no text is built on the failure path.
 - **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow union of `TuffErrorKind` members (for example `DivisionByZero`). The operator never sees source positions. The evaluator attaches the operator token's span and widens the failure to a `TuffError`.
 - **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
 - **Block**: a sequence of zero or more bindings followed by one final expression, optionally wrapped in `{ }`. The whole source is a block without braces. A block is the only construct that creates a scope.
@@ -59,7 +59,7 @@ Rules:
 
 - Dependencies flow one way, from `index.ts` toward the leaves. No cycles between files.
 - Each stage is a pure function from its input type to a `Result` of its output type. A stage never calls a later stage.
-- Name checks run before evaluation. `DuplicateName` is a property of the block's syntax, so the parser reports it when it builds a `Block`. `UnknownName` is reported by `resolver.ts`, a static pass over the AST that uses `scope.ts`. The evaluator never reports a name error, because by then every name is known to be bound.
+- Name checks run before evaluation. `DuplicateName` is a property of the block's syntax, so the parser reports it when it builds a `Block`. `UnknownName` is reported by `resolver.ts`, a static pass over the AST that uses `scope.ts`. The resolver records the binding of every name use as a block depth and a position within that block, and the evaluator reads values by that reference. The evaluator never reports a name error. It reports `InternalError` only if the resolver and evaluator disagree, which is a bug in Tuff.
 - The parser must not evaluate and must not look up names. Its output is a syntactically valid AST and nothing more.
 - Recursion is allowed only inside the parser and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
 - Limits: 100 lines per function, 500 code lines per file, 10 files per directory. These must be enforced by lint (see Future Work). Lint does not enforce them yet.
