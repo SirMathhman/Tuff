@@ -3,6 +3,7 @@ import {
   blockEndsWithStatement,
   Bracket,
   booleanOperand,
+  chainedComparison,
   booleanSign,
   closerFor,
   expectedClose,
@@ -91,14 +92,28 @@ interface ParserState {
   lastStatementEnded: boolean; // the most recent item was a statement, not an expression
 }
 
-function precedence(op: Operator): number {
-  return op === Operator.Multiply ? 2 : 1;
+function isComparison(op: Operator): boolean {
+  return (
+    op !== Operator.Add && op !== Operator.Subtract && op !== Operator.Multiply
+  );
 }
 
-function apply(left: number, op: Operator, right: number): number {
+// Comparisons bind loosest, then + and -, then *.
+function precedence(op: Operator): number {
+  if (op === Operator.Multiply) return 2;
+  return isComparison(op) ? 0 : 1;
+}
+
+function apply(left: number, op: Operator, right: number): Value {
   if (op === Operator.Add) return left + right;
   if (op === Operator.Subtract) return left - right;
-  return left * right;
+  if (op === Operator.Multiply) return left * right;
+  if (op === Operator.LessThan) return left < right;
+  if (op === Operator.LessEqual) return left <= right;
+  if (op === Operator.GreaterThan) return left > right;
+  if (op === Operator.GreaterEqual) return left >= right;
+  if (op === Operator.Equal) return left === right;
+  return left !== right;
 }
 
 // Applies a sign to a value. Only numbers take a sign, so a negative sign on a
@@ -370,11 +385,18 @@ function pushOperator(
     precedence(top.operator) >= precedence(op);
     top = state.ops[state.ops.length - 1]
   ) {
+    if (
+      top?.kind === EntryKind.Operator &&
+      isComparison(top.operator) &&
+      isComparison(op)
+    ) {
+      return chainedComparison(state.pos);
+    }
     const failure = applyTop(state.values, state.ops);
     if (failure !== undefined) return failure;
   }
   state.ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
-  state.pos++;
+  state.pos += op.length;
   state.expectOperand = true;
   state.atStatementStart = false;
   return undefined;
@@ -436,7 +458,7 @@ function stepOperator(state: ParserState): Failure<TuffError> | Step {
   const ch = state.source.charAt(state.pos);
   if (ch === ";") return endStatement(state);
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
-  const op = toOperator(ch);
+  const op = toOperator(state.source, state.pos);
   if (op === undefined) {
     if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
       return expectedSemicolon(state.source, state.pos);

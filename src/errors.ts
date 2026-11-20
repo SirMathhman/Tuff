@@ -297,8 +297,23 @@ export function booleanOperand(
   return fail(
     `Cannot use a boolean with '${operator}'`,
     where,
-    "Only numbers can be combined with '+', '-', or '*'; a boolean has no arithmetic value.",
+    "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
     "Use a number in place of the boolean, or remove the operator.",
+  );
+}
+
+/**
+ * Reports a comparison written directly after another comparison.
+ *
+ * @param where - the offset of the second comparison operator.
+ * @returns a failure describing the chained comparison.
+ */
+export function chainedComparison(where: number): Failure<TuffError> {
+  return fail(
+    "Comparisons cannot be chained",
+    where,
+    "A comparison produces a boolean, which cannot be compared again in the same expression.",
+    "Remove one of the comparisons, or compare the values in separate statements.",
   );
 }
 

@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, a boolean (`true` or `false`), a variable, or a parenthesized or braced expression. Booleans cannot be used in arithmetic.
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. Booleans cannot be used in arithmetic. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
@@ -81,7 +81,7 @@ Reads stdin lines, evaluates each with `interpretTuff`, and prints the value or 
 
 #### Tests (src/index.test.ts)
 
-Uses Bun's built-in `bun:test` runner. Each feature has a test named after its expression. Error tests check all four `TuffError` fields.
+Uses `bun:test`. Error tests check all four `TuffError` fields.
 
 ### Dependency direction
 

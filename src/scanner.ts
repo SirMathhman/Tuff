@@ -7,6 +7,12 @@ export enum Operator {
   Add = "+",
   Subtract = "-",
   Multiply = "*",
+  LessThan = "<",
+  LessEqual = "<=",
+  GreaterThan = ">",
+  GreaterEqual = ">=",
+  Equal = "==",
+  NotEqual = "!=",
 }
 
 function isDigit(ch: string): boolean {
@@ -28,15 +34,24 @@ function isSpace(ch: string): boolean {
 }
 
 /**
- * Maps a character to a binary operator.
+ * Maps the text at an offset to a binary operator. Two-character operators are
+ * read with one character of lookahead.
  *
- * @param ch - the character to map.
- * @returns the operator, or undefined when the character is not one.
+ * @param source - the program being parsed.
+ * @param pos - the offset of the operator's first character.
+ * @returns the operator, or undefined when the text there is not one.
  */
-export function toOperator(ch: string): Operator | undefined {
+export function toOperator(source: string, pos: number): Operator | undefined {
+  const ch = source.charAt(pos);
+  const next = source.charAt(pos + 1);
   if (ch === "+") return Operator.Add;
   if (ch === "-") return Operator.Subtract;
   if (ch === "*") return Operator.Multiply;
+  if (ch === "<") return next === "=" ? Operator.LessEqual : Operator.LessThan;
+  if (ch === ">")
+    return next === "=" ? Operator.GreaterEqual : Operator.GreaterThan;
+  if (ch === "=") return next === "=" ? Operator.Equal : undefined;
+  if (ch === "!") return next === "=" ? Operator.NotEqual : undefined;
   return undefined;
 }
 

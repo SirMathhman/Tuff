@@ -495,8 +495,24 @@ test('interpretTuff("true + 1") => error', () => {
     error: {
       what: "Cannot use a boolean with '+'",
       where: 5,
-      why: "Only numbers can be combined with '+', '-', or '*'; a boolean has no arithmetic value.",
+      why: "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
       fix: "Use a number in place of the boolean, or remove the operator.",
+    },
+  });
+});
+
+test('interpretTuff("let x = 3 < 5; x") => 1', () => {
+  expect(interpretTuff("let x = 3 < 5; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("1 < 2 < 3") => error', () => {
+  expect(interpretTuff("1 < 2 < 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Comparisons cannot be chained",
+      where: 6,
+      why: "A comparison produces a boolean, which cannot be compared again in the same expression.",
+      fix: "Remove one of the comparisons, or compare the values in separate statements.",
     },
   });
 });
