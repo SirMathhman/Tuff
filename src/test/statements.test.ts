@@ -414,6 +414,18 @@ test('interpretTuff("let mut x = 0; let y = &mut x; *y = 1; x") => 1', () => {
   });
 });
 
+test('interpretTuff("if (true) 1 { 1 / { let x = 0; x }}") => error', () => {
+  expect(interpretTuff("if (true) 1 { 1 / { let x = 0; x }}")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected 'else' but found '{'",
+      where: 12,
+      why: "An 'if' expression needs an 'else' branch so that it always has a value.",
+      fix: "Add 'else' followed by a value.",
+    },
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,
