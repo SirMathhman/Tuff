@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`, and a braced body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function whose body `e` is parsed at each `NAME()` call, in the scopes of its declaration. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`, and a braced body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
@@ -34,7 +34,7 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`.
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/parse/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/parse/operands.ts`, `src/parse/operators.ts`: parse steps, with `*` in `operands.ts`. `src/parse/references.ts`: `&` steps. `src/index.ts`: `interpretTuff`.
+- `src/parse/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/parse/operands.ts`, `src/parse/operators.ts`: parse steps, with `*` in `operands.ts`. `src/parse/references.ts`: `&` steps. `src/parse/calls.ts`: `fn` declarations and calls. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/*.test.ts`: `bun:test` suites. `src/test/test-messages.ts` holds shared expected messages.
 
@@ -110,7 +110,7 @@ The REPL reads each stdin line with no length limit. No maximum source length or
 
 ### Known gaps
 
-Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores. Also missing: statement-level `if` with `else` whose braces end in assignments, REPL bindings across lines, and REPL output of `why` and `fix`.
+Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions with parameters, and names with digits or underscores. Also missing: statement-level `if` with `else` whose braces end in assignments, REPL bindings across lines, and REPL output of `why` and `fix`.
 
 ### Module names
 

@@ -13,6 +13,8 @@ export enum EntryKind {
   Binding = "binding",
   /** An if expression in progress. */
   If = "if",
+  /** A function call whose body is being parsed. */
+  Call = "call",
 }
 
 /**
@@ -141,7 +143,8 @@ export interface IfEntry {
 /**
  * Any entry on the operator stack.
  */
-export type StackEntry = OperatorEntry | GroupEntry | BindingEntry | IfEntry;
+export type StackEntry =
+  OperatorEntry | GroupEntry | BindingEntry | IfEntry | CallEntry;
 
 /**
  * A variable: its value, and whether it was declared with `let mut`.
@@ -155,12 +158,46 @@ export interface Cell {
   target?: Cell;
   /** For a reference, whether it is a `&mut` one. */
   exclusive?: boolean;
+  /** For a function, its body and the variables visible where it was declared. */
+  func?: FuncDef;
 }
 
 /**
  * The variables declared in one block.
  */
 export type Scope = Map<string, Cell>;
+
+/**
+ * A declared function: the span of its body, and the scopes visible at its declaration.
+ */
+export interface FuncDef {
+  /** Offset of the first character of the body. */
+  start: number;
+  /** Offset of the ';' that ends the body. */
+  end: number;
+  /** The scopes visible at the declaration, innermost last. */
+  scopes: Scope[];
+}
+
+/**
+ * A function call whose body is being parsed; the caller's state is saved here.
+ */
+export interface CallEntry {
+  /** Discriminates this entry as a function call. */
+  kind: EntryKind.Call;
+  /** The sign written before the call. */
+  sign: number;
+  /** Offset of the call's name. */
+  where: number;
+  /** Offset just past the call's closing parenthesis. */
+  returnPos: number;
+  /** Offset of the ';' that ends the body. */
+  end: number;
+  /** The caller's scopes, restored when the call finishes. */
+  scopes: Scope[];
+  /** The caller's bracket depth, restored when the call finishes. */
+  depth: number;
+}
 
 /**
  * The parser's complete state between steps.

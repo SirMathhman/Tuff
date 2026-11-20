@@ -319,3 +319,10 @@ test('interpretTuff("let mut x = 1; x += 2; x") => 3', () => {
     value: 3,
   });
 });
+
+test('interpretTuff("fn get() => 1; get()") => 1', () => {
+  expect(interpretTuff("fn get() => 1; get()")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

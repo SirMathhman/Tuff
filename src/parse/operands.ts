@@ -8,6 +8,7 @@ import {
   expectedNumber,
   expectedVariableName,
   letNotAllowed,
+  notAFunction,
   notMutable,
   notReference,
   ownerBorrowed,
@@ -20,6 +21,7 @@ import {
 } from "../errors";
 import { applySign } from "../operations";
 import { operandRef } from "./references";
+import { startCall, startFn } from "./calls";
 import {
   Operator,
   isLetter,
@@ -33,7 +35,15 @@ import { EntryKind, IfPhase, Step } from "../types";
 import { borrowedBy, innermostGroup, lookupCell, pushOperand } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.
-const RESERVED_NAMES = new Set(["let", "mut", "true", "false", "if", "else"]);
+const RESERVED_NAMES = new Set([
+  "let",
+  "mut",
+  "true",
+  "false",
+  "if",
+  "else",
+  "fn",
+]);
 
 function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   const { ops, scopes, flags } = state;
@@ -162,6 +172,10 @@ function operandName(
     if (flags.atStatementStart && !signed) return startLet(state, end);
     return letNotAllowed(state.pos);
   }
+  if (name === "fn") {
+    if (flags.atStatementStart && !signed) return startFn(state, end);
+    return reservedName(state.pos, name);
+  }
   if (name === "if") return startIf(state, sign, end);
   if (name === "else") return elseNotAllowed(state.pos);
   if (name === "true" || name === "false") {
@@ -185,6 +199,12 @@ function operandName(
   const cell = lookupCell(scopes, name);
   if (cell === undefined) {
     return undefinedName(state.pos, name);
+  }
+  if (cell.func !== undefined) {
+    return startCall(state, name, state.pos, end, cell.func, sign);
+  }
+  if (source.charAt(skipSpaces(source, end)) === "(") {
+    return notAFunction(state.pos, name);
   }
   if (cell.target !== undefined) return referenceUse(state.pos, name);
   if (borrowedBy(scopes, cell, true)) {
