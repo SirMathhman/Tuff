@@ -15,6 +15,7 @@ export default tseslint.config(
       "no-implied-eval": "error",
       "no-new-func": "error",
       "no-nested-ternary": "error",
+      "max-lines": ["error", { max: 1000, skipComments: true, skipBlankLines: true }],
       "no-restricted-syntax": [
         "error",
         {
