@@ -22,6 +22,9 @@ export interface Parsed {
   end: number;
 }
 
+// Parses a parenthesized group whose "(" sits just before `start`.
+type GroupParser = (source: string, start: number) => Result<Parsed, TuffError>;
+
 function isDigit(c: string): boolean {
   return c >= "0" && c <= "9";
 }
@@ -83,7 +86,7 @@ function expectedClose(source: string, where: number): Failure<TuffError> {
 }
 
 // factor: [sign] (digits | "(" expression ")")
-function parseFactor(source: string, start: number): Result<Parsed, TuffError> {
+function parseFactor(source: string, start: number, parseGroup: GroupParser): Result<Parsed, TuffError> {
   let pos = start;
   let sign = 1;
   const c = source.charAt(pos);
@@ -93,7 +96,7 @@ function parseFactor(source: string, start: number): Result<Parsed, TuffError> {
   }
 
   if (source.charAt(pos) === "(") {
-    const inner = parseExpression(source, pos + 1, true);
+    const inner = parseGroup(source, pos + 1);
     if (!inner.ok) return inner;
     return { ok: true, value: { value: sign * inner.value.value, end: inner.value.end + 1 } };
   }
@@ -108,14 +111,14 @@ function parseFactor(source: string, start: number): Result<Parsed, TuffError> {
 }
 
 // term: factor ( "*" factor )*
-function parseTerm(source: string, start: number): Result<Parsed, TuffError> {
-  const first = parseFactor(source, start);
+function parseTerm(source: string, start: number, parseGroup: GroupParser): Result<Parsed, TuffError> {
+  const first = parseFactor(source, start, parseGroup);
   if (!first.ok) return first;
   let value = first.value.value;
   let pos = skipSpaces(source, first.value.end);
 
   while (source.charAt(pos) === "*") {
-    const next = parseFactor(source, skipSpaces(source, pos + 1));
+    const next = parseFactor(source, skipSpaces(source, pos + 1), parseGroup);
     if (!next.ok) return next;
     value *= next.value.value;
     pos = skipSpaces(source, next.value.end);
@@ -126,11 +129,15 @@ function parseTerm(source: string, start: number): Result<Parsed, TuffError> {
 // expression: term ( ("+" | "-") term )*. When grouped, it stops before ")" and
 // the returned end points at that ")". Offsets refer to the unmodified source.
 function parseExpression(source: string, start: number, grouped: boolean): Result<Parsed, TuffError> {
+  // Passing the group parser down keeps parseFactor and parseTerm free of a
+  // direct dependency on parseExpression.
+  const parseGroup: GroupParser = (s, p) => parseExpression(s, p, true);
+
   let pos = skipSpaces(source, start);
   let total = 0;
   let termSign = 1; // sign from the additive operator before the next term
   for (;;) {
-    const term = parseTerm(source, pos);
+    const term = parseTerm(source, pos, parseGroup);
     if (!term.ok) return term;
     total += termSign * term.value.value;
     pos = term.value.end;
