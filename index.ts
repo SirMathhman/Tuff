@@ -8,14 +8,13 @@ import { err, ok, type Result } from "./src/result";
  */
 export function interpretTuff(tuffSource: string): Result<number, string> {
   const source = tuffSource.trim();
-  if (/^\d+$/.test(source)) {
-    return ok(Number(source));
-  }
-  if (/^\d+(\s*\+\s*\d+)+$/.test(source)) {
-    const sum = source
-      .split("+")
-      .reduce((total, term) => total + Number(term.trim()), 0);
-    return ok(sum);
+  if (/^\d+(\s*[+-]\s*\d+)*$/.test(source)) {
+    let total = 0;
+    for (const [, sign, digits] of source.matchAll(/([+-])?\s*(\d+)/g)) {
+      const value = Number(digits);
+      total += sign === "-" ? -value : value;
+    }
+    return ok(total);
   }
   return err(describeUnsupported(tuffSource));
 }
@@ -37,13 +36,13 @@ function describeUnsupported(tuffSource: string): string {
   return (
     `What: unsupported Tuff source. ` +
     `Where: line ${line}, column ${column}, found ${found} where ${expected} was expected. ` +
-    `Why: Tuff currently only evaluates non-negative integer literals and sums of them joined by "+". ` +
-    `Fix: change the source to a form such as "1" or "1 + 2" (received ${JSON.stringify(tuffSource)}).`
+    `Why: Tuff currently only evaluates non-negative integer literals combined with binary "+" and "-". ` +
+    `Fix: change the source to a form such as "1" or "1 + 2 - 3" (received ${JSON.stringify(tuffSource)}).`
   );
 }
 
 /**
- * Scans the source against the grammar `number ("+" number)*` and finds the
+ * Scans the source against the grammar `number (("+" | "-") number)*` and finds the
  * first character that breaks it.
  *
  * @param tuffSource - The source to scan.
@@ -70,8 +69,8 @@ function findFirstUnsupported(tuffSource: string): {
       }
       expectTerm = false;
     } else {
-      if (c !== "+") {
-        return { offset: i, expected: `"+" or end of input` };
+      if (c !== "+" && c !== "-") {
+        return { offset: i, expected: `"+", "-" or end of input` };
       }
       i++;
       expectTerm = true;
