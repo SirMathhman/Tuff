@@ -22,7 +22,7 @@ The unchosen branch of an `if` is parsed for syntax only. Every error there is r
 
 ### Results and errors
 
-Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`.
+Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`. A `fix` is an edit the grammar allows, so it never asks for something the same error forbids.
 
 ### Examples
 
@@ -97,6 +97,10 @@ Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` ro
 
 A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `src/parse/helpers.ts`).
 
+### Misleading fixes
+
+Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references.
+
 ## Security Concerns
 
 ### Trust boundary
@@ -119,7 +123,11 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Module names
 
-`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, and move `closeBinding` and `endStatement` into `src/parse/statements.ts`.
+`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, move `closeBinding` and `endStatement` into `src/parse/statements.ts`, and move bracket and `if` steps into `src/parse/brackets.ts` and `src/parse/ifs.ts`.
+
+### Error kinds
+
+Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` (607 lines, mostly constructors) by category before it nears the 500-line limit.
 
 ### Parse tree
 
