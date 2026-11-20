@@ -23,6 +23,23 @@ const PAREN_CLOSE_WHY = "Every '(' must be closed by a matching ')'.";
 const PAREN_CLOSE_FIX = "Add a ')' at the end of the parenthesized expression.";
 const BRACE_CLOSE_WHY = "Every '{' must be closed by a matching '}'.";
 const BRACE_CLOSE_FIX = "Add a '}' at the end of the braced expression.";
+const EQUALS_WHY = "A 'let' statement gives its variable a value with '='.";
+const EQUALS_FIX = "Insert '=' between the name and its value.";
+const NAME_WHY =
+  "A 'let' statement names the variable it declares, as in 'let x = 1;'.";
+const NAME_FIX = "Write a name made of letters after 'let'.";
+const KEYWORD_WHY =
+  "'let' starts a declaration, so it cannot also name a variable.";
+const KEYWORD_FIX = "Choose a different name.";
+const SEMICOLON_WHY = "Every 'let' statement must end with ';'.";
+const SEMICOLON_FIX = "Add ';' after the value.";
+const STRAY_SEMICOLON_WHY = "';' only ends a 'let' statement.";
+const STRAY_SEMICOLON_FIX =
+  "Remove the ';', or start the statement with 'let name ='.";
+const LET_POSITION_WHY =
+  "A 'let' statement can only begin the program, a block, or follow a ';', so it cannot be part of a larger expression.";
+const LET_POSITION_FIX =
+  "Move the 'let' statement out of the parentheses or operator, or remove the 'let'.";
 
 test('interpretTuff("5") => 5', () => {
   expect(interpretTuff("5")).toEqual({ ok: true, value: 5 });
@@ -263,6 +280,144 @@ test('interpretTuff("()") => error', () => {
       where: 1,
       why: NUMBER_WHY,
       fix: NUMBER_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; let x = 2; x") => 2', () => {
+  expect(interpretTuff("let x = 1; let x = 2; x")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test('interpretTuff("let x = 5; { let x = 2; x } + x") => 7', () => {
+  expect(interpretTuff("let x = 5; { let x = 2; x } + x")).toEqual({
+    ok: true,
+    value: 7,
+  });
+});
+
+test('interpretTuff("{ let x = 1; { x } }") => 1', () => {
+  expect(interpretTuff("{ let x = 1; { x } }")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("{ let x = 1; 2 } + x") => error', () => {
+  expect(interpretTuff("{ let x = 1; 2 } + x")).toEqual({
+    ok: false,
+    error: {
+      what: "Name 'x' is not defined",
+      where: 19,
+      why: UNDEFINED_WHY,
+      fix: "Declare it with 'let x = ...;' before using it, in this block or an enclosing one.",
+    },
+  });
+});
+
+test('interpretTuff("let x 1;") => error', () => {
+  expect(interpretTuff("let x 1;")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected '=' after 'let x' but found '1'",
+      where: 6,
+      why: EQUALS_WHY,
+      fix: EQUALS_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let = 1;") => error', () => {
+  expect(interpretTuff("let = 1;")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected a variable name after 'let' but found '='",
+      where: 4,
+      why: NAME_WHY,
+      fix: NAME_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let let = 1;") => error', () => {
+  expect(interpretTuff("let let = 1;")).toEqual({
+    ok: false,
+    error: {
+      what: "'let' is a keyword and cannot be a variable name",
+      where: 4,
+      why: KEYWORD_WHY,
+      fix: KEYWORD_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let x = 1") => error', () => {
+  expect(interpretTuff("let x = 1")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected ';' but found the end of the input",
+      where: 9,
+      why: SEMICOLON_WHY,
+      fix: SEMICOLON_FIX,
+    },
+  });
+});
+
+test('interpretTuff("1;") => error', () => {
+  expect(interpretTuff("1;")).toEqual({
+    ok: false,
+    error: {
+      what: "Unexpected ';' outside a let statement",
+      where: 1,
+      why: STRAY_SEMICOLON_WHY,
+      fix: STRAY_SEMICOLON_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; x y") => error', () => {
+  expect(interpretTuff("let x = 1; x y")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected '+', '-', or '*' but found 'y'",
+      where: 13,
+      why: OPERATOR_WHY,
+      fix: OPERATOR_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let x = 1 y") => error', () => {
+  expect(interpretTuff("let x = 1 y")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected ';' but found 'y'",
+      where: 10,
+      why: SEMICOLON_WHY,
+      fix: SEMICOLON_FIX,
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; ;") => error', () => {
+  expect(interpretTuff("let x = 1; ;")).toEqual({
+    ok: false,
+    error: {
+      what: "Unexpected ';' outside a let statement",
+      where: 11,
+      why: STRAY_SEMICOLON_WHY,
+      fix: STRAY_SEMICOLON_FIX,
+    },
+  });
+});
+
+test('interpretTuff("(let x = 1; x)") => error', () => {
+  expect(interpretTuff("(let x = 1; x)")).toEqual({
+    ok: false,
+    error: {
+      what: "'let' is only allowed at the start of a statement",
+      where: 1,
+      why: LET_POSITION_WHY,
+      fix: LET_POSITION_FIX,
     },
   });
 });

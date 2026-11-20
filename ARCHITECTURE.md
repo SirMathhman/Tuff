@@ -48,7 +48,7 @@ Errors:
 - A character after a term that is not an operator (or a closing bracket inside brackets): `Expected '+', '-', or '*'` at top level, or `Expected '+', '-', '*', ')', or '}'` inside brackets.
 - Input ends inside brackets: `Expected ')'` or `Expected '}'`, matching the innermost opening bracket.
 - A name that is not declared in any enclosing scope: `Name 'x' is not defined`.
-- A `let` with no name, a keyword as its name, no `=` after the name, or no `;` after its value has its own message. A `;` outside a `let` is `Unexpected ';' outside a let statement`.
+- A `let` with no name, a keyword as its name, no `=` after the name, or no `;` after its value has its own message. A `let` that is not at the start of a statement, such as inside parentheses or after an operator, reports that `let` is only allowed at the start of a statement. A `;` outside a `let` is `Unexpected ';' outside a let statement`.
 
 Behavior:
 

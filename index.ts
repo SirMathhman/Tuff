@@ -251,6 +251,15 @@ function expectedSemicolon(source: string, where: number): Failure<TuffError> {
   );
 }
 
+function letNotAllowed(where: number): Failure<TuffError> {
+  return fail(
+    "'let' is only allowed at the start of a statement",
+    where,
+    "A 'let' statement can only begin the program, a block, or follow a ';', so it cannot be part of a larger expression.",
+    "Move the 'let' statement out of the parentheses or operator, or remove the 'let'.",
+  );
+}
+
 function unexpectedSemicolon(where: number): Failure<TuffError> {
   return fail(
     "Unexpected ';' outside a let statement",
@@ -382,8 +391,10 @@ function operandName(
 ): Failure<TuffError> | Step {
   const end = readName(state.source, state.pos);
   const name = state.source.slice(state.pos, end);
-  if (name === "let" && state.atStatementStart && !signed)
-    return startLet(state, end);
+  if (name === "let") {
+    if (state.atStatementStart && !signed) return startLet(state, end);
+    return letNotAllowed(state.pos);
+  }
   const value = lookup(state.scopes, name);
   if (value === undefined) return undefinedName(state.pos, name);
   return pushOperand(state, sign * value, end);
@@ -412,6 +423,9 @@ function stepOperand(state: ParserState): Failure<TuffError> | Step {
     state.pos === state.source.length
   ) {
     return Step.End;
+  }
+  if (state.atStatementStart && state.source.charAt(state.pos) === ";") {
+    return unexpectedSemicolon(state.pos);
   }
   let sign = 1;
   let ch = state.source.charAt(state.pos);
@@ -497,8 +511,12 @@ function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (ch === ";") return endStatement(state);
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
   const op = toOperator(ch);
-  if (op === null)
+  if (op === null) {
+    if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
+      return expectedSemicolon(state.source, state.pos);
+    }
     return expectedOperator(state.source, state.pos, state.depth > 0);
+  }
   pushOperator(state, op);
   return Step.Continue;
 }
