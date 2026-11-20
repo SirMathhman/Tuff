@@ -375,3 +375,10 @@ test('interpretTuff("1 + { let x = 2; }") => error', () => {
     },
   });
 });
+
+test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
+  expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
