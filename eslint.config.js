@@ -18,6 +18,10 @@ export default tseslint.config(
           message: "Constructing RegExp objects is not allowed.",
         },
         {
+          selector: "TSTypeLiteral",
+          message: "Use a named interface instead of an object type literal.",
+        },
+        {
           selector: "CallExpression[callee.name='RegExp']",
           message: "Calling RegExp as a function is not allowed.",
         },

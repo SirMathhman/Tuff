@@ -1,6 +1,19 @@
-export type TuffError = { kind: "InvalidSyntax"; source: string };
+export interface TuffError {
+  kind: "InvalidSyntax";
+  source: string;
+}
 
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export interface Success<T> {
+  ok: true;
+  value: T;
+}
+
+export interface Failure<E> {
+  ok: false;
+  error: E;
+}
+
+export type Result<T, E> = Success<T> | Failure<E>;
 
 function isDigit(c: string): boolean {
   return c >= "0" && c <= "9";
@@ -14,7 +27,10 @@ function isSpace(c: string): boolean {
 // must touch its digits and the whole source is trimmed first.
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const s = tuffSource.trim();
-  const invalid = { ok: false as const, error: { kind: "InvalidSyntax" as const, source: tuffSource } };
+  const invalid: Failure<TuffError> = {
+    ok: false,
+    error: { kind: "InvalidSyntax", source: tuffSource },
+  };
   let pos = 0;
   let total = 0;
   let termSign = 1; // sign from the binary operator before the next term

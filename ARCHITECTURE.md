@@ -41,7 +41,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 - **Error detail:** `InvalidSyntax` only reports the whole source. It does not identify which operand is wrong.
 - **Operators:** only `+` and `-` are supported, and only between integers. Multiplication and grouping are not implemented.
-- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, and `match`/`matchAll`/`search` calls. The project size limits are not enforced by lint.
+- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The project size limits are not enforced by lint.
 
 ## Potential Problems
 
