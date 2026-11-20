@@ -238,6 +238,29 @@ test("interpretTuff rejects == between a reference and a plain value", () => {
   expect(interpretTuff("let x = 1; &x == 1").ok).toBe(false);
 });
 
+test("interpretTuff('match (true) { case true => 1; case false => 2; }') => 1", () => {
+  expect(interpretTuff("match (true) { case true => 1; case false => 2; }")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: match picks the first equal case", () => {
+  expect(interpretTuff("match (1) { case 2 => 10; case 1 => 20; }")).toEqual({ ok: true, value: 20 });
+});
+
+test("interpretTuff: match runs only the chosen arm's effects", () => {
+  expect(interpretTuff("let mut x = 0; let y = match (2) { case 1 => { x = 5; 1 }; case 2 => { x = 9; 2 }; }; x")).toEqual({
+    ok: true,
+    value: 9,
+  });
+});
+
+test("interpretTuff rejects a match with no equal case", () => {
+  expect(interpretTuff("match (3) { case 1 => 1; }").ok).toBe(false);
+});
+
+test("interpretTuff rejects a case pattern of a different type", () => {
+  expect(interpretTuff("match (true) { case 1 => 1; case true => 2; }").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

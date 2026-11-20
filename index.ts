@@ -39,7 +39,17 @@ interface Reference {
  * Words with a fixed meaning that cannot be used as variable names.
  * "true" evaluates to 1 and "false" to 0.
  */
-const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false", "if", "else", "while"]);
+const RESERVED_WORDS: ReadonlySet<string> = new Set([
+  "let",
+  "mut",
+  "true",
+  "false",
+  "if",
+  "else",
+  "while",
+  "match",
+  "case",
+]);
 
 /**
  * Message for a value that would make a reference outlive the variable it points to.
@@ -191,6 +201,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *               | "while" "(" expression ")" statement   (re-run until the condition is false, up to a limit)
+ *   match      := "match" "(" expression ")" "{" ("case" expression "=>" expression ";")* "}"
  *   expression := sum (("==" | "<") sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
@@ -251,21 +262,11 @@ function parseExpression(text: string, cursor: Cursor): Result<Value, Problem> {
       return right;
     }
     if (op === "==") {
-      if (typeof value !== typeof right.value) {
-        return err({ offset: opOffset, expected: `a value of the same type as the left side of "=="` });
+      const equal = valuesEqual(value, right.value, opOffset);
+      if (!equal.ok) {
+        return equal;
       }
-      if (typeof value === "object" && typeof right.value === "object") {
-        const { target: leftTarget } = value;
-        const { target: rightTarget } = right.value;
-        const leftPointee = leftTarget.value;
-        const rightPointee = rightTarget.value;
-        if (typeof leftPointee !== typeof rightPointee) {
-          return err({ offset: opOffset, expected: `references to values of the same type on each side of "=="` });
-        }
-        value = leftPointee === rightPointee;
-      } else {
-        value = value === right.value;
-      }
+      value = equal.value;
     } else {
       if (typeof value !== "number" || typeof right.value !== "number") {
         return err({ offset: opOffset, expected: `a number on each side of "<"` });
@@ -347,16 +348,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     return parseBlock(text, cursor);
   }
   if (next === "(") {
-    cursor.pos++;
-    const inner = parseExpression(text, cursor);
-    if (!inner.ok) {
-      return inner;
-    }
-    if (peek(text, cursor) !== ")") {
-      return err({ offset: cursor.pos, expected: `")"` });
-    }
-    cursor.pos++;
-    return inner;
+    return parseParenthesized(text, cursor);
   }
   if (next === "&") {
     return parseReference(text, cursor);
@@ -373,6 +365,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     }
     if (name === "if") {
       return parseIf(text, cursor);
+    }
+    if (name === "match") {
+      return parseMatch(text, cursor, start);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
@@ -1134,6 +1129,119 @@ function peekOperator(text: string, cursor: Cursor): string {
     return "==";
   }
   return text.charAt(cursor.pos) === "<" ? "<" : "";
+}
+
+/**
+ * Compares two values with "==". They must have the same type. References are compared by the
+ * values they point to, which must also have the same type.
+ *
+ * @param left - The left-hand value.
+ * @param right - The right-hand value.
+ * @param offset - Offset of the operator, for error reporting.
+ * @returns An Ok result with whether the values are equal, or an Err result with the first problem found.
+ */
+function valuesEqual(left: Value, right: Value, offset: number): Result<boolean, Problem> {
+  if (typeof left !== typeof right) {
+    return err({ offset, expected: `a value of the same type as the left side of "=="` });
+  }
+  if (typeof left === "object" && typeof right === "object") {
+    const { target: leftTarget } = left;
+    const { target: rightTarget } = right;
+    const leftPointee = leftTarget.value;
+    const rightPointee = rightTarget.value;
+    if (typeof leftPointee !== typeof rightPointee) {
+      return err({ offset, expected: `references to values of the same type on each side of "=="` });
+    }
+    return ok(leftPointee === rightPointee);
+  }
+  return ok(left === right);
+}
+
+/**
+ * Parses "match (scrutinee) { case pattern => value; ... }". Arms are tried in order and the
+ * first whose pattern equals the scrutinee gives the value. Only the chosen arm's effects run.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the match.
+ * @param start - Offset of the "match" keyword, for error reporting.
+ * @returns An Ok result with the chosen arm's value, or an Err result with the first problem found.
+ */
+function parseMatch(text: string, cursor: Cursor, start: number): Result<Value, Problem> {
+  const scrutinee = parseParenthesized(text, cursor);
+  if (!scrutinee.ok) {
+    return scrutinee;
+  }
+  if (peek(text, cursor) !== "{") {
+    return err({ offset: cursor.pos, expected: `"{"` });
+  }
+  cursor.pos++;
+  const outerDead = cursor.dead;
+  let result: Value | undefined;
+  while (peekName(text, cursor) === "case") {
+    cursor.pos += "case".length;
+    const chosen = result !== undefined;
+    peek(text, cursor);
+    const patternStart = cursor.pos;
+    cursor.dead = outerDead || chosen;
+    const pattern = parseExpression(text, cursor);
+    cursor.dead = outerDead;
+    if (!pattern.ok) {
+      return pattern;
+    }
+    const equal = valuesEqual(scrutinee.value, pattern.value, patternStart);
+    if (!equal.ok) {
+      return equal;
+    }
+    if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
+      return err({ offset: cursor.pos, expected: `"=>"` });
+    }
+    cursor.pos += 2;
+    const matches = equal.value && !chosen;
+    cursor.dead = outerDead || !matches;
+    const body = parseExpression(text, cursor);
+    cursor.dead = outerDead;
+    if (!body.ok) {
+      return body;
+    }
+    if (peek(text, cursor) !== ";") {
+      return err({ offset: cursor.pos, expected: `";"` });
+    }
+    cursor.pos++;
+    if (matches) {
+      result = body.value;
+    }
+  }
+  if (peek(text, cursor) !== "}") {
+    return err({ offset: cursor.pos, expected: `"case" or "}"` });
+  }
+  cursor.pos++;
+  if (result === undefined) {
+    return err({ offset: start, expected: `a case whose pattern equals the matched value` });
+  }
+  return ok(result);
+}
+
+/**
+ * Parses a parenthesized expression, "(expression)".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the expression.
+ * @returns An Ok result with the expression's value, or an Err result with the first problem found.
+ */
+function parseParenthesized(text: string, cursor: Cursor): Result<Value, Problem> {
+  if (peek(text, cursor) !== "(") {
+    return err({ offset: cursor.pos, expected: `"("` });
+  }
+  cursor.pos++;
+  const inner = parseExpression(text, cursor);
+  if (!inner.ok) {
+    return inner;
+  }
+  if (peek(text, cursor) !== ")") {
+    return err({ offset: cursor.pos, expected: `")"` });
+  }
+  cursor.pos++;
+  return inner;
 }
 
 /**
