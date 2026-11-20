@@ -15,6 +15,12 @@ interface Problem {
 }
 
 /**
+ * A value of a Tuff expression: a number, or a boolean from "true" or "false".
+ * Values of different types are never equal.
+ */
+type Value = number | boolean;
+
+/**
  * Words with a fixed meaning that cannot be used as variable names.
  * "true" evaluates to 1 and "false" to 0.
  */
@@ -27,7 +33,7 @@ interface Binding {
   /**
    * The variable's current value.
    */
-  value: number;
+  value: Value;
   /**
    * True if the variable was declared with "let mut" and may be assigned.
    */
@@ -71,7 +77,7 @@ interface Cursor {
 export function interpretTuff(tuffSource: string): Result<number, string> {
   const result = parseProgram(tuffSource);
   if (result.ok) {
-    return result;
+    return ok(typeof result.value === "boolean" ? (result.value ? 1 : 0) : result.value);
   }
   return err(describeUnsupported(tuffSource, result.error));
 }
@@ -83,12 +89,14 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   program    := statement* expression
  *   block      := "{" statement* expression "}"
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";"
- *   expression := term (("+" | "-") term)*
+ *   expression := sum ("==" sum)*
+ *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
  *   factor     := number | "true" | "false" | name | "(" expression ")" | block
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
- * group sub-expressions. "true" and "false" evaluate to 1 and 0. "let" declares a variable and the final expression
+ * group sub-expressions. "true" and "false" evaluate to 1 and 0, and "==" yields
+ * 1 or 0. "let" declares a variable and the final expression
  * is the value; a block's variables are visible only inside that block. Only
  * variables declared with "let mut" may be assigned. Whitespace between tokens
  * is ignored.
@@ -96,7 +104,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * @param text - The source to parse.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
-function parseProgram(text: string): Result<number, Problem> {
+function parseProgram(text: string): Result<Value, Problem> {
   const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined } };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
@@ -104,19 +112,48 @@ function parseProgram(text: string): Result<number, Problem> {
   }
   skipSpaces(text, cursor);
   if (cursor.pos < text.length) {
-    return err({ offset: cursor.pos, expected: `"+", "-", "*" or end of input` });
+    return err({ offset: cursor.pos, expected: `"+", "-", "*", "==" or end of input` });
   }
   return value;
 }
 
 /**
- * Parses an expression of terms joined by "+" or "-".
+ * Parses an expression: sums compared with "==". The comparison yields 1 when
+ * the sides are equal and 0 otherwise.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past what was consumed.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
-function parseExpression(text: string, cursor: Cursor): Result<number, Problem> {
+function parseExpression(text: string, cursor: Cursor): Result<Value, Problem> {
+  const first = parseSum(text, cursor);
+  if (!first.ok) {
+    return first;
+  }
+  let value: Value = first.value;
+  while (peekOperator(text, cursor) === "==") {
+    const opOffset = cursor.pos;
+    cursor.pos += 2;
+    const right = parseSum(text, cursor);
+    if (!right.ok) {
+      return right;
+    }
+    if (typeof value !== typeof right.value) {
+      return err({ offset: opOffset, expected: `a value of the same type as the left side of "=="` });
+    }
+    value = value === right.value ? 1 : 0;
+  }
+  return ok(value);
+}
+
+/**
+ * Parses a sum of terms joined by "+" or "-".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past what was consumed.
+ * @returns An Ok result with the value, or an Err result with the first problem found.
+ */
+function parseSum(text: string, cursor: Cursor): Result<Value, Problem> {
   const first = parseTerm(text, cursor);
   if (!first.ok) {
     return first;
@@ -127,10 +164,14 @@ function parseExpression(text: string, cursor: Cursor): Result<number, Problem> 
     if (op !== "+" && op !== "-") {
       return ok(value);
     }
+    const opOffset = cursor.pos;
     cursor.pos++;
     const right = parseTerm(text, cursor);
     if (!right.ok) {
       return right;
+    }
+    if (typeof value !== "number" || typeof right.value !== "number") {
+      return err({ offset: opOffset, expected: `a number on each side of "${op}"` });
     }
     value = op === "+" ? value + right.value : value - right.value;
   }
@@ -143,17 +184,21 @@ function parseExpression(text: string, cursor: Cursor): Result<number, Problem> 
  * @param cursor - The read position, advanced past what was consumed.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
-function parseTerm(text: string, cursor: Cursor): Result<number, Problem> {
+function parseTerm(text: string, cursor: Cursor): Result<Value, Problem> {
   const first = parseFactor(text, cursor);
   if (!first.ok) {
     return first;
   }
   let value = first.value;
   while (peek(text, cursor) === "*") {
+    const opOffset = cursor.pos;
     cursor.pos++;
     const right = parseFactor(text, cursor);
     if (!right.ok) {
       return right;
+    }
+    if (typeof value !== "number" || typeof right.value !== "number") {
+      return err({ offset: opOffset, expected: `a number on each side of "*"` });
     }
     value *= right.value;
   }
@@ -167,7 +212,7 @@ function parseTerm(text: string, cursor: Cursor): Result<number, Problem> {
  * @param cursor - The read position, advanced past what was consumed.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
-function parseFactor(text: string, cursor: Cursor): Result<number, Problem> {
+function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
   const c = peek(text, cursor);
   if (c === "{") {
     return parseBlock(text, cursor);
@@ -189,7 +234,7 @@ function parseFactor(text: string, cursor: Cursor): Result<number, Problem> {
     const start = cursor.pos;
     cursor.pos += name.length;
     if (name === "true" || name === "false") {
-      return ok(name === "true" ? 1 : 0);
+      return ok(name === "true");
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
@@ -215,7 +260,7 @@ function parseFactor(text: string, cursor: Cursor): Result<number, Problem> {
  * @param cursor - The read position, advanced past the block.
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
-function parseBlock(text: string, cursor: Cursor): Result<number, Problem> {
+function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
   cursor.pos++;
   const outer = cursor.scope;
   cursor.scope = { vars: new Map(), parent: outer };
@@ -238,7 +283,7 @@ function parseBlock(text: string, cursor: Cursor): Result<number, Problem> {
  * @param cursor - The read position, advanced past what was consumed.
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
-function parseBlockBody(text: string, cursor: Cursor): Result<number, Problem> {
+function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
   for (;;) {
     const name = peekName(text, cursor);
     let problem: Problem | undefined;
@@ -311,9 +356,15 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
   }
   peek(text, cursor);
   cursor.pos++;
+  peek(text, cursor);
+  const valueStart = cursor.pos;
   const value = parseExpression(text, cursor);
   if (!value.ok) {
     return value.error;
+  }
+  if (typeof value.value !== typeof binding.value) {
+    const kind = typeof binding.value === "number" ? "a number" : "a boolean";
+    return { offset: valueStart, expected: `${kind} to match the type of "${name}"` };
   }
   if (peek(text, cursor) !== ";") {
     return { offset: cursor.pos, expected: `";"` };
@@ -325,6 +376,7 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
 
 /**
  * Returns the significant character that follows a name, without moving the cursor.
+ * A "==" comparison is reported as "==" so it is not mistaken for an assignment.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, which is left unchanged.
@@ -335,8 +387,21 @@ function peekAfterName(text: string, cursor: Cursor, name: string): string {
   const saved = cursor.pos;
   cursor.pos += name.length;
   const after = peek(text, cursor);
+  const result = after === "=" && text.charAt(cursor.pos + 1) === "=" ? "==" : after;
   cursor.pos = saved;
-  return after;
+  return result;
+}
+
+/**
+ * Returns the two-character operator at the next significant position, without consuming it.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past any whitespace.
+ * @returns "==" if it is next, otherwise "".
+ */
+function peekOperator(text: string, cursor: Cursor): string {
+  skipSpaces(text, cursor);
+  return text.slice(cursor.pos, cursor.pos + 2) === "==" ? "==" : "";
 }
 
 /**

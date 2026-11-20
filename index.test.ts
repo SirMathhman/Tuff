@@ -64,6 +64,33 @@ test("interpretTuff('let true = 1; true') is rejected", () => {
   expect(interpretTuff("let true = 1; true").ok).toBe(false);
 });
 
+test("interpretTuff('1 == 1') => 1", () => {
+  expect(interpretTuff("1 == 1")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('1 == true') is an error: values of different types", () => {
+  const result = interpretTuff("1 == true");
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error).toContain('a value of the same type as the left side of "=="');
+});
+
+test("interpretTuff('true == true') => 1", () => {
+  expect(interpretTuff("true == true")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('true + 1') is an error: arithmetic needs numbers", () => {
+  expect(interpretTuff("true + 1").ok).toBe(false);
+});
+
+test("interpretTuff('1 == 2') => 0", () => {
+  expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff('let x = 1; x == 1') => 1", () => {
+  expect(interpretTuff("let x = 1; x == 1")).toEqual({ ok: true, value: 1 });
+});
+
 test("interpretTuff('(1 + 2}') reports the expected closing character", () => {
   const result = interpretTuff("(1 + 2}");
   expect(result.ok).toBe(false);
@@ -92,5 +119,5 @@ test("interpretTuff('1 x 2') points at the offending character", () => {
   const result = interpretTuff("1 x 2");
   expect(result.ok).toBe(false);
   if (result.ok) return;
-  expect(result.error).toContain('Where: line 1, column 3, found "x" where "+", "-", "*" or end of input was expected');
+  expect(result.error).toContain('Where: line 1, column 3, found "x" where "+", "-", "*", "==" or end of input was expected');
 });
