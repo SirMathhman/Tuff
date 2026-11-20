@@ -30,7 +30,7 @@ interface Env {
   /** The binding of every name use, from the resolver. */
   refs: NameRefs;
   /** Values of the open blocks, outermost first; each block's values are in binding order. */
-  frames: Frame[];
+  frames: Frame<Value>[];
 }
 
 function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
@@ -204,7 +204,7 @@ function evaluateBranch(branch: Expr, env: Env, chosen: boolean): Result<Value, 
  * @param frames - The open blocks' values, outermost first.
  * @param snapshot - Copies of the same blocks' values, taken earlier.
  */
-function restoreFrames(frames: Frame[], snapshot: Frame[]): void {
+function restoreFrames(frames: Frame<Value>[], snapshot: Frame<Value>[]): void {
   for (const [index, frame] of frames.entries()) {
     const saved = snapshot[index];
     if (saved === undefined) continue;
@@ -228,7 +228,7 @@ function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
 }
 
 function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
-  const frame: Frame = [];
+  const frame: Frame<Value> = [];
   env.frames.push(frame);
   const result = evaluateBlockBody(block, env, frame);
   env.frames.pop();
@@ -239,7 +239,7 @@ function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
   return err({ kind: TuffErrorKind.ReferenceEscapes, span: spanOf(block) });
 }
 
-function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame): Result<Value, TuffError> {
+function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame<Value>): Result<Value, TuffError> {
   for (const statement of block.statements) {
     if (statement.kind === StatementKind.Let) {
       const value = evaluateIn(statement.value, env);

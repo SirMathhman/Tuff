@@ -55,7 +55,7 @@ value.ts       -> scope.ts (for the Frame type)
 resolver.ts    -> ast.ts, scope.ts, errors.ts, result.ts
 parser.ts      -> lexer.ts, ast.ts, errors.ts, result.ts, span.ts
 lexer.ts       -> errors.ts, result.ts, span.ts
-scope.ts       -> nothing (generic over the stored value)
+scope.ts       -> ast.ts (type only, for the NameRefs key); never value.ts, since value.ts imports Frame from here
 errors.ts      -> span.ts
 ast.ts         -> span.ts
 limits.ts      -> nothing (not yet created)

@@ -1,8 +1,7 @@
 import type { NameNode } from "./ast.ts";
-import type { Value } from "./value.ts";
 
 /** The values of one open block's bindings, in binding order. */
-export type Frame = Value[];
+export type Frame<T> = T[];
 
 /** Where a name use is bound: how many blocks out, and its position in that block. */
 export interface NameRef {

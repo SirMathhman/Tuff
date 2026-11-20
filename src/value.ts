@@ -1,7 +1,9 @@
+import type { Frame } from "./scope.ts";
+
 /** A pointer to one binding's slot in a block's frame. It stays live while that block is open. */
 export interface Reference {
   /** The frame of the block that declares the binding. */
-  target: Value[];
+  target: Frame<Value>;
   /** The binding's position within that frame. */
   index: number;
   /** Whether the reference may be written through (`&mut`). */
