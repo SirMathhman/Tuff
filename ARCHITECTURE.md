@@ -18,7 +18,7 @@ A block's value is its final expression, so it cannot end with a statement. A pr
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Semantic errors there (undefined names, boolean operands, type mismatches, signs on booleans) are suppressed, undefined names read as 0, and assignments have no effect. Syntax errors there are still reported.
+The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, type mismatches, signs on booleans) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, assignment to a non-`let mut` name) are still reported.
 
 ### Results and errors
 
