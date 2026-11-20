@@ -15,6 +15,12 @@ interface Problem {
 }
 
 /**
+ * Words with a fixed meaning that cannot be used as variable names.
+ * "true" evaluates to 1 and "false" to 0.
+ */
+const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false"]);
+
+/**
  * A variable's current value and whether it may be reassigned.
  */
 interface Binding {
@@ -79,10 +85,10 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";"
  *   expression := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
- *   factor     := number | name | "(" expression ")" | block
+ *   factor     := number | "true" | "false" | name | "(" expression ")" | block
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
- * group sub-expressions. "let" declares a variable and the final expression
+ * group sub-expressions. "true" and "false" evaluate to 1 and 0. "let" declares a variable and the final expression
  * is the value; a block's variables are visible only inside that block. Only
  * variables declared with "let mut" may be assigned. Whitespace between tokens
  * is ignored.
@@ -182,6 +188,9 @@ function parseFactor(text: string, cursor: Cursor): Result<number, Problem> {
   if (name !== "") {
     const start = cursor.pos;
     cursor.pos += name.length;
+    if (name === "true" || name === "false") {
+      return ok(name === "true" ? 1 : 0);
+    }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
@@ -262,7 +271,7 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     mutable = true;
   }
   const name = peekName(text, cursor);
-  if (name === "") {
+  if (name === "" || RESERVED_WORDS.has(name)) {
     return { offset: cursor.pos, expected: "a variable name" };
   }
   cursor.pos += name.length;
@@ -407,7 +416,7 @@ function describeUnsupported(tuffSource: string, problem: Problem): string {
   return (
     `What: unsupported Tuff source. ` +
     `Where: line ${line}, column ${column}, found ${found} where ${problem.expected} was expected. ` +
-    `Why: Tuff currently only evaluates non-negative integer literals, variables declared with "let" (assignable only when declared with "let mut"), binary "+", "-", and "*", and parentheses or braces for grouping. ` +
+    `Why: Tuff currently only evaluates non-negative integer literals, the booleans true (1) and false (0), variables declared with "let" (assignable only when declared with "let mut"), binary "+", "-", and "*", and parentheses or braces for grouping. ` +
     `Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3" (received ${JSON.stringify(tuffSource)}).`
   );
 }

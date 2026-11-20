@@ -52,6 +52,18 @@ test("interpretTuff assignment to an immutable variable is rejected", () => {
   expect(result.error).toContain('found "x" where a mutable variable (declare "x" with "let mut") was expected');
 });
 
+test("interpretTuff('let x = true; x') => 1", () => {
+  expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('false') => 0", () => {
+  expect(interpretTuff("false")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff('let true = 1; true') is rejected", () => {
+  expect(interpretTuff("let true = 1; true").ok).toBe(false);
+});
+
 test("interpretTuff('(1 + 2}') reports the expected closing character", () => {
   const result = interpretTuff("(1 + 2}");
   expect(result.ok).toBe(false);
