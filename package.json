@@ -14,6 +14,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "repl": "bun run repl.ts"
   }
 }

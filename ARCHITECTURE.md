@@ -7,9 +7,10 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 | File | Role |
 | --- | --- |
 | `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, `Parsed`, and `TuffError`. |
+| `repl.ts` | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`. |
 | `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
 | `eslint.config.js` | ESLint configuration (recommended JavaScript and TypeScript rules, plus restricted syntax). |
-| `package.json` | Project metadata and the `lint` script. Declares `@types/bun`, ESLint, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
+| `package.json` | Project metadata and the `lint` and `repl` scripts. Declares `@types/bun`, ESLint, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
 | `tsconfig.json` | TypeScript configuration. |
 | `.gitignore`, `README.md`, `bun.lock` | Repository support files. |
 
@@ -18,7 +19,7 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 - **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an optional sign followed by either an integer or a parenthesized expression. A sign may follow a binary operator, so `1 - -2`, `2 * -3`, and `-(2 + 3)` are valid.
 - **Result:** `{ ok: true, value }` (a `Success`) on success or `{ ok: false, error }` (a `Failure`) on failure.
 - **TuffError:** a four-part description of a syntax error:
-  - `what`: the error, for example `Expected '+' or '-' but found 'x'`.
+  - `what`: the error, for example `Expected '+', '-', or '*' but found 'x'`.
   - `where`: the zero-based offset into the original source string.
   - `why`: the rule that was broken.
   - `fix`: how to correct the source.
@@ -53,6 +54,10 @@ Behavior:
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number or '(' but found 'x'`.
 - `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number or '(' but found the end of the input`.
 - `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
+
+### REPL (`repl.ts`)
+
+Reads one expression per line. Blank lines are skipped, and `exit` quits. A value prints as the number; an error prints as `error: <what> (at offset <where>)`. The REPL does not print `why` or `fix`.
 
 ## Testing
 
