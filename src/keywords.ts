@@ -17,4 +17,5 @@ export const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "break",
   "fn",
   "type",
+  "struct",
 ]);

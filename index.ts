@@ -34,12 +34,15 @@ import {
   applyCompound,
   valuesEqual,
   isReference,
+  lookupStruct,
   OUTLIVES_MESSAGE,
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
 import { hoistFunctions } from "./src/hoisting";
 import { RESERVED_WORDS } from "./src/keywords";
-import { parseArrayLiteral, parseIndexing } from "./src/arrays";
+import { parseArrayLiteral } from "./src/arrays";
+import { parsePostfix } from "./src/postfix";
+import { parseStructDeclaration, parseStructLiteral } from "./src/structs";
 
 /**
  * Interprets a Tuff program and returns its result.
@@ -251,6 +254,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (name === "loop") {
       return parseLoop(text, cursor, start);
     }
+    if (peek(text, cursor) === "{" && lookupStruct(cursor.scope, name) !== undefined) {
+      return parseStructLiteral(text, cursor, name, start, parseExpression);
+    }
     if (peek(text, cursor) === "(") {
       const fn = lookupFunction(cursor.scope, name);
       if (fn === undefined) {
@@ -262,7 +268,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
     }
-    return parseIndexing(text, cursor, start, binding.value, parseExpression);
+    return parsePostfix(text, cursor, start, binding.value, parseExpression);
   }
   if (!/\d/.test(next)) {
     return err({ offset: cursor.pos, expected: `a number, a variable, "(" or "{"` });
@@ -542,6 +548,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "struct" && allowDeclaration) {
+    return { matched: true, problem: parseStructDeclaration(text, cursor, RESERVED_WORDS) };
   }
   if (name === "type" && allowDeclaration) {
     return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };

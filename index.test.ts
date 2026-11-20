@@ -91,6 +91,33 @@ test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get r
   expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
 });
 
+test("interpretTuff('struct Wrapper { value : I32 } let temp = Wrapper { value : 1 }; temp.value') => 1", () => {
+  expect(interpretTuff("struct Wrapper { value : I32 } let temp = Wrapper { value : 1 }; temp.value")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test("interpretTuff struct literal missing a field is an error", () => {
+  expect(interpretTuff("struct P { x : I32, y : I32 } let p = P { x : 1 }; p.x").ok).toBe(false);
+});
+
+test("interpretTuff struct literal with an unknown field is an error", () => {
+  expect(interpretTuff("struct P { x : I32 } let p = P { x : 1, z : 2 }; p.x").ok).toBe(false);
+});
+
+test("interpretTuff struct field with the wrong type is an error", () => {
+  expect(interpretTuff("struct P { x : I32 } let p = P { x : true }; p.x").ok).toBe(false);
+});
+
+test("interpretTuff reading a field of a number is an error", () => {
+  expect(interpretTuff("let n = 1; n.x").ok).toBe(false);
+});
+
+test("interpretTuff struct type annotation accepts a matching struct", () => {
+  expect(interpretTuff("struct P { x : I32 } let p : P = P { x : 3 }; p.x + 1")).toEqual({ ok: true, value: 4 });
+});
+
 test("interpretTuff('let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]') => 6", () => {
   expect(interpretTuff("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toEqual({
     ok: true,

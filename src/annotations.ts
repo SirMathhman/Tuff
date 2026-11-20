@@ -1,5 +1,5 @@
 import { peek, peekName, peekStart, type Problem } from "./lexing";
-import { isDeclarableType, fitsIntegerType, lookupType } from "./scope";
+import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "./scope";
 import { type Cursor, type Scope } from "./types";
 import { err, ok, type Result } from "./result";
 
@@ -15,7 +15,7 @@ function resolveTypeName(scope: Scope, name: string): string | undefined {
   if (aliased !== undefined) {
     return aliased;
   }
-  return isDeclarableType(name) ? name : undefined;
+  return isDeclarableType(name) || lookupStruct(scope, name) !== undefined ? name : undefined;
 }
 
 /**

@@ -7,7 +7,7 @@ import type { Problem } from "./lexing";
  * A value of a Tuff expression: a number, a boolean from "true" or "false", a reference, or an array.
  * Values of different types are never equal.
  */
-export type Value = number | boolean | Reference | ArrayValue;
+export type Value = number | boolean | Reference | ArrayValue | StructValue;
 /**
  * A reference made with "&name" or "&mut name". Reading it with "*" gives the target's
  * current value; only a mutable reference can be assigned through with "*name = ...".
@@ -21,6 +21,28 @@ export interface Reference {
    * True if the reference was made with "&mut".
    */
   readonly mutable: boolean;
+}
+/**
+ * A struct value, built with "Name { field : value, ... }" and read with "value.field".
+ */
+export interface StructValue {
+  /**
+   * The name of the struct type this value was built from.
+   */
+  readonly structName: string;
+  /**
+   * The field values, keyed by field name, in declaration order.
+   */
+  readonly fields: ReadonlyMap<string, Value>;
+}
+/**
+ * A struct declared with "struct". Each field has a declared type.
+ */
+export interface StructDef {
+  /**
+   * The declared type of each field, keyed by field name, in declaration order.
+   */
+  readonly fields: ReadonlyMap<string, string>;
 }
 /**
  * An array made with "[a, b, c]". Its elements all have the same kind, and it is read with "name[index]".
@@ -70,6 +92,8 @@ export interface Scope {
   readonly functions: Map<string, FunctionDef>;
   /** Type aliases declared directly in this scope, mapping each name to the type it stands for. */
   readonly types: Map<string, string>;
+  /** Structs declared directly in this scope. */
+  readonly structs: Map<string, StructDef>;
 }
 /** A parameter of a function declared with "fn". */
 export interface Param {

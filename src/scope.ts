@@ -10,6 +10,8 @@ import {
   type LoopExit,
   type Reference,
   type ArrayValue,
+  type StructValue,
+  type StructDef,
   type Param,
 } from "./types";
 import { findTopLevel, type Problem } from "./lexing";
@@ -83,6 +85,7 @@ export function newScope(parent?: Scope): Scope {
     vars: new Map(),
     functions: new Map(),
     types: new Map(),
+    structs: new Map(),
     parent,
     depth: parent === undefined ? 0 : parent.depth + 1,
   };
@@ -129,6 +132,10 @@ export function escapes(value: Value, depth: number): boolean {
     const { elements } = value;
     return elements.some((element) => escapes(element, depth));
   }
+  if (isStruct(value)) {
+    const { fields } = value;
+    return [...fields.values()].some((field) => escapes(field, depth));
+  }
   if (!isReference(value)) {
     return false;
   }
@@ -147,6 +154,9 @@ export function kindOf(value: Value): string {
   }
   if (typeof value === "boolean") {
     return "a boolean";
+  }
+  if (isStruct(value)) {
+    return `a ${value.structName} struct`;
   }
   return isArray(value) ? "an array" : "a reference";
 }
@@ -289,7 +299,7 @@ export function checkArgument(value: Value, offset: number, param?: Param): Prob
  * @param type - The declared type.
  * @returns The problem found, or undefined if the value has the declared type.
  */
-function checkTypedValue(value: Value, offset: number, type: string): Problem | undefined {
+export function checkTypedValue(value: Value, offset: number, type: string): Problem | undefined {
   const reference = referenceTarget(type);
   if (reference !== undefined) {
     if (!isReference(value) || !typeMatches(targetValue(value), reference.inner)) {
@@ -307,6 +317,9 @@ function checkTypedValue(value: Value, offset: number, type: string): Problem | 
   }
   if (type === "Bool") {
     return typeof value === "boolean" ? undefined : { offset, expected: `a boolean for ${type}` };
+  }
+  if (!isIntegerType(type)) {
+    return typeMatches(value, type) ? undefined : { offset, expected: `a value of type ${type}` };
   }
   if (typeof value !== "number") {
     return { offset, expected: `a number for ${type}` };
@@ -353,6 +366,9 @@ function referenceTarget(type: string): ReferenceType | undefined {
  * @returns True if the value has the type.
  */
 function typeMatches(value: Value, type: string): boolean {
+  if (isStruct(value)) {
+    return value.structName === type;
+  }
   const reference = referenceTarget(type);
   if (reference !== undefined) {
     return isReference(value) && typeMatches(targetValue(value), reference.inner);
@@ -390,6 +406,34 @@ function targetValue(reference: Reference): Value {
  */
 export function isReference(value: Value): value is Reference {
   return typeof value === "object" && "target" in value;
+}
+
+/**
+ * Reports whether a value is a struct rather than a number, boolean, reference or array.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a struct.
+ */
+export function isStruct(value: Value): value is StructValue {
+  return typeof value === "object" && "structName" in value;
+}
+
+/**
+ * Finds a struct declared in the given scope or the scopes enclosing it.
+ *
+ * @param scope - The innermost scope to search first.
+ * @param name - The struct name to look up.
+ * @returns The struct's definition, or undefined if no struct with that name is in scope.
+ */
+export function lookupStruct(scope: Scope, name: string): StructDef | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { structs } = current;
+    const found = structs.get(name);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -431,7 +475,7 @@ export function valuesEqual(left: Value, right: Value, offset: number): Result<b
   if (kindOf(left) !== kindOf(right)) {
     return err({ offset, expected: `a value of the same type as the left side of "=="` });
   }
-  if (isArray(left) || isArray(right)) {
+  if (isArray(left) || isArray(right) || isStruct(left) || isStruct(right)) {
     return err({ offset, expected: `numbers, booleans or references to compare with "=="` });
   }
   if (isReference(left) && isReference(right)) {
