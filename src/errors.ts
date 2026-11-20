@@ -2,9 +2,13 @@
  * A syntax error: what went wrong, where, why, and how to fix it.
  */
 export interface TuffError {
+  /** What went wrong, as a short message. */
   what: string;
+  /** Zero-based offset of the problem in the source. */
   where: number;
+  /** The rule that was broken. */
   why: string;
+  /** How to correct the source. */
   fix: string;
 }
 
@@ -17,7 +21,9 @@ interface Success<T> {
  * A failed parse, holding the error.
  */
 export interface Failure<E> {
+  /** Always false for a failure. */
   ok: false;
+  /** The error describing the failure. */
   error: E;
 }
 
@@ -30,7 +36,9 @@ export type Result<T, E> = Success<T> | Failure<E>;
  * The two kinds of opening bracket.
  */
 export enum Bracket {
+  /** A parenthesized group, closed by `)`. */
   Paren = "(",
+  /** A braced block, closed by `}`. */
   Brace = "{",
 }
 

@@ -4,14 +4,23 @@ import { Bracket } from "./errors";
  * The binary operators.
  */
 export enum Operator {
+  /** Addition. */
   Add = "+",
+  /** Subtraction. */
   Subtract = "-",
+  /** Multiplication. */
   Multiply = "*",
+  /** Less than. */
   LessThan = "<",
+  /** Less than or equal. */
   LessEqual = "<=",
+  /** Greater than. */
   GreaterThan = ">",
+  /** Greater than or equal. */
   GreaterEqual = ">=",
+  /** Equality. */
   Equal = "==",
+  /** Inequality. */
   NotEqual = "!=",
 }
 
