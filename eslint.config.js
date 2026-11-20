@@ -60,6 +60,11 @@ export default tseslint.config(
           message: "Use a named interface instead of an object type literal.",
         },
         {
+          selector: "TSNullKeyword",
+          message:
+            "The null type is not allowed; use undefined or a named type instead.",
+        },
+        {
           selector: "TSLiteralType > Literal[raw=/^[\"']/]",
           message: "String literal types are not allowed; use an enum.",
         },

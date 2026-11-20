@@ -98,17 +98,17 @@ function isSpace(ch: string): boolean {
   return ch.length === 1 && ch.trim() === "";
 }
 
-function toOperator(ch: string): Operator | null {
+function toOperator(ch: string): Operator | undefined {
   if (ch === "+") return Operator.Add;
   if (ch === "-") return Operator.Subtract;
   if (ch === "*") return Operator.Multiply;
-  return null;
+  return undefined;
 }
 
-function toBracket(ch: string): Bracket | null {
+function toBracket(ch: string): Bracket | undefined {
   if (ch === "(") return Bracket.Paren;
   if (ch === "{") return Bracket.Brace;
-  return null;
+  return undefined;
 }
 
 function isCloser(ch: string): boolean {
@@ -160,50 +160,50 @@ function applySign(
 function applyTop(
   values: Value[],
   ops: StackEntry[],
-): Failure<TuffError> | null {
+): Failure<TuffError> | undefined {
   const entry = ops.pop();
-  if (entry?.kind !== EntryKind.Operator) return null;
+  if (entry?.kind !== EntryKind.Operator) return undefined;
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
   if (typeof left === "boolean" || typeof right === "boolean") {
     return booleanOperand(entry.where, entry.operator);
   }
   values.push(apply(left, entry.operator, right));
-  return null;
+  return undefined;
 }
 
 // Applies every pending operator at the top of the stack.
 function reduceOperators(
   values: Value[],
   ops: StackEntry[],
-): Failure<TuffError> | null {
+): Failure<TuffError> | undefined {
   for (
     let top = ops[ops.length - 1];
     top?.kind === EntryKind.Operator;
     top = ops[ops.length - 1]
   ) {
     const failure = applyTop(values, ops);
-    if (failure !== null) return failure;
+    if (failure !== undefined) return failure;
   }
-  return null;
+  return undefined;
 }
 
 // The newest open bracket on the stack, or null when none is open.
-function innermostGroup(ops: StackEntry[]): GroupEntry | null {
+function innermostGroup(ops: StackEntry[]): GroupEntry | undefined {
   for (let idx = ops.length - 1; idx >= 0; idx--) {
     const entry = ops[idx];
     if (entry?.kind === EntryKind.Group) return entry;
   }
-  return null;
+  return undefined;
 }
 
 // The newest open bracket or `let` on the stack, or null when there is none.
-function innermostNonOperator(ops: StackEntry[]): StackEntry | null {
+function innermostNonOperator(ops: StackEntry[]): StackEntry | undefined {
   for (let idx = ops.length - 1; idx >= 0; idx--) {
     const entry = ops[idx];
     if (entry !== undefined && entry.kind !== EntryKind.Operator) return entry;
   }
-  return null;
+  return undefined;
 }
 
 // The innermost scope's cell for `name`, or undefined.
@@ -220,15 +220,15 @@ function lookupCell(scopes: Scope[], name: string): Cell | undefined {
 function closeGroup(
   values: Value[],
   ops: StackEntry[],
-): Failure<TuffError> | null {
+): Failure<TuffError> | undefined {
   const reduced = reduceOperators(values, ops);
-  if (reduced !== null) return reduced;
+  if (reduced !== undefined) return reduced;
   const group = ops.pop();
-  if (group?.kind !== EntryKind.Group) return null;
+  if (group?.kind !== EntryKind.Group) return undefined;
   const signed = applySign(values.pop() ?? 0, group.sign, group.where);
   if (typeof signed === "object") return signed;
   values.push(signed);
-  return null;
+  return undefined;
 }
 
 // Completes a `let` or assignment: its value is the newest value. A `let` binds
@@ -236,9 +236,9 @@ function closeGroup(
 function closeBinding(
   state: ParserState,
   binding: BindingEntry,
-): Failure<TuffError> | null {
+): Failure<TuffError> | undefined {
   const reduced = reduceOperators(state.values, state.ops);
-  if (reduced !== null) return reduced;
+  if (reduced !== undefined) return reduced;
   state.ops.pop();
   const value = state.values.pop() ?? 0;
   if (binding.assign) {
@@ -250,7 +250,7 @@ function closeBinding(
   }
   state.lastStatementEnded = true;
   if (state.depth === 0) state.afterLet = true;
-  return null;
+  return undefined;
 }
 
 function pushOperand(state: ParserState, value: Value, end: number): Step {
@@ -396,7 +396,7 @@ function stepOperand(state: ParserState): Failure<TuffError> | Step {
     ch = state.source.charAt(state.pos);
   }
   const bracket = toBracket(ch);
-  if (bracket !== null) return openBracket(state, bracket, sign);
+  if (bracket !== undefined) return openBracket(state, bracket, sign);
   if (isLetter(ch)) return operandName(state, sign, signed);
   return operandNumber(state, sign);
 }
@@ -404,7 +404,7 @@ function stepOperand(state: ParserState): Failure<TuffError> | Step {
 function pushOperator(
   state: ParserState,
   op: Operator,
-): Failure<TuffError> | null {
+): Failure<TuffError> | undefined {
   // Left-associative: apply pending operators that bind at least as tightly.
   for (
     let top = state.ops[state.ops.length - 1];
@@ -413,18 +413,18 @@ function pushOperator(
     top = state.ops[state.ops.length - 1]
   ) {
     const failure = applyTop(state.values, state.ops);
-    if (failure !== null) return failure;
+    if (failure !== undefined) return failure;
   }
   state.ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
   state.pos++;
   state.expectOperand = true;
   state.atStatementStart = false;
-  return null;
+  return undefined;
 }
 
 function endOfInput(state: ParserState): Failure<TuffError> | Step {
   const group = innermostGroup(state.ops);
-  if (state.depth > 0 && group !== null) {
+  if (state.depth > 0 && group !== undefined) {
     return expectedClose(state.source, state.pos, group.bracket);
   }
   if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
@@ -437,7 +437,7 @@ function endStatement(state: ParserState): Failure<TuffError> | Step {
   const open = innermostNonOperator(state.ops);
   if (open?.kind === EntryKind.Binding) {
     const failure = closeBinding(state, open);
-    if (failure !== null) return failure;
+    if (failure !== undefined) return failure;
     state.pos++;
     state.expectOperand = true;
     state.atStatementStart = true;
@@ -457,12 +457,13 @@ function closeBracket(
     return expectedSemicolon(state.source, state.pos);
   }
   const group = innermostGroup(state.ops);
-  if (group === null) return expectedOperator(state.source, state.pos, true);
+  if (group === undefined)
+    return expectedOperator(state.source, state.pos, true);
   if (ch !== closerFor(group.bracket)) {
     return expectedMismatch(state.source, state.pos, group.bracket);
   }
   const failure = closeGroup(state.values, state.ops);
-  if (failure !== null) return failure;
+  if (failure !== undefined) return failure;
   if (group.bracket === Bracket.Brace) state.scopes.pop();
   state.depth--;
   state.pos++;
@@ -478,7 +479,7 @@ function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (ch === ";") return endStatement(state);
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
   const op = toOperator(ch);
-  if (op === null) {
+  if (op === undefined) {
     if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
       return expectedSemicolon(state.source, state.pos);
     }
@@ -520,7 +521,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     if (outcome !== Step.Continue) return outcome;
   }
   const failure = reduceOperators(state.values, state.ops);
-  if (failure !== null) return failure;
+  if (failure !== undefined) return failure;
   const result = state.values.pop() ?? 0;
   return {
     ok: true,

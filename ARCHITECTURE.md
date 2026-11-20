@@ -1,6 +1,6 @@
 # Architecture
 
-Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evaluates `let` and assignment statements followed by one expression. It is at an early stage, and the sections below give the details.
+Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evaluates `let` and assignment statements followed by one expression.
 
 ## Definitions
 
@@ -69,7 +69,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Source files
 
-Source lives in `src/`, and the docs and tooling stay at the root.
+Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, custom Markdown rules in `markdown-rules/`, and docs at the root.
 
 #### Interpreter (src/index.ts)
 
@@ -85,7 +85,7 @@ Uses Bun's built-in `bun:test` runner. Each feature has a test named after its e
 
 ### Dependency direction
 
-`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends only on `errors.ts`, which depends on no project file. Neither performs I/O.
+`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends only on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -93,7 +93,7 @@ Uses Bun's built-in `bun:test` runner. Each feature has a test named after its e
 
 #### Stacks
 
-A value stack holds numbers. An operator stack holds pending operators, open brackets, and `let` bindings. Scopes form a stack of maps, and a name is looked up from the innermost scope outwards.
+A value stack holds numbers. An operator stack holds pending operators, open brackets, and `let` bindings. Scopes form a stack of maps, searched innermost first.
 
 #### Precedence
 
@@ -109,7 +109,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### ESLint rules
 
-ESLint runs its recommended rules plus the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, and string literal types.
+ESLint runs its recommended rules plus the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, string literal types, and the null type.
 
 #### Recursion
 
@@ -121,7 +121,7 @@ Method names match loosely, so unrelated objects can produce false positives. Co
 
 #### Size and naming
 
-`max-lines-per-function` caps functions at 100 lines, `max-lines` caps files at 500, and `id-length` requires names of at least two characters. Blank lines and comments are skipped.
+`max-lines-per-function` caps functions at 100 lines, `max-lines` caps files at 500, and `id-length` requires names of at least two characters.
 
 ##### Directories
 
