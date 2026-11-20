@@ -313,3 +313,15 @@ test('interpretTuff("let mut x = 0; x = true; x") => error', () => {
     },
   });
 });
+
+test('interpretTuff("true == true") => error', () => {
+  expect(interpretTuff("true == true")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot use a boolean with '=='",
+      where: 5,
+      why: "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
+      fix: "Use a number in place of the boolean, or remove the operator.",
+    },
+  });
+});

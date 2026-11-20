@@ -262,6 +262,23 @@ test('interpretTuff("1 < 2 < 3") => error', () => {
   });
 });
 
+test('interpretTuff("2 * 3 < 7") => 1', () => {
+  expect(interpretTuff("2 * 3 < 7")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("1 + 2 == 3") => 1', () => {
+  expect(interpretTuff("1 + 2 == 3")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("each comparison operator") => 1, 1, 1, 0, 1, 0', () => {
+  expect(interpretTuff("2 < 3")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("2 <= 2")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("4 > 3")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("3 >= 4")).toEqual({ ok: true, value: 0 });
+  expect(interpretTuff("3 != 4")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("3 == 4")).toEqual({ ok: true, value: 0 });
+});
+
 test('interpretTuff("1 - -2") => 3', () => {
   expect(interpretTuff("1 - -2")).toEqual({ ok: true, value: 3 });
 });
