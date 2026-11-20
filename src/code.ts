@@ -17,6 +17,7 @@ import type { Instruction, Names, Unit } from "./instructions";
 import { InstructionKind, UnitKind } from "./instructions";
 import {
   UNSUPPORTED_WHAT,
+  compileFactor,
   compileFrom,
   unsupportedAt,
 } from "./compile-expression";
@@ -96,6 +97,7 @@ function compileUnit(
   if (unit.kind === UnitKind.Condition) {
     return compileCondition(source, unit, queue);
   }
+  if (unit.kind === UnitKind.Factor) return compileFactor(source, unit, queue);
   const { code, names } = unit;
   const block = unit.kind === UnitKind.Block;
   let pos = unit.pos;

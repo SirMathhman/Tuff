@@ -256,7 +256,8 @@ function finishOperand(
 }
 
 // Reads `if (condition) { then } else { otherwise }` from the word `if`. The condition is
-// queued as its own unit and both branches as blocks; Branch runs them and Pick chooses.
+// queued as its own unit, and each branch as a block or a single operand; Branch runs them
+// and Pick chooses.
 // Any other shape is unsupported, so the parser reports it.
 function readIf(
   source: string,
@@ -271,24 +272,22 @@ function readIf(
   if (source.charAt(open) !== "(") return unsupportedAt(at);
   const close = matchingClose(source, open);
   if (close === undefined) return unsupportedAt(at);
-  const thenOpen = skipSpaces(source, close + 1);
-  if (source.charAt(thenOpen) !== "{") return unsupportedAt(at);
-  const thenClose = matchingClose(source, thenOpen);
-  if (thenClose === undefined) return unsupportedAt(at);
-  const elseWord = skipSpaces(source, thenClose + 1);
+  const thenStart = skipSpaces(source, close + 1);
+  const thenEnd = branchEnd(source, thenStart);
+  if (thenEnd === undefined) return unsupportedAt(at);
+  const elseWord = skipSpaces(source, thenEnd);
   const elseEnd = readName(source, elseWord);
-  const elseOpen = skipSpaces(source, elseEnd);
   if (source.slice(elseWord, elseEnd) !== "else") return unsupportedAt(at);
-  if (source.charAt(elseOpen) !== "{") return unsupportedAt(at);
-  const elseClose = matchingClose(source, elseOpen);
-  if (elseClose === undefined) return unsupportedAt(at);
+  const elseStart = skipSpaces(source, elseEnd);
+  const elseStop = branchEnd(source, elseStart);
+  if (elseStop === undefined) return unsupportedAt(at);
   const conditionCode: Instruction[] = [];
   const thenCode: Instruction[] = [];
   const elseCode: Instruction[] = [];
   code.push({ kind: InstructionKind.Enter, where: at, block: conditionCode });
   code.push({
     kind: InstructionKind.Branch,
-    where: at,
+    where: close,
     block: thenCode,
     otherwise: elseCode,
   });
@@ -299,19 +298,64 @@ function readIf(
     names: new Map(names),
     kind: UnitKind.Condition,
   });
-  queue.push({
-    code: thenCode,
-    pos: thenOpen + 1,
-    names: new Map(names),
-    kind: UnitKind.Block,
-  });
-  queue.push({
-    code: elseCode,
-    pos: elseOpen + 1,
-    names: new Map(names),
-    kind: UnitKind.Block,
-  });
-  return { next: finishOperand(elseClose + 1, code, stack), done: true };
+  queue.push(branchUnit(source, thenStart, thenCode, names));
+  queue.push(branchUnit(source, elseStart, elseCode, names));
+  return { next: finishOperand(elseStop, code, stack), done: true };
+}
+
+// Where a branch of an if ends: after its braces, or after its single operand. Undefined
+// for any other shape, which the parser handles.
+function branchEnd(source: string, start: number): number | undefined {
+  if (source.charAt(start) === "{") {
+    const close = matchingClose(source, start);
+    return close === undefined ? undefined : close + 1;
+  }
+  const sign = signOf(source.charAt(start));
+  const at = sign === undefined ? start : start + 1;
+  if (isLetter(source.charAt(at))) {
+    const end = readName(source, at);
+    return source.slice(at, end) === "if" ? undefined : end;
+  }
+  const end = readDigits(source, at);
+  return end === at ? undefined : end;
+}
+
+// The unit that compiles one branch: a braced block, or a single operand.
+function branchUnit(
+  source: string,
+  start: number,
+  code: Instruction[],
+  names: Names,
+): Unit {
+  const kind = source.charAt(start) === "{" ? UnitKind.Block : UnitKind.Factor;
+  const pos = kind === UnitKind.Block ? start + 1 : start;
+  return { code, pos, names: new Map(names), kind };
+}
+
+/**
+ * Compiles a single-operand branch of an if into its own code. Any other operand is
+ * unsupported here, so the parser handles it.
+ *
+ * @param source - the program text.
+ * @param unit - the factor unit, whose code receives the instructions.
+ * @param queue - the units still to compile.
+ * @returns success, or the unsupported marker.
+ */
+export function compileFactor(
+  source: string,
+  unit: Unit,
+  queue: Unit[],
+): Result<true, TuffError> {
+  const result = readOperand(
+    source,
+    unit.pos,
+    unit.code,
+    [],
+    unit.names,
+    queue,
+  );
+  if (!("next" in result) || !result.done) return unsupportedAt(unit.pos);
+  return { ok: true, value: true };
 }
 
 // Applies pending operators that bind at least as tightly, then pushes this one.

@@ -102,6 +102,8 @@ export enum UnitKind {
   Block = "block",
   /** The condition of an if, which ends at its closing parenthesis. */
   Condition = "condition",
+  /** A single-operand branch of an if. */
+  Factor = "factor",
 }
 
 /**
