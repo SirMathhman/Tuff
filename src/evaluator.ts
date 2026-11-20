@@ -17,7 +17,13 @@ const OPERATORS: Record<Operator, BinaryOp> = {
   [Operator.Divide]: (a, b) => (b === 0 ? err(TuffErrorKind.DivisionByZero) : ok(Math.trunc(a / b))),
 };
 
-/** Folds the AST to a value. Name errors are reported by resolver.ts before this runs. */
+/**
+ * Folds the AST to a value. Name errors are reported by resolver.ts before this runs.
+ *
+ * @param expr - The expression to evaluate.
+ * @param scope - The values bound by enclosing blocks, or `undefined` at the top level.
+ * @returns The computed number, or an arithmetic error (`DivisionByZero`, `NumericOverflow`) at the operator that caused it.
+ */
 export function evaluate(expr: Expr, scope: Scope<number> | undefined): Result<number, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:

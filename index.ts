@@ -10,6 +10,13 @@ export { TuffErrorKind } from "./src/errors.ts";
 export type { TuffError, TuffErrorOf } from "./src/errors.ts";
 export type { Ok, Err, Result } from "./src/result.ts";
 
+/**
+ * Evaluates Tuff source text: tokenize, parse, resolve names, then evaluate.
+ * Errors are reported in phase order; the first failing phase wins.
+ *
+ * @param source - The Tuff source to evaluate.
+ * @returns The numeric value, or the first `TuffError` found.
+ */
 export function evaluateTuff(source: string): Result<number, TuffError> {
   const tokenized = tokenize(source);
   if (!tokenized.ok) return tokenized;

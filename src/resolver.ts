@@ -3,7 +3,13 @@ import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import { createScope, lookup, type Scope } from "./scope.ts";
 
-/** Checks that every name is bound in scope. Computes no values. */
+/**
+ * Checks that every name is bound in scope. Computes no values.
+ *
+ * @param expr - The expression to check.
+ * @param scope - The names bound by enclosing blocks, or `undefined` at the top level.
+ * @returns `ok(undefined)` if every name resolves, otherwise an `UnknownName` error at the first unbound name.
+ */
 export function resolve(expr: Expr, scope: Scope<boolean> | undefined): Result<undefined, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:

@@ -1,5 +1,6 @@
 import type { Span } from "./span.ts";
 
+/** The kinds of AST node. */
 export enum NodeKind {
   Literal = "Literal",
   Name = "Name",
@@ -7,6 +8,7 @@ export enum NodeKind {
   Block = "Block",
 }
 
+/** The binary operators. */
 export enum Operator {
   Add = "+",
   Subtract = "-",
@@ -14,18 +16,21 @@ export enum Operator {
   Divide = "/",
 }
 
+/** A numeric literal. */
 export interface LiteralNode {
   kind: NodeKind.Literal;
   value: number;
   span: Span;
 }
 
+/** A reference to a bound name. */
 export interface NameNode {
   kind: NodeKind.Name;
   name: string;
   span: Span;
 }
 
+/** One operator and its right-hand operand within a chain. */
 export interface ChainStep {
   operator: Operator;
   operatorSpan: Span;
@@ -39,16 +44,19 @@ export interface ChainNode {
   steps: ChainStep[];
 }
 
+/** A `let NAME = value;` statement. */
 export interface Binding {
   name: string;
   span: Span;
   value: Expr;
 }
 
+/** Zero or more bindings followed by one final expression. */
 export interface BlockNode {
   kind: NodeKind.Block;
   bindings: Binding[];
   result: Expr;
 }
 
+/** Any expression node. */
 export type Expr = LiteralNode | NameNode | ChainNode | BlockNode;

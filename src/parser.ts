@@ -130,6 +130,14 @@ function parseExpression(input: Input, pos: number, depth: number): Step<Expr> {
   return parseBinary(input, pos, depth, ADDITIVE, (i, p, d) => parseTerm(i, p, d, parseExpression));
 }
 
+/**
+ * Parses a whole source as a block body (the top level has no braces).
+ * Emits an AST only: it neither evaluates nor looks up names.
+ *
+ * @param tokens - The tokens produced by `tokenize`.
+ * @param end - The span just past the last character, used for end-of-input errors.
+ * @returns The program's top-level block, or the first syntax error found.
+ */
 export function parseProgram(tokens: Token[], end: Span): Result<BlockNode, TuffError> {
   const input: Input = { tokens, end };
   const parsed = parseBlock(input, 0, 0, parseExpression);

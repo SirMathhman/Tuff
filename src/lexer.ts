@@ -2,11 +2,18 @@ import { TuffErrorKind, type TuffError } from "./errors.ts";
 import type { Span } from "./span.ts";
 import { err, ok, type Result } from "./result.ts";
 
+/** A lexeme and where it sits in the source. */
 export interface Token {
   text: string;
   span: Span;
 }
 
+/**
+ * Splits Tuff source into tokens. Whitespace is skipped.
+ *
+ * @param source - The Tuff source to split.
+ * @returns The tokens, or an `UnexpectedCharacter` error at the first character that starts no token.
+ */
 export function tokenize(source: string): Result<Token[], TuffError> {
   const tokens: Token[] = [];
   const pattern = /\s*(\d+|[A-Za-z]+|[-+*/(){}=;])/y;
