@@ -76,7 +76,7 @@ export function expectedNumber(
   return fail(
     `Expected a number, a variable, '(', or '{' but found ${describe(source.charAt(where))}`,
     where,
-    "Every '+', '-', or '*' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
+    "Every '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
     "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.",
   );
 }
@@ -96,17 +96,17 @@ export function expectedOperator(
   const found = describe(source.charAt(where));
   if (grouped) {
     return fail(
-      `Expected '+', '-', '*', ')', or '}' but found ${found}`,
+      `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found ${found}`,
       where,
-      "Two terms can only be combined with '+', '-', or '*', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
-      "Insert '+', '-', '*', or a closing bracket here, or remove the extra character.",
+      "Two terms can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
+      "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.",
     );
   }
   return fail(
-    `Expected '+', '-', or '*' but found ${found}`,
+    `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found ${found}`,
     where,
-    "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.",
-    "Insert '+', '-', or '*' between the numbers, or remove the extra character.",
+    "Two numbers can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.",
+    "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.",
   );
 }
 
@@ -299,6 +299,29 @@ export function booleanOperand(
     where,
     "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
     "Use a number in place of the boolean, or remove the operator.",
+  );
+}
+
+/**
+ * Reports a variable assigned a value of a different type.
+ *
+ * @param where - the offset of the variable's name.
+ * @param name - the variable being assigned.
+ * @param held - the type the variable currently holds.
+ * @param assigned - the type of the new value.
+ * @returns a failure describing the type mismatch.
+ */
+export function typeMismatch(
+  where: number,
+  name: string,
+  held: string,
+  assigned: string,
+): Failure<TuffError> {
+  return fail(
+    `Cannot assign a ${assigned} to '${name}', which holds a ${held}`,
+    where,
+    "A variable keeps the type of the value it holds.",
+    "Assign a value of the same type, or declare a new variable.",
   );
 }
 

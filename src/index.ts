@@ -5,6 +5,7 @@ import {
   booleanOperand,
   chainedComparison,
   booleanSign,
+  typeMismatch,
   closerFor,
   expectedClose,
   expectedEquals,
@@ -68,6 +69,7 @@ interface BindingEntry {
   name: string;
   mutable: boolean;
   assign: boolean;
+  where: number;
 }
 
 type StackEntry = OperatorEntry | GroupEntry | BindingEntry;
@@ -216,7 +218,17 @@ function closeBinding(
   const value = state.values.pop() ?? 0;
   if (binding.assign) {
     const cell = lookupCell(state.scopes, binding.name);
-    if (cell !== undefined) cell.value = value;
+    if (cell !== undefined) {
+      if (typeof cell.value !== typeof value) {
+        return typeMismatch(
+          binding.where,
+          binding.name,
+          typeof cell.value,
+          typeof value,
+        );
+      }
+      cell.value = value;
+    }
   } else {
     const cell = { value, mutable: binding.mutable };
     state.scopes[state.scopes.length - 1]?.set(binding.name, cell);
@@ -265,7 +277,13 @@ function startLet(
   if (state.source.charAt(equals) !== "=") {
     return expectedEquals(state.source, equals, name);
   }
-  state.ops.push({ kind: EntryKind.Binding, name, mutable, assign: false });
+  state.ops.push({
+    kind: EntryKind.Binding,
+    name,
+    mutable,
+    assign: false,
+    where: nameStart,
+  });
   state.pos = skipSpaces(state.source, equals + 1);
   state.expectOperand = true;
   state.atStatementStart = false;
@@ -287,6 +305,7 @@ function startAssign(
     name,
     mutable: false,
     assign: true,
+    where: nameStart,
   });
   state.pos = skipSpaces(state.source, equals + 1);
   state.expectOperand = true;

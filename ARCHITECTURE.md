@@ -6,11 +6,11 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. Booleans cannot be used in arithmetic. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. A boolean cannot be an operand or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name at a statement start.
+`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start.
 
 ### Blocks
 
@@ -18,7 +18,7 @@ A block's value is its final expression, so it cannot end with a statement. A pr
 
 ### Results and errors
 
-Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has four parts: `what`, `where` (a zero-based offset), `why`, and `fix`.
+Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`.
 
 ### Examples
 
@@ -26,14 +26,11 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 - `interpretTuff("5")` returns `{ ok: true, value: 5 }`.
 - `interpretTuff("1 + 2")` returns `{ ok: true, value: 3 }`.
-- `interpretTuff("2 + 3 - 4")` returns `{ ok: true, value: 1 }`.
-- `interpretTuff("1 - -2")` returns `{ ok: true, value: 3 }`.
 
 #### Products and grouping
 
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
 - `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
-- `interpretTuff("-(2 + 3) * 4")` returns `{ ok: true, value: -20 }`.
 
 #### Brackets
 
@@ -49,7 +46,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ##### Operator examples
 
-- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
+- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found 'x'`.
 - `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
 
 #### Statement examples
@@ -73,19 +70,23 @@ Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rule
 
 #### Interpreter (src/index.ts)
 
-Exports `interpretTuff`. Scanning lives in `src/scanner.ts`; errors live in `src/errors.ts`.
+Exports `interpretTuff`, the single-pass parser and evaluator.
+
+#### Operations (planned: src/operations.ts)
+
+Operator meaning: `apply`, `precedence`, and reduction of pending operators.
 
 #### REPL (src/repl.ts)
 
 Reads stdin lines, evaluates each with `interpretTuff`, and prints the value or the error. Run with `bun run repl`.
 
-#### Tests (src/index.test.ts)
+#### Tests (src/*.test.ts)
 
-Uses `bun:test`. Error tests check all four `TuffError` fields.
+Use `bun:test`. Error tests check all four `TuffError` fields. Shared expected messages live in `src/test-messages.ts`.
 
 ### Dependency direction
 
-`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on `scanner.ts` and `errors.ts`. `scanner.ts` depends only on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
+`repl.ts` and the tests depend on `index.ts`. `index.ts` depends on `scanner.ts` and `errors.ts`. The planned `operations.ts` will depend on `errors.ts` too. `scanner.ts` depends on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -101,7 +102,7 @@ A pending operator is applied first when it binds at least as tightly, so operat
 
 ### Configuration
 
-`package.json` holds the `lint`, `repl`, `format`, and `format:check` scripts and the dev dependencies. `tsconfig.json` configures TypeScript, and `bun.lock` pins versions.
+`package.json` holds the scripts and dev dependencies, and `bun.lock` pins versions.
 
 ### Quality gates
 
@@ -145,10 +146,6 @@ Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` ro
 
 The sum can exceed the double range without any `TuffError`. A 400-digit literal gives `Infinity` with `ok: true`.
 
-### Negative zero
-
-`interpretTuff("-0")` returns `-0`, which `Object.is` distinguishes from `0`. Equality checks on results can disagree with arithmetic.
-
 ## Security Concerns
 
 ### Trust boundary
@@ -167,11 +164,11 @@ The REPL reads each stdin line with no length limit, and no maximum source lengt
 
 ### Known gaps
 
-Operators are `+`, `-`, and `*`, applied to integers, variables, and groups. Not implemented: division, assignment outside statement starts, functions, and names with digits or underscores.
+Operators are `+`, `-`, `*`, and the six comparisons, applied to integers, variables, and groups. Not implemented: division, equality on booleans, assignment outside statement starts, functions, and names with digits or underscores.
 
 ### Module split
 
-Split into `lexer`, `parser` (producing an AST), and `evaluator`, with `interpretTuff` as the composition point. It is a stopgap until then.
+Next, move operator meaning into `operations.ts`. Later, split the parser (producing an AST) from the evaluator, with `interpretTuff` as the composition point. `Bracket` belongs with the scanner, not `errors.ts`.
 
 ### Numbers and output
 
