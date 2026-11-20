@@ -27,7 +27,6 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Examples
 
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
-- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
 - `interpretTuff("7 / 0")` returns an error at offset 2: `what` is `Division by zero`.
 - `interpretTuff("let x = 1; let y = &x; *y")` returns `{ ok: true, value: 1 }`.
 
@@ -47,7 +46,7 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at t
 
 ### Dependency direction
 
-`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`, which depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -67,7 +66,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### Lint rules
 
-ESLint adds local rules and restricted syntax on top of its recommended set (see `eslint.config.ts`). The `local/no-recursion` rule counts direct calls by name, through aliases, as methods, and into nested closures. A cycle through a parameter is allowed. It sees one file only, and method names match loosely, so it can give false positives.
+ESLint adds local rules and restricted syntax on top of its recommended set (see `eslint.config.ts`). `local/no-recursion` counts direct and aliased calls within one file, allows a cycle through a parameter, and can false-positive on method names.
 
 #### Size and naming
 
@@ -77,7 +76,7 @@ Functions are capped at 100 lines, files at 500, and names need two characters. 
 
 ### Shared parser state
 
-Every parse step mutates one `ParserState`, so any step can touch any field, and the shape grows with each construct.
+Every parse step mutates one `ParserState`, so any step can touch any field.
 
 ### Lenient flag threading
 
@@ -94,6 +93,10 @@ Failures and values share a return type, told apart by `typeof === "object"`. Th
 ### Numeric precision
 
 Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently: `9007199254740993 + 0` gives `9007199254740992`. Results can overflow to `Infinity` with no `TuffError`, and `1 / -2` gives `-0`, which the REPL prints.
+
+### Reference aliasing
+
+Only references are checked against each other. Reading or assigning the owner ignores live references, so `let mut x = 0; let y = &x; x = 5; *y` gives 5. Target: freeze the owner while borrowed.
 
 ## Security Concerns
 
