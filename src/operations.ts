@@ -45,6 +45,23 @@ function apply(left: number, op: Operator, right: number): Value {
 }
 
 /**
+ * Handles a value error. In an unchosen branch the error is not reported, and the
+ * fallback stands in for the value; otherwise the failure is returned.
+ *
+ * @param lenient - whether the operation is in an unchosen branch.
+ * @param failure - the value error that would be reported.
+ * @param fallback - the value used in place of the error when lenient.
+ * @returns the fallback when lenient, or the failure.
+ */
+export function valueError<T extends Value>(
+  lenient: boolean,
+  failure: Failure<TuffError>,
+  fallback: T,
+): Failure<TuffError> | T {
+  return lenient ? fallback : failure;
+}
+
+/**
  * Applies a sign to a value. Only numbers take a sign. In lenient mode, a value
  * in an unchosen branch is not an error, so a boolean becomes 0.
  *
@@ -62,7 +79,7 @@ export function applySign(
 ): Failure<TuffError> | Value {
   if (sign === 1) return value;
   if (typeof value === "boolean") {
-    return lenient ? 0 : booleanSign(where);
+    return valueError(lenient, booleanSign(where), 0);
   }
   return sign * value;
 }
@@ -86,18 +103,20 @@ export function applyTop(
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
   if (typeof left === "boolean" || typeof right === "boolean") {
-    if (lenient) {
-      values.push(0);
-      return undefined;
-    }
-    return booleanOperand(entry.where, entry.operator);
+    const failure = valueError(
+      lenient,
+      booleanOperand(entry.where, entry.operator),
+      0,
+    );
+    if (typeof failure === "object") return failure;
+    values.push(failure);
+    return undefined;
   }
   if (entry.operator === Operator.Divide && right === 0) {
-    if (lenient) {
-      values.push(0);
-      return undefined;
-    }
-    return divisionByZero(entry.where);
+    const failure = valueError(lenient, divisionByZero(entry.where), 0);
+    if (typeof failure === "object") return failure;
+    values.push(failure);
+    return undefined;
   }
   values.push(apply(left, entry.operator, right));
   return undefined;

@@ -15,6 +15,7 @@ import {
 import {
   applyTop,
   closeGroup,
+  valueError,
   isComparison,
   precedence,
   reduceOperators,
@@ -46,8 +47,13 @@ function startBranch(
   const entry = ops[ops.length - 1];
   if (entry?.kind !== EntryKind.If) return Step.Continue;
   const value = values.pop() ?? false;
-  if (typeof value !== "boolean" && !isLenient(state)) {
-    return nonBooleanCondition(closePos);
+  if (typeof value !== "boolean") {
+    const failure = valueError(
+      isLenient(state),
+      nonBooleanCondition(closePos),
+      false,
+    );
+    if (typeof failure === "object") return failure;
   }
   entry.condition = value === true;
   entry.phase = IfPhase.Then;

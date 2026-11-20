@@ -118,7 +118,7 @@ Every parse step mutates one `ParserState`, so any step can touch any field, and
 
 ### Lenient flag threading
 
-A `lenient` flag reaches every reduction and sign call, and each site decides whether its error is static or value. A new error site can get this wrong silently.
+A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors are never passed through it.
 
 ### Numeric precision
 
@@ -154,7 +154,7 @@ Build an AST in a parse module, then evaluate it in a separate module. Lenient b
 
 ### Error classes
 
-Each error is tagged static or value when constructed, and one gate drops value errors in unchosen branches.
+Not yet done: tag each error as static or value when constructed, so that the gate is driven by the error itself.
 
 ### Numbers and output
 
