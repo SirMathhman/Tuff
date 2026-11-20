@@ -357,10 +357,27 @@ test('interpretTuff("if (true) 2") => error', () => {
   });
 });
 
-test('interpretTuff("if (true) 2 else (true + 1)") => 2', () => {
+test('interpretTuff("if (true) 1 else { true + true }") => error', () => {
+  expect(interpretTuff("if (true) 1 else { true + true }")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot use a boolean with '+'",
+      where: 24,
+      why: "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
+      fix: "Use a number in place of the boolean, or remove the operator.",
+    },
+  });
+});
+
+test('interpretTuff("if (true) 2 else (true + 1)") => error', () => {
   expect(interpretTuff("if (true) 2 else (true + 1)")).toEqual({
-    ok: true,
-    value: 2,
+    ok: false,
+    error: {
+      what: "Cannot use a boolean with '+'",
+      where: 23,
+      why: "Only numbers can be used with arithmetic or comparison operators; a boolean has no numeric value.",
+      fix: "Use a number in place of the boolean, or remove the operator.",
+    },
   });
 });
 

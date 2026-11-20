@@ -86,31 +86,22 @@ export function applySign(
 
 /**
  * Pops the newest operator and applies it to the two newest values. A boolean
- * operand is a failure, unless the operation is in an unchosen branch.
+ * operand is a failure, even in an unchosen branch.
  *
  * @param values - the value stack.
  * @param ops - the operator stack.
- * @param lenient - whether errors in an unchosen branch are suppressed.
- * @returns a failure for a boolean operand, or undefined.
+ * @returns a failure for a boolean operand or a zero divisor, or undefined.
  */
 export function applyTop(
   values: Value[],
   ops: StackEntry[],
-  lenient: boolean,
 ): Failure<TuffError> | undefined {
   const entry = ops.pop();
   if (entry?.kind !== EntryKind.Operator) return undefined;
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
   if (typeof left === "boolean" || typeof right === "boolean") {
-    const failure = valueError(
-      lenient,
-      booleanOperand(entry.where, entry.operator),
-      0,
-    );
-    if (typeof failure === "object") return failure;
-    values.push(failure);
-    return undefined;
+    return booleanOperand(entry.where, entry.operator);
   }
   if (entry.operator === Operator.Divide && right === 0) {
     return divisionByZero(entry.where);
@@ -124,20 +115,18 @@ export function applyTop(
  *
  * @param values - the value stack.
  * @param ops - the operator stack.
- * @param lenient - whether errors in an unchosen branch are suppressed.
  * @returns a failure for a boolean operand, or undefined.
  */
 export function reduceOperators(
   values: Value[],
   ops: StackEntry[],
-  lenient: boolean,
 ): Failure<TuffError> | undefined {
   for (
     let top = ops[ops.length - 1];
     top?.kind === EntryKind.Operator;
     top = ops[ops.length - 1]
   ) {
-    const failure = applyTop(values, ops, lenient);
+    const failure = applyTop(values, ops);
     if (failure !== undefined) return failure;
   }
   return undefined;
@@ -157,7 +146,7 @@ export function closeGroup(
   ops: StackEntry[],
   lenient: boolean,
 ): Failure<TuffError> | undefined {
-  const reduced = reduceOperators(values, ops, lenient);
+  const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   const group = ops.pop();
   if (group?.kind !== EntryKind.Group) return undefined;

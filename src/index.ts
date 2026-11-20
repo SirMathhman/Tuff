@@ -2,7 +2,6 @@ import type { Result, TuffError } from "./errors";
 import { reduceOperators } from "./operations";
 import type { ParserState } from "./types";
 import { Step } from "./types";
-import { isLenient } from "./helpers";
 import { stepOperand } from "./operands";
 import { stepOperator } from "./operators";
 
@@ -42,7 +41,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     if (outcome === Step.End) break;
     if (outcome !== Step.Continue) return outcome;
   }
-  const failure = reduceOperators(state.values, state.ops, isLenient(state));
+  const failure = reduceOperators(state.values, state.ops);
   if (failure !== undefined) return failure;
   const { values } = state;
   const result = values.pop() ?? 0;

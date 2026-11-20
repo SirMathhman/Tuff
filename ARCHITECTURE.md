@@ -18,7 +18,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero) are reported.
+The unchosen branch of an `if` is parsed for syntax only. Value errors there (signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero, boolean operands) are reported.
 
 ### Results and errors
 

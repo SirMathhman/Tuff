@@ -85,7 +85,7 @@ function pushOperator(
     ) {
       return chainedComparison(state.pos);
     }
-    const failure = applyTop(values, ops, isLenient(state));
+    const failure = applyTop(values, ops);
     if (failure !== undefined) return failure;
   }
   ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
@@ -115,7 +115,7 @@ function closeBinding(
 ): Failure<TuffError> | undefined {
   const { ops, values, scopes, flags } = state;
   const lenient = isLenient(state);
-  const reduced = reduceOperators(values, ops, lenient);
+  const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   ops.pop();
   const value = values.pop() ?? 0;
