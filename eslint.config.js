@@ -1,6 +1,7 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 import jsdoc from "eslint-plugin-jsdoc";
+import maxInterfaceMembers from "./eslint-rules/max-interface-members.js";
 import noRecursion from "./eslint-rules/no-recursion.js";
 
 export default tseslint.config(
@@ -9,11 +10,17 @@ export default tseslint.config(
   tseslint.configs.recommended,
   {
     plugins: {
-      local: { rules: { "no-recursion": noRecursion } },
+      local: {
+        rules: {
+          "no-recursion": noRecursion,
+          "max-interface-members": maxInterfaceMembers,
+        },
+      },
       jsdoc,
     },
     rules: {
       "local/no-recursion": "error",
+      "local/max-interface-members": "error",
       "id-length": ["error", { min: 2 }],
       "max-lines": [
         "error",

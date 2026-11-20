@@ -99,6 +99,18 @@ export type Scope = Map<string, Cell>;
 /**
  * The parser's complete state between steps.
  */
+/**
+ * Where the parser stands among statements.
+ */
+interface StatementFlags {
+  atStatementStart: boolean;
+  afterLet: boolean; // the last top-level statement was a `let` or an assignment
+  lastStatementEnded: boolean; // the most recent item was a statement, not an expression
+}
+
+/**
+ * The parser's complete state between steps.
+ */
 export interface ParserState {
   source: string;
   pos: number;
@@ -108,7 +120,5 @@ export interface ParserState {
   depth: number; // number of open brackets
   skipDepth: number; // number of unchosen `if` branches being parsed
   expectOperand: boolean;
-  atStatementStart: boolean;
-  afterLet: boolean; // the last top-level statement was a `let` or an assignment
-  lastStatementEnded: boolean; // the most recent item was a statement, not an expression
+  flags: StatementFlags;
 }

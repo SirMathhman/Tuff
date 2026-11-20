@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. `if (c) a else b` is an operand with a boolean condition and one-factor branches; only the chosen branch takes effect. A boolean cannot be an operand or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
@@ -16,50 +16,37 @@ Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds t
 
 A block's value is its final expression, so it cannot end with a statement. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
 
+### Lenient branches
+
+The unchosen branch of an `if` is parsed for syntax only. Semantic errors there (undefined names, boolean operands, type mismatches, signs on booleans) are suppressed, undefined names read as 0, and assignments have no effect. Syntax errors there are still reported.
+
 ### Results and errors
 
 Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`.
 
 ### Examples
 
-#### Sums and differences
-
-- `interpretTuff("5")` returns `{ ok: true, value: 5 }`.
-- `interpretTuff("1 + 2")` returns `{ ok: true, value: 3 }`.
-
-#### Products and grouping
+#### Arithmetic and grouping
 
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
 - `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
-
-#### Brackets
-
-- `interpretTuff("{ 2 + 3 } * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
 
-#### Errors
+#### Conditionals
 
-##### Operand examples
+- `interpretTuff("if (1 < 2) 7 else x")` returns `{ ok: true, value: 7 }`.
+- `interpretTuff("if (1) 7 else 8")` returns an error at offset 5: the condition is not a boolean.
+
+#### Errors
 
 - `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
 
-##### Operator examples
-
-- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found 'x'`.
-- `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
-
-#### Statement examples
-
-##### Values
+#### Statements
 
 - `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
-- `interpretTuff("{ let x = 2 + 3; x } * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("let mut x = 0; x = 1; x")` returns `{ ok: true, value: 1 }`.
-
-##### Scope
-
-- `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression, not a statement.
+- `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression.
 - `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `x` is out of scope.
 
 ## Structure
@@ -68,41 +55,29 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, custom Markdown rules in `markdown-rules/`, and docs at the root.
 
-#### Interpreter (src/index.ts)
-
-Exports `interpretTuff`: the parser and evaluator.
-
-#### Operations (src/operations.ts)
-
-Operator meaning and reduction.
-
-#### REPL (src/repl.ts)
-
-Reads stdin lines, evaluates each with `interpretTuff`, and prints the value or the error. Run with `bun run repl`.
-
-#### Tests (src/*.test.ts)
-
-Use `bun:test`. Error tests check all four `TuffError` fields. Shared expected messages live in `src/test-messages.ts`.
+- `src/scanner.ts`: character classes, token readers, `Operator` and `Bracket`.
+- `src/errors.ts`: `TuffError`, `Result`, and error constructors.
+- `src/types.ts`: parser state and stack entry types.
+- `src/operations.ts`: operator meaning and reduction.
+- `src/index.ts`: `interpretTuff`, the parse loop.
+- `src/repl.ts`: stdin REPL. Run with `bun run repl`.
+- `src/*.test.ts`: `bun:test` suites. Shared messages live in `src/test-messages.ts`.
 
 ### Dependency direction
 
-`repl.ts` and the tests depend on `index.ts`. `index.ts` depends on `operations.ts`, `scanner.ts`, `types.ts`, and `errors.ts`. `operations.ts`, `scanner.ts`, and `types.ts` depend on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
+Edges point one way, and there are no cycles. `scanner.ts` depends on no project file and owns `Bracket`. `errors.ts` depends on `scanner.ts`. `types.ts` and `operations.ts` depend on `scanner.ts` and `errors.ts`, and `operations.ts` also depends on `types.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
-`interpretTuff` is a single loop with explicit stacks and no recursion.
+`interpretTuff` is a single loop with explicit stacks and no recursion. Each step reads an operand or an operator, depending on the expected kind.
 
 #### Stacks
 
-A value stack holds numbers. An operator stack holds pending operators, open brackets, and `let` bindings. Scopes form a stack of maps, searched innermost first.
+A value stack holds integers and booleans. An operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes form a stack of maps, searched innermost first. A skip counter counts unchosen branches, and lenient behavior applies while it is above zero.
 
 #### Precedence
 
-A pending operator is applied first when it binds at least as tightly, so operators are left-associative. `)` and `}` apply pending operators back to their bracket, then scale the value by the sign before it.
-
-### Configuration
-
-`package.json` holds the scripts and dev dependencies, and `bun.lock` pins versions.
+A pending operator is applied first when it binds at least as tightly, so operators are left-associative. `)` and `}` apply pending operators back to their bracket, then apply the sign before it.
 
 ### Quality gates
 
@@ -134,9 +109,13 @@ Exported top-level functions, classes, interfaces, type aliases, and enums need 
 
 #### Exports and Markdown
 
-The unused-export check fails on any export that no other file uses. Markdown lint caps bullet lists at 10 items and each markdown file at 7500 characters.
+The unused-export check fails on unused exports. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
 
 ## Potential Problems
+
+### Parser size
+
+`index.ts` holds every parse step in one file, so each new construct adds to a file that is near the 500-line cap.
 
 ### Numeric precision
 
@@ -154,7 +133,7 @@ The sum can exceed the double range without any `TuffError`. A 400-digit literal
 
 ### Controls
 
-Explicit stacks mean nesting costs memory, not call frames. Future I/O must go behind an explicit capability parameter, so `interpretTuff` stays pure.
+Explicit stacks mean nesting costs memory, not call frames. Future I/O must go behind a capability parameter, keeping `interpretTuff` pure.
 
 ### Gaps
 
@@ -164,11 +143,11 @@ The REPL reads each stdin line with no length limit, and no maximum source lengt
 
 ### Known gaps
 
-Operators are `+`, `-`, `*`, and the six comparisons, applied to integers, variables, and groups. Not implemented: division, equality on booleans, assignment outside statement starts, functions, and names with digits or underscores.
+Not implemented: division, `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
 
-### Module split
+### Parser split
 
-Next, move operator meaning into `operations.ts`. Later, split the parser (producing an AST) from the evaluator, with `interpretTuff` as the composition point. `Bracket` belongs with the scanner, not `errors.ts`.
+Split the parse loop before it reaches the line cap: operand steps, operator steps, and `if` branches each get a module, and `index.ts` stays the composition point. Later, split the parser (producing an AST) from the evaluator.
 
 ### Numbers and output
 

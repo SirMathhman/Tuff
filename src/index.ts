@@ -124,11 +124,11 @@ function pushOperand(
   value: Value,
   end: number,
 ): Failure<TuffError> | Step {
-  state.lastStatementEnded = false;
+  state.flags.lastStatementEnded = false;
   state.values.push(value);
   state.pos = end;
   state.expectOperand = false;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return completeBranch(state) ?? Step.Continue;
 }
 
@@ -146,7 +146,7 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   if (bracket === Bracket.Brace) state.scopes.push(new Map());
   state.depth++;
   state.pos++;
-  state.atStatementStart = bracket === Bracket.Brace;
+  state.flags.atStatementStart = bracket === Bracket.Brace;
   return Step.Continue;
 }
 
@@ -162,7 +162,7 @@ function startIf(state: ParserState, sign: number, end: number): Step {
     value: undefined,
   });
   state.pos = end;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -216,7 +216,7 @@ function startLet(
   });
   state.pos = skipSpaces(state.source, equals + 1);
   state.expectOperand = true;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -241,7 +241,7 @@ function startAssign(
   });
   state.pos = skipSpaces(state.source, equals + 1);
   state.expectOperand = true;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -253,7 +253,7 @@ function operandName(
   const end = readName(state.source, state.pos);
   const name = state.source.slice(state.pos, end);
   if (name === "let") {
-    if (state.atStatementStart && !signed) return startLet(state, end);
+    if (state.flags.atStatementStart && !signed) return startLet(state, end);
     return letNotAllowed(state.pos);
   }
   if (name === "if") return startIf(state, sign, end);
@@ -270,7 +270,7 @@ function operandName(
   }
   const equals = skipSpaces(state.source, end);
   if (
-    state.atStatementStart &&
+    state.flags.atStatementStart &&
     !signed &&
     state.source.charAt(equals) === "="
   ) {
@@ -303,22 +303,22 @@ function operandNumber(
 function stepOperand(state: ParserState): Failure<TuffError> | Step {
   state.pos = skipSpaces(state.source, state.pos);
   if (
-    state.atStatementStart &&
+    state.flags.atStatementStart &&
     state.depth === 0 &&
-    state.afterLet &&
+    state.flags.afterLet &&
     state.pos === state.source.length
   ) {
     return Step.End;
   }
   if (
-    state.atStatementStart &&
+    state.flags.atStatementStart &&
     state.depth > 0 &&
-    state.lastStatementEnded &&
+    state.flags.lastStatementEnded &&
     state.source.charAt(state.pos) === "}"
   ) {
     return blockEndsWithStatement(state.pos);
   }
-  if (state.atStatementStart && state.source.charAt(state.pos) === ";") {
+  if (state.flags.atStatementStart && state.source.charAt(state.pos) === ";") {
     return unexpectedSemicolon(state.pos);
   }
   const top = state.ops[state.ops.length - 1];
@@ -367,7 +367,7 @@ function pushOperator(
   state.ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
   state.pos += op.length;
   state.expectOperand = true;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return undefined;
 }
 
@@ -410,8 +410,8 @@ function closeBinding(
     const cell = { value, mutable: binding.mutable };
     state.scopes[state.scopes.length - 1]?.set(binding.name, cell);
   }
-  state.lastStatementEnded = true;
-  if (state.depth === 0) state.afterLet = true;
+  state.flags.lastStatementEnded = true;
+  if (state.depth === 0) state.flags.afterLet = true;
   return undefined;
 }
 
@@ -422,7 +422,7 @@ function endStatement(state: ParserState): Failure<TuffError> | Step {
     if (failure !== undefined) return failure;
     state.pos++;
     state.expectOperand = true;
-    state.atStatementStart = true;
+    state.flags.atStatementStart = true;
     return Step.Continue;
   }
   if (open?.kind === EntryKind.Group) {
@@ -450,7 +450,7 @@ function closeBracket(
   if (group.bracket === Bracket.Brace) state.scopes.pop();
   state.depth--;
   state.pos++;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   if (group.ifCondition) return startBranch(state, closePos);
   return completeBranch(state) ?? Step.Continue;
 }
@@ -469,7 +469,7 @@ function awaitElse(
   if (entry.skipping) state.skipDepth++;
   state.pos = skipSpaces(state.source, end);
   state.expectOperand = true;
-  state.atStatementStart = false;
+  state.flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -515,9 +515,11 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     depth: 0,
     skipDepth: 0,
     expectOperand: true,
-    atStatementStart: true,
-    afterLet: false,
-    lastStatementEnded: false,
+    flags: {
+      atStatementStart: true,
+      afterLet: false,
+      lastStatementEnded: false,
+    },
   };
   for (;;) {
     const outcome = state.expectOperand
