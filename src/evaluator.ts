@@ -91,6 +91,7 @@ function evaluateBlockBody(block: BlockNode, env: Env, frame: number[]): Result<
     const assigned = evaluateAssign(statement, env);
     if (!assigned.ok) return assigned;
   }
+  if (block.result === undefined) return ok(0);
   return evaluateIn(block.result, env);
 }
 

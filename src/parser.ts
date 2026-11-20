@@ -72,13 +72,21 @@ function parseAssign(input: Input, pos: number, depth: number, parseExpr: Parser
   return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
-function parseBlock(input: Input, pos: number, depth: number, parseExpr: Parser): Step<BlockNode> {
+function parseBlock(input: Input, pos: number, depth: number, parseExpr: Parser, closer: string | undefined): Step<BlockNode> {
   const statements: Statement[] = [];
   const names = new Set<string>();
   let cursor = pos;
   for (;;) {
     const token = input.tokens[cursor];
-    if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (token === undefined || token.text === closer) {
+      if (statements.length === 0) {
+        return token === undefined
+          ? err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end })
+          : err({ kind: TuffErrorKind.UnexpectedToken, span: token.span });
+      }
+      const block: BlockNode = { kind: NodeKind.Block, statements, result: undefined };
+      return ok({ value: block, next: cursor });
+    }
     if (token.text === "let") {
       const statement = parseLet(input, cursor, depth, names, parseExpr);
       if (!statement.ok) return statement;
@@ -109,7 +117,7 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     const isBlock = token.text === "{";
     const closer = isBlock ? "}" : ")";
     const inner: Step<Expr> = isBlock
-      ? parseBlock(input, pos + 1, depth + 1, parseExpr)
+      ? parseBlock(input, pos + 1, depth + 1, parseExpr, "}")
       : parseExpr(input, pos + 1, depth + 1);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
@@ -176,7 +184,7 @@ function parseExpression(input: Input, pos: number, depth: number): Step<Expr> {
  */
 export function parseProgram(tokens: Token[], end: Span): Result<BlockNode, TuffError> {
   const input: Input = { tokens, end };
-  const parsed = parseBlock(input, 0, 0, parseExpression);
+  const parsed = parseBlock(input, 0, 0, parseExpression, undefined);
   if (!parsed.ok) return parsed;
   const extra = input.tokens[parsed.value.next];
   if (extra !== undefined) return err({ kind: TuffErrorKind.UnexpectedToken, span: extra.span });

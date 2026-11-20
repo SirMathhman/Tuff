@@ -114,6 +114,10 @@ test('evaluateTuff("let mut x = 0; x = 1; x") => 1', () => {
   expect(evaluateTuff("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluateTuff("let mut x = 0; x = 1;") => 0', () => {
+  expect(evaluateTuff("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
+});
+
 test("assigning a plain let binding is an ImmutableAssignment error", () => {
   expect(evaluateTuff("let x = 0; x = 1; x")).toEqual({ ok: false, error: { kind: TuffErrorKind.ImmutableAssignment, span: { start: 11, end: 12 } } });
 });

@@ -105,8 +105,8 @@ export interface BlockNode {
   kind: NodeKind.Block;
   /** The statements, in source order. */
   statements: Statement[];
-  /** The expression whose value is the block's value. */
-  result: Expr;
+  /** The expression whose value is the block's value, or `undefined` when the block ends in a statement; such a block evaluates to 0. */
+  result: Expr | undefined;
 }
 
 /** Any expression node. */

@@ -110,5 +110,6 @@ function resolveBlockBody(
     const value = resolveExpr(statement.value, blocks, refs);
     if (!value.ok) return value;
   }
+  if (block.result === undefined) return ok(undefined);
   return resolveExpr(block.result, blocks, refs);
 }
