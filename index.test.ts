@@ -96,6 +96,18 @@ test("interpretTuff rejects a reference that outlives its variable", () => {
   expect(interpretTuff("let mut y = &0; { let x = 1; y = &x; } *y").ok).toBe(false);
 });
 
+test("interpretTuff('let mut x = 0; let y = &mut x; *y = 1; x') => 1", () => {
+  expect(interpretTuff("let mut x = 0; let y = &mut x; *y = 1; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff rejects &mut of an immutable variable", () => {
+  expect(interpretTuff("let x = 0; let y = &mut x; *y").ok).toBe(false);
+});
+
+test("interpretTuff rejects assigning through a shared reference", () => {
+  expect(interpretTuff("let mut x = 0; let y = &x; *y = 1; x").ok).toBe(false);
+});
+
 test("interpretTuff rejects a program whose result is a reference", () => {
   expect(interpretTuff("let x = 1; &x").ok).toBe(false);
 });

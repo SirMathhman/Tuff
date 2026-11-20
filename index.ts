@@ -21,13 +21,18 @@ interface Problem {
 type Value = number | boolean | Reference;
 
 /**
- * A reference made with "&name". Reading it with "*" gives the target's current value.
+ * A reference made with "&name" or "&mut name". Reading it with "*" gives the target's
+ * current value; only a mutable reference can be assigned through with "*name = ...".
  */
 interface Reference {
   /**
    * The variable the reference points to.
    */
   readonly target: Binding;
+  /**
+   * True if the reference was made with "&mut".
+   */
+  readonly mutable: boolean;
 }
 
 /**
@@ -35,6 +40,11 @@ interface Reference {
  * "true" evaluates to 1 and "false" to 0.
  */
 const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false"]);
+
+/**
+ * Matches the start of a statement that assigns through a reference: "*name =" but not "*name ==".
+ */
+const DEREFERENCE_ASSIGNMENT = /^\*\s*[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)/;
 
 /**
  * A variable's current value and whether it may be reassigned.
@@ -110,11 +120,11 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * Grammar:
  *   program    := statement* expression
  *   block      := "{" statement* expression "}"
- *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";"
+ *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" name "=" expression ";"
  *   expression := sum ("==" sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
- *   factor     := number | "true" | "false" | name | "&" name | "*" factor | "(" expression ")" | block
+ *   factor     := number | "true" | "false" | name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
  * group sub-expressions. "true" and "false" evaluate to 1 and 0, and "==" yields
@@ -314,7 +324,8 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
 }
 
 /**
- * Parses "&name", a reference to a variable in scope.
+ * Parses "&name" or "&mut name", a reference to a variable in scope. A mutable
+ * reference requires the variable to be declared with "let mut".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past the reference.
@@ -322,6 +333,11 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
  */
 function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
   cursor.pos++;
+  let mutable = false;
+  if (peekName(text, cursor) === "mut") {
+    cursor.pos += "mut".length;
+    mutable = true;
+  }
   const name = peekName(text, cursor);
   if (name === "") {
     return err({ offset: cursor.pos, expected: `a variable name after "&"` });
@@ -332,7 +348,57 @@ function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
   if (binding === undefined) {
     return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
   }
-  return ok({ target: binding });
+  if (mutable && !binding.mutable) {
+    return err({ offset: start, expected: `a mutable variable (declare "${name}" with "let mut") to borrow mutably` });
+  }
+  return ok({ target: binding, mutable });
+}
+
+/**
+ * Parses "*name = expression;", which assigns through a mutable reference stored in a variable.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the assignment.
+ * @returns The first problem found, or undefined if the assignment parsed.
+ */
+function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | undefined {
+  peek(text, cursor);
+  const starOffset = cursor.pos;
+  cursor.pos++;
+  const name = peekName(text, cursor);
+  const nameStart = cursor.pos;
+  cursor.pos += name.length;
+  const holder = lookup(cursor.scope, name);
+  if (holder === undefined) {
+    return { offset: nameStart, expected: `a variable in scope (no "${name}" is defined)` };
+  }
+  const ref = holder.value;
+  if (typeof ref !== "object") {
+    return { offset: nameStart, expected: `a reference after "*"` };
+  }
+  if (!ref.mutable) {
+    return { offset: starOffset, expected: `a mutable reference (made with "&mut") to assign through` };
+  }
+  peek(text, cursor);
+  cursor.pos++;
+  peek(text, cursor);
+  const valueStart = cursor.pos;
+  const value = parseExpression(text, cursor);
+  if (!value.ok) {
+    return value.error;
+  }
+  if (typeof value.value !== typeof ref.target.value) {
+    return { offset: valueStart, expected: `${kindOf(ref.target.value)} to match the type of the referenced variable` };
+  }
+  if (escapes(value.value, ref.target.depth)) {
+    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
+  }
+  if (peek(text, cursor) !== ";") {
+    return { offset: cursor.pos, expected: `";"` };
+  }
+  cursor.pos++;
+  ref.target.value = value.value;
+  return undefined;
 }
 
 /**
@@ -395,6 +461,8 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
       problem = parseDeclaration(text, cursor);
     } else if (name !== "" && peekAfterName(text, cursor, name) === "=") {
       problem = parseAssignment(text, cursor);
+    } else if (name === "" && DEREFERENCE_ASSIGNMENT.test(text.slice(peekStart(text, cursor)))) {
+      problem = parseDereferenceAssignment(text, cursor);
     } else {
       break;
     }
@@ -513,6 +581,18 @@ function peekAfterName(text: string, cursor: Cursor, name: string): string {
 function peekOperator(text: string, cursor: Cursor): string {
   skipSpaces(text, cursor);
   return text.slice(cursor.pos, cursor.pos + 2) === "==" ? "==" : "";
+}
+
+/**
+ * Returns the position of the next significant character without consuming it.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past any whitespace.
+ * @returns The offset of the next significant character.
+ */
+function peekStart(text: string, cursor: Cursor): number {
+  skipSpaces(text, cursor);
+  return cursor.pos;
 }
 
 /**
