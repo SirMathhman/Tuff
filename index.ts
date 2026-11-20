@@ -152,8 +152,14 @@ function closeGroup(values: number[], ops: StackEntry[]): void {
   values.push(group.sign * (values.pop() ?? 0));
 }
 
-// Shunting-yard evaluation with explicit stacks, so nesting depth is not limited
-// by the JavaScript call stack. Offsets in errors refer to the unmodified source.
+/**
+ * Evaluates a Tuff expression: integers joined by `+`, `-`, and `*`, with
+ * parentheses and signs. Uses explicit stacks, so nesting depth is not limited
+ * by the JavaScript call stack. Offsets in errors refer to the unmodified source.
+ *
+ * @param tuffSource - the expression to evaluate.
+ * @returns the value on success, or a TuffError describing the first syntax error.
+ */
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const values: number[] = [];
   const ops: StackEntry[] = [];
