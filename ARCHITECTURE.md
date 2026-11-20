@@ -52,6 +52,8 @@ Errors:
 
 Behavior:
 
+Arithmetic and grouping:
+
 - `interpretTuff("5")` returns `{ ok: true, value: 5 }`.
 - `interpretTuff("1 + 2")` returns `{ ok: true, value: 3 }`.
 - `interpretTuff("2 + 3 - 4")` returns `{ ok: true, value: 1 }`.
@@ -60,12 +62,21 @@ Behavior:
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
 - `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("-(2 + 3) * 4")` returns `{ ok: true, value: -20 }`.
+
+Errors in expressions:
+
 - `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
 - `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
 - `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
+
+Brackets:
+
 - `interpretTuff("{ 2 + 3 } * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
+
+Statements, blocks, and scope:
+
 - `interpretTuff("{ let x = 2 + 3; x } * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
 - `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block cannot end with a `let`.

@@ -1,0 +1,9 @@
+{
+  "config": {
+    "default": true,
+    "MD013": false,
+    "max-list-items": true,
+  },
+  "customRules": ["./markdown-rules/max-list-items.mjs"],
+  "ignores": ["node_modules/**"],
+}
