@@ -1,18 +1,5 @@
 import { err, ok, type Result } from "./src/result";
-
-/**
- * A syntax error found at a specific offset in the source.
- */
-interface Problem {
-  /**
-   * Zero-based offset of the first character that could not be parsed.
-   */
-  readonly offset: number;
-  /**
-   * Human-readable description of what the parser expected at that offset.
-   */
-  readonly expected: string;
-}
+import { describeUnsupported, peek, peekName, peekStart, peekOperator, peekAfterName, peekCompoundOperator, skipSpaces, type Problem } from "./src/tuff-lexing";
 
 /**
  * A value of a Tuff expression: a number, a boolean from "true" or "false", or a reference.
@@ -50,6 +37,9 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "match",
   "case",
   "_",
+  "for",
+  "loop",
+  "break",
 ]);
 
 /**
@@ -109,6 +99,14 @@ interface Cursor {
    * True inside a branch of "if" that is not taken: it is checked but its assignments do not run.
    */
   dead: boolean;
+  /**
+   * True inside a loop body, where "break" is allowed.
+   */
+  breakable: boolean;
+  /**
+   * Set when a "break" has run in the current loop iteration; later statements then take no effect.
+   */
+  exit?: LoopExit;
 }
 
 /**
@@ -160,17 +158,13 @@ interface NamedVariable {
 }
 
 /**
- * A one-based position in source text.
+ * The value a "break" produced, which ends the enclosing loop.
  */
-interface Location {
+interface LoopExit {
   /**
-   * One-based line number.
+   * The value given to "break".
    */
-  readonly line: number;
-  /**
-   * One-based column number.
-   */
-  readonly column: number;
+  readonly value: Value;
 }
 
 /**
@@ -202,6 +196,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *               | "while" "(" expression ")" statement   (re-run until the condition is false, up to a limit)
+ *               | "for" "(" "let" ["mut"] name "=" expression ";" expression ";" statement ")" statement
  *   match      := "match" "(" expression ")" "{" ("case" (expression | "_") "=>" expression ";")* "}"
  *   expression := sum (("==" | "<") sum)*
  *   sum        := term (("+" | "-") term)*
@@ -221,7 +216,12 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
 function parseProgram(text: string): Result<number | boolean, Problem> {
-  const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined, depth: 0 }, dead: false };
+  const cursor: Cursor = {
+    pos: 0,
+    scope: { vars: new Map(), parent: undefined, depth: 0 },
+    dead: false,
+    breakable: false,
+  };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -369,6 +369,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     }
     if (name === "match") {
       return parseMatch(text, cursor, start);
+    }
+    if (name === "loop") {
+      return parseLoop(text, cursor, start);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
@@ -551,7 +554,7 @@ function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | und
     return init.error;
   }
   const { target: referenced } = ref;
-  if (!cursor.dead) {
+  if (!isSuppressed(cursor)) {
     referenced.value = init.value;
   }
   return undefined;
@@ -727,7 +730,13 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
     return { matched: true, problem: parseStatementIf(text, cursor) };
   }
   if (name === "while") {
-    return { matched: true, problem: parseWhile(text, cursor) };
+    return { matched: true, problem: inBreakContext(cursor, false, () => parseWhile(text, cursor)) };
+  }
+  if (name === "for") {
+    return { matched: true, problem: inBreakContext(cursor, false, () => parseFor(text, cursor)) };
+  }
+  if (name === "break") {
+    return { matched: true, problem: parseBreak(text, cursor) };
   }
   return NOT_A_STATEMENT;
 }
@@ -886,6 +895,104 @@ function parseWhile(text: string, cursor: Cursor): Problem | undefined {
 }
 
 /**
+ * Parses "for (let init; condition; step) body". The initializer runs once in a new scope. Each
+ * iteration checks the condition, runs the body, then runs the step. The step is textually before
+ * the body, so each iteration skips past it in a dry run to find where the body starts.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the loop.
+ * @returns The first problem found, or undefined if the loop parsed.
+ */
+function parseFor(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "for".length;
+  if (peek(text, cursor) !== "(") {
+    return { offset: cursor.pos, expected: `"("` };
+  }
+  cursor.pos++;
+  const outerScope = cursor.scope;
+  const outerDead = cursor.dead;
+  cursor.scope = { vars: new Map(), parent: outerScope, depth: outerScope.depth + 1 };
+  const problem = parseForParts(text, cursor, outerDead);
+  cursor.scope = outerScope;
+  cursor.dead = outerDead;
+  return problem;
+}
+
+/**
+ * Parses the parts of a "for" loop after the opening parenthesis, in the loop's own scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the loop.
+ * @param outerDead - Whether the loop itself is inside a branch that is not taken.
+ * @returns The first problem found, or undefined if the loop parsed.
+ */
+function parseForParts(text: string, cursor: Cursor, outerDead: boolean): Problem | undefined {
+  if (peekName(text, cursor) !== "let") {
+    return { offset: cursor.pos, expected: "a let declaration" };
+  }
+  const initProblem = parseDeclaration(text, cursor);
+  if (initProblem !== undefined) {
+    return initProblem;
+  }
+  peek(text, cursor);
+  const conditionStart = cursor.pos;
+  let iterations = 0;
+  while (true) {
+    cursor.pos = conditionStart;
+    const condition = parseExpression(text, cursor);
+    if (!condition.ok) {
+      return condition.error;
+    }
+    if (typeof condition.value !== "boolean") {
+      return { offset: conditionStart, expected: "a boolean condition" };
+    }
+    if (peek(text, cursor) !== ";") {
+      return { offset: cursor.pos, expected: `";"` };
+    }
+    cursor.pos++;
+    peek(text, cursor);
+    const stepStart = cursor.pos;
+    const runBody = condition.value && !outerDead;
+    cursor.dead = true;
+    const stepSkip = parseOneStatement(text, cursor, false);
+    cursor.dead = outerDead;
+    if (!stepSkip.matched) {
+      return { offset: stepStart, expected: "a step statement" };
+    }
+    if (stepSkip.problem !== undefined) {
+      return stepSkip.problem;
+    }
+    if (peek(text, cursor) !== ")") {
+      return { offset: cursor.pos, expected: `")"` };
+    }
+    cursor.pos++;
+    cursor.dead = outerDead || !runBody;
+    const bodyProblem = parseBranchStatement(text, cursor);
+    cursor.dead = outerDead;
+    if (bodyProblem !== undefined) {
+      return bodyProblem;
+    }
+    if (!runBody) {
+      return undefined;
+    }
+    const bodyEnd = cursor.pos;
+    cursor.pos = stepStart;
+    const step = parseOneStatement(text, cursor, false);
+    if (!step.matched) {
+      return { offset: stepStart, expected: "a step statement" };
+    }
+    if (step.problem !== undefined) {
+      return step.problem;
+    }
+    cursor.pos = bodyEnd;
+    iterations++;
+    if (iterations >= MAX_LOOP_ITERATIONS) {
+      return { offset: conditionStart, expected: `a loop that ends within ${MAX_LOOP_ITERATIONS} iterations` };
+    }
+  }
+}
+
+/**
  * Parses an "if" statement. Only the branch taken runs; the other is checked and skipped.
  *
  * @param text - The source being parsed.
@@ -987,7 +1094,7 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
   if (!init.ok) {
     return init.error;
   }
-  if (!cursor.dead) {
+  if (!isSuppressed(cursor)) {
     binding.value = init.value;
   }
   return undefined;
@@ -1028,24 +1135,6 @@ function findMutableTarget(text: string, cursor: Cursor): Result<NamedVariable, 
     return err({ offset: start, expected: `a mutable variable (declare "${name}" with "let mut")` });
   }
   return found;
-}
-
-/**
- * Returns the compound-assignment operator ("+", "-" or "*") that follows a name, as in "x += 1",
- * without moving the cursor.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, which is left unchanged.
- * @param name - The name that starts at the cursor's next significant character.
- * @returns The operator, or "" if the name is not followed by a compound assignment.
- */
-function peekCompoundOperator(text: string, cursor: Cursor, name: string): string {
-  const saved = cursor.pos;
-  cursor.pos += name.length;
-  const op = peek(text, cursor);
-  const isCompound = (op === "+" || op === "-" || op === "*") && text.charAt(cursor.pos + 1) === "=";
-  cursor.pos = saved;
-  return isCompound ? op : "";
 }
 
 /**
@@ -1093,43 +1182,10 @@ function parseCompoundAssignment(text: string, cursor: Cursor): Problem | undefi
   }
   const current = binding.value;
   const rhs = init.value;
-  if (typeof current === "number" && typeof rhs === "number" && !cursor.dead) {
+  if (typeof current === "number" && typeof rhs === "number" && !isSuppressed(cursor)) {
     binding.value = applyCompound(op, current, rhs);
   }
   return undefined;
-}
-
-/**
- * Returns the significant character that follows a name, without moving the cursor.
- * A "==" comparison is reported as "==" so it is not mistaken for an assignment.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, which is left unchanged.
- * @param name - The name that starts at the cursor's next significant character.
- * @returns The next significant character after the name, or "" at end of input.
- */
-function peekAfterName(text: string, cursor: Cursor, name: string): string {
-  const saved = cursor.pos;
-  cursor.pos += name.length;
-  const after = peek(text, cursor);
-  const result = after === "=" && text.charAt(cursor.pos + 1) === "=" ? "==" : after;
-  cursor.pos = saved;
-  return result;
-}
-
-/**
- * Returns the comparison operator at the next significant position, without consuming it.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past any whitespace.
- * @returns "==" or "<" if one is next, otherwise "".
- */
-function peekOperator(text: string, cursor: Cursor): string {
-  skipSpaces(text, cursor);
-  if (text.slice(cursor.pos, cursor.pos + 2) === "==") {
-    return "==";
-  }
-  return text.charAt(cursor.pos) === "<" ? "<" : "";
 }
 
 /**
@@ -1182,6 +1238,115 @@ function parsePattern(text: string, cursor: Cursor, scrutinee: Value, dead: bool
     return pattern;
   }
   return valuesEqual(scrutinee, pattern.value, patternStart);
+}
+
+/**
+ * Reports whether assignments must take no effect: inside a dead branch, or after a "break"
+ * has run in the current loop iteration.
+ *
+ * @param cursor - The current parse state.
+ * @returns True if effects are suppressed.
+ */
+function isSuppressed(cursor: Cursor): boolean {
+  return cursor.dead || cursor.exit !== undefined;
+}
+
+/**
+ * Runs a parse with "break" allowed or disallowed, restoring the previous setting afterwards.
+ *
+ * @param cursor - The parse state, whose breakable flag is changed for the duration.
+ * @param breakable - Whether "break" is allowed inside the parse.
+ * @param parse - The parse to run.
+ * @returns The result of the parse.
+ */
+function inBreakContext<T>(cursor: Cursor, breakable: boolean, parse: () => T): T {
+  const outerBreakable = cursor.breakable;
+  cursor.breakable = breakable;
+  const result = parse();
+  cursor.breakable = outerBreakable;
+  return result;
+}
+
+/**
+ * Returns the exit set by a "break" and clears it, so the next loop iteration starts fresh.
+ *
+ * @param cursor - The parse state.
+ * @returns The exit, or undefined if no break ran.
+ */
+function takeExit(cursor: Cursor): LoopExit | undefined {
+  const exit = cursor.exit;
+  cursor.exit = undefined;
+  return exit;
+}
+
+/**
+ * Parses "break value;", which ends the enclosing loop with that value. Statements after it
+ * in the loop body take no effect.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the statement.
+ * @returns The first problem found, or undefined if the statement parsed.
+ */
+function parseBreak(text: string, cursor: Cursor): Problem | undefined {
+  peek(text, cursor);
+  const start = cursor.pos;
+  cursor.pos += "break".length;
+  if (!cursor.breakable) {
+    return { offset: start, expected: "a break inside a loop" };
+  }
+  const value = parseExpression(text, cursor);
+  if (!value.ok) {
+    return value.error;
+  }
+  if (peek(text, cursor) !== ";") {
+    return { offset: cursor.pos, expected: `";"` };
+  }
+  cursor.pos++;
+  if (!isSuppressed(cursor)) {
+    cursor.exit = { value: value.value };
+  }
+  return undefined;
+}
+
+/**
+ * Parses "loop { statements }". The body re-runs until a "break value;" runs, and the loop's
+ * value is that value. A break's value may not refer to a variable declared inside the loop.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the loop.
+ * @param start - Offset of the "loop" keyword, for error reporting.
+ * @returns An Ok result with the break value, or an Err result with the first problem found.
+ */
+function parseLoop(text: string, cursor: Cursor, start: number): Result<Value, Problem> {
+  if (peek(text, cursor) !== "{") {
+    return err({ offset: cursor.pos, expected: `"{"` });
+  }
+  const bodyStart = cursor.pos;
+  if (isSuppressed(cursor)) {
+    const skipped = inBreakContext(cursor, true, () => parseStatementBlock(text, cursor));
+    return skipped === undefined ? ok(0) : err(skipped);
+  }
+  let iterations = 0;
+  while (true) {
+    cursor.pos = bodyStart;
+    cursor.exit = undefined;
+    const problem = inBreakContext(cursor, true, () => parseStatementBlock(text, cursor));
+    const exit = takeExit(cursor);
+    if (problem !== undefined) {
+      return err(problem);
+    }
+    if (exit !== undefined) {
+      const { depth } = cursor.scope;
+      if (escapes(exit.value, depth)) {
+        return err({ offset: start, expected: OUTLIVES_MESSAGE });
+      }
+      return ok(exit.value);
+    }
+    iterations++;
+    if (iterations >= MAX_LOOP_ITERATIONS) {
+      return err({ offset: start, expected: `a loop that breaks within ${MAX_LOOP_ITERATIONS} iterations` });
+    }
+  }
 }
 
 /**
@@ -1292,37 +1457,6 @@ function parseCondition(text: string, cursor: Cursor): Result<boolean, Problem> 
 }
 
 /**
- * Returns the position of the next significant character without consuming it.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past any whitespace.
- * @returns The offset of the next significant character.
- */
-function peekStart(text: string, cursor: Cursor): number {
-  skipSpaces(text, cursor);
-  return cursor.pos;
-}
-
-/**
- * Returns the identifier starting at the next significant character without consuming it.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past any whitespace.
- * @returns The identifier, or "" if the next significant character cannot start one.
- */
-function peekName(text: string, cursor: Cursor): string {
-  skipSpaces(text, cursor);
-  if (!/[A-Za-z_]/.test(text.charAt(cursor.pos))) {
-    return "";
-  }
-  let end = cursor.pos;
-  while (/[A-Za-z0-9_]/.test(text.charAt(end))) {
-    end++;
-  }
-  return text.slice(cursor.pos, end);
-}
-
-/**
  * Finds the value of a variable in the given scope or the scopes enclosing it.
  *
  * @param scope - The innermost scope to search first.
@@ -1340,69 +1474,3 @@ function lookup(scope: Scope, name: string): Binding | undefined {
   return undefined;
 }
 
-/**
- * Skips whitespace and returns the next significant character.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past any whitespace.
- * @returns The next significant character, or "" at end of input.
- */
-function peek(text: string, cursor: Cursor): string {
-  skipSpaces(text, cursor);
-  return text.charAt(cursor.pos);
-}
-
-/**
- * Advances the cursor past any whitespace.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position to advance.
- */
-function skipSpaces(text: string, cursor: Cursor): void {
-  while (/\s/.test(text.charAt(cursor.pos))) {
-    cursor.pos++;
-  }
-}
-
-/**
- * Builds an error message that states what is wrong, where it is, why it is
- * rejected, and how to fix it.
- *
- * @param tuffSource - The untrimmed source that failed to parse.
- * @param problem - The syntax problem with its offset and expectation.
- * @returns A multi-part message naming the location of the first offending character.
- */
-function describeUnsupported(tuffSource: string, problem: Problem): string {
-  const { line, column } = locate(tuffSource, problem.offset);
-  const found =
-    problem.offset < tuffSource.length
-      ? `"${tuffSource.charAt(problem.offset)}"`
-      : "end of input";
-  return (
-    `What: unsupported Tuff source. ` +
-    `Where: line ${line}, column ${column}, found ${found} where ${problem.expected} was expected. ` +
-    `Why: Tuff currently only evaluates non-negative integer literals, the booleans true (1) and false (0), variables declared with "let" (assignable only when declared with "let mut"), references with "&name" read back with "*", binary "+", "-", and "*", and parentheses or braces for grouping. ` +
-    `Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3" (received ${JSON.stringify(tuffSource)}).`
-  );
-}
-
-/**
- * Converts a zero-based offset into a one-based line and column.
- *
- * @param text - The text containing the offset.
- * @param offset - The zero-based offset to locate.
- * @returns The one-based line and column of the offset.
- */
-function locate(text: string, offset: number): Location {
-  let line = 1;
-  let column = 1;
-  for (let index = 0; index < offset && index < text.length; index++) {
-    if (text.charAt(index) === "\n") {
-      line++;
-      column = 1;
-    } else {
-      column++;
-    }
-  }
-  return { line, column };
-}

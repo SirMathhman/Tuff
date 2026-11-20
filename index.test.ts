@@ -217,6 +217,58 @@ test("interpretTuff: while loop that never runs its body", () => {
   expect(interpretTuff("let mut x = 0; while (false) x += 1; x")).toEqual({ ok: true, value: 0 });
 });
 
+test("interpretTuff: for loop sums 0..10", () => {
+  expect(interpretTuff("let mut sum = 0; for (let mut i = 0; i < 10; i += 1; ) { sum += i; } sum")).toEqual({
+    ok: true,
+    value: 45,
+  });
+});
+
+test("interpretTuff: for loop with a single-statement body", () => {
+  expect(interpretTuff("let mut sum = 0; for (let mut i = 0; i < 10; i += 1; ) sum += i; sum")).toEqual({
+    ok: true,
+    value: 45,
+  });
+});
+
+test("interpretTuff: for loop body that never runs", () => {
+  expect(interpretTuff("let mut s = 0; for (let mut i = 5; i < 3; i += 1; ) s += 1; s")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff rejects a for loop variable used after the loop", () => {
+  expect(interpretTuff("for (let mut i = 0; i < 2; i += 1; ) i += 1; i").ok).toBe(false);
+});
+
+test("interpretTuff rejects a for condition that is not a boolean", () => {
+  expect(interpretTuff("let mut s = 0; for (let mut i = 0; 1; i += 1; ) s += 1; s").ok).toBe(false);
+});
+
+test("interpretTuff: loop with if/else break", () => {
+  expect(
+    interpretTuff("let mut counter = 0; let x = loop { if (counter < 4) counter += 1; else break counter; }; x"),
+  ).toEqual({ ok: true, value: 4 });
+});
+
+test("interpretTuff: break value ends a loop", () => {
+  expect(interpretTuff("let x = loop { break 7; }; x")).toEqual({ ok: true, value: 7 });
+});
+
+test("interpretTuff: statements after break take no effect", () => {
+  expect(interpretTuff("let mut s = 0; let x = loop { break 1; s += 1; }; s")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff rejects break outside a loop", () => {
+  expect(interpretTuff("break 1; 1").ok).toBe(false);
+});
+
+test("interpretTuff rejects break inside a while loop", () => {
+  expect(interpretTuff("let x = loop { while (false) break 1; break 2; }; x").ok).toBe(false);
+});
+
+test("interpretTuff rejects a loop that never breaks", () => {
+  expect(interpretTuff("let x = loop { }; x").ok).toBe(false);
+});
+
 test("interpretTuff rejects a while condition that is not a boolean", () => {
   expect(interpretTuff("let mut x = 0; while (1) x += 1; x").ok).toBe(false);
 });
