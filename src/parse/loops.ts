@@ -7,11 +7,20 @@ import {
 } from "../errors";
 import { skipSpaces } from "../scanner";
 import type { LoopEntry, ParserState } from "../types";
-import { EntryKind, LoopPart, Step } from "../types";
+import { EntryKind, GroupPart, Step } from "../types";
 import { innermostNonOperator, isLenient } from "./helpers";
 
-// Offset of the bracket closing the one at `open`, or undefined at the end of input.
-function matchingClose(source: string, open: number): number | undefined {
+/**
+ * Finds the bracket closing the one at `open`.
+ *
+ * @param source - the program being parsed.
+ * @param open - the offset of the opening bracket.
+ * @returns the offset of the closing bracket, or undefined at the end of input.
+ */
+export function matchingClose(
+  source: string,
+  open: number,
+): number | undefined {
   let depth = 0;
   for (let index = open; index < source.length; index++) {
     const ch = source.charAt(index);
@@ -32,9 +41,12 @@ function matchingClose(source: string, open: number): number | undefined {
  * @param pos - the offset of the bracket.
  * @returns the part, or undefined when the bracket is elsewhere.
  */
-export function loopPartAt(loop: LoopEntry, pos: number): LoopPart | undefined {
-  if (pos === loop.condStart) return LoopPart.Condition;
-  if (pos === loop.bodyStart) return LoopPart.Body;
+export function loopPartAt(
+  loop: LoopEntry,
+  pos: number,
+): GroupPart | undefined {
+  if (pos === loop.condStart) return GroupPart.LoopCondition;
+  if (pos === loop.bodyStart) return GroupPart.LoopBody;
   return undefined;
 }
 

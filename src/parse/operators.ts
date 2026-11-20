@@ -30,7 +30,7 @@ import {
   toOperator,
 } from "../scanner";
 import type { BindingEntry, IfEntry, ParserState } from "../types";
-import { EntryKind, IfPhase, LoopPart, Step } from "../types";
+import { EntryKind, GroupPart, IfPhase, Step } from "../types";
 import {
   completeBranch,
   innermostGroup,
@@ -41,6 +41,7 @@ import {
   borrowedBy,
 } from "./helpers";
 import { closeLoopBody, closeLoopCondition } from "./loops";
+import { closeMatchBody, closeMatchScrutinee, finishArm } from "./matches";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
 // still parsed for syntax, but its errors and assignments have no effect.
@@ -201,6 +202,9 @@ function closeBracket(
   if (ch !== closerFor(group.bracket)) {
     return expectedMismatch(source, state.pos, group.bracket);
   }
+  if (group.part === GroupPart.MatchBody) {
+    return closeMatchBody(state, state.pos);
+  }
   const closePos = state.pos;
   const failure = closeGroup(values, ops);
   if (failure !== undefined) return failure;
@@ -215,10 +219,13 @@ function closeBracket(
     state.expectOperand = true;
     if (state.depth === 0) flags.afterLet = true;
   }
-  if (group.loopPart === LoopPart.Condition) {
+  if (group.part === GroupPart.MatchScrutinee) {
+    return closeMatchScrutinee(state);
+  }
+  if (group.part === GroupPart.LoopCondition) {
     return closeLoopCondition(state, closePos);
   }
-  if (group.loopPart === LoopPart.Body) return closeLoopBody(state);
+  if (group.part === GroupPart.LoopBody) return closeLoopBody(state);
   if (group.ifCondition) return startBranch(state, closePos);
   return completeBranch(state) ?? Step.Continue;
 }
@@ -263,7 +270,15 @@ export function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (pending?.kind === EntryKind.If) return awaitElse(state, pending);
   if (state.pos === source.length) return endOfInput(state);
   const ch = source.charAt(state.pos);
-  if (ch === ";") return endStatement(state);
+  if (ch === ";") {
+    if (
+      pending?.kind === EntryKind.Group &&
+      pending.part === GroupPart.MatchBody
+    ) {
+      return finishArm(state);
+    }
+    return endStatement(state);
+  }
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
   const op = toOperator(source, state.pos);
   if (op === undefined) {

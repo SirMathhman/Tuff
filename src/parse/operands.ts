@@ -23,6 +23,7 @@ import { applySign } from "../operations";
 import { operandRef } from "./references";
 import { startCall, startFn } from "./calls";
 import { loopPartAt, startWhile } from "./loops";
+import { inMatchBody, matchPartAt, startArm, startMatch } from "./matches";
 import {
   Operator,
   isLetter,
@@ -32,11 +33,13 @@ import {
   toBracket,
 } from "../scanner";
 import type { Cell, ParserState } from "../types";
-import { EntryKind, IfPhase, LoopPart, Step } from "../types";
+import { EntryKind, GroupPart, IfPhase, Step } from "../types";
 import { borrowedBy, innermostGroup, lookupCell, pushOperand } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.
 const RESERVED_NAMES = new Set([
+  "match",
+  "case",
   "while",
   "let",
   "mut",
@@ -52,11 +55,15 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   const top = ops[ops.length - 1];
   const ifCondition =
     top?.kind === EntryKind.If && top.phase === IfPhase.Condition;
-  const loopPart =
-    top?.kind === EntryKind.Loop ? loopPartAt(top, state.pos) : undefined;
+  const part =
+    top?.kind === EntryKind.Loop
+      ? loopPartAt(top, state.pos)
+      : top?.kind === EntryKind.Match
+        ? matchPartAt(top, state.pos)
+        : undefined;
   const discardable =
     (top?.kind === EntryKind.If && top.phase === IfPhase.Then) ||
-    loopPart === LoopPart.Body;
+    part === GroupPart.LoopBody;
   ops.push({
     kind: EntryKind.Group,
     bracket,
@@ -64,7 +71,7 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
     where: state.pos,
     ifCondition,
     discardable,
-    loopPart,
+    part,
     statementStart:
       bracket === Bracket.Brace &&
       sign === 1 &&
@@ -172,7 +179,7 @@ function operandName(
   sign: number,
   signed: boolean,
 ): Failure<TuffError> | Step {
-  const { source, scopes, flags } = state;
+  const { source, ops, scopes, flags } = state;
   const end = readName(source, state.pos);
   const name = source.slice(state.pos, end);
   if (name === "let") {
@@ -185,6 +192,11 @@ function operandName(
   }
   if (name === "while") {
     if (flags.atStatementStart && !signed) return startWhile(state, end);
+    return reservedName(state.pos, name);
+  }
+  if (name === "match") return startMatch(state, end, sign);
+  if (name === "case") {
+    if (inMatchBody(ops)) return startArm(state, end);
     return reservedName(state.pos, name);
   }
   if (name === "if") return startIf(state, sign, end);

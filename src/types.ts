@@ -17,6 +17,8 @@ export enum EntryKind {
   Call = "call",
   /** A while loop in progress. */
   Loop = "loop",
+  /** A match expression in progress. */
+  Match = "match",
 }
 
 /**
@@ -90,8 +92,8 @@ export interface GroupEntry {
   statementStart?: boolean;
   /** The body of a statement-level if without else; a body ending in a statement is checked when an else is seen. */
   discardable?: boolean;
-  /** The part of a while loop this bracket opens, if any. */
-  loopPart?: LoopPart;
+  /** The part of a while loop or match this bracket opens, if any. */
+  part?: GroupPart;
   /** Whether the block's value is discarded because it ends in an assignment. */
   discardValue?: boolean;
 }
@@ -148,7 +150,13 @@ export interface IfEntry {
  * Any entry on the operator stack.
  */
 export type StackEntry =
-  OperatorEntry | GroupEntry | BindingEntry | IfEntry | CallEntry | LoopEntry;
+  | OperatorEntry
+  | GroupEntry
+  | BindingEntry
+  | IfEntry
+  | CallEntry
+  | LoopEntry
+  | MatchEntry;
 
 /**
  * A variable: its value, and whether it was declared with `let mut`.
@@ -218,13 +226,17 @@ export interface PendingCheck {
 }
 
 /**
- * The parts of a while loop that a bracket can open.
+ * The parts of a while loop or match that a bracket can open.
  */
-export enum LoopPart {
-  /** The parenthesized condition. */
-  Condition = "condition",
-  /** The braced body. */
-  Body = "body",
+export enum GroupPart {
+  /** The parenthesized condition of a while loop. */
+  LoopCondition = "loopCondition",
+  /** The braced body of a while loop. */
+  LoopBody = "loopBody",
+  /** The parenthesized value of a match. */
+  MatchScrutinee = "matchScrutinee",
+  /** The braced cases of a match. */
+  MatchBody = "matchBody",
 }
 
 /**
@@ -245,6 +257,32 @@ export interface LoopEntry {
   once: boolean;
   /** Whether the body is parsed in lenient mode, counted in the skip depth. */
   counted: boolean;
+}
+
+/**
+ * A match expression in progress: its scrutinee, and which case has been chosen.
+ */
+export interface MatchEntry {
+  /** Discriminates this entry as a match. */
+  kind: EntryKind.Match;
+  /** Offset of the `match` keyword. */
+  where: number;
+  /** The sign written before the match. */
+  sign: number;
+  /** Offset of the scrutinee's opening parenthesis. */
+  parenStart: number;
+  /** Offset of the cases' opening brace. */
+  bodyStart: number;
+  /** The value being matched, once the scrutinee is read. */
+  scrutinee: Value | undefined;
+  /** Whether a case's value is being parsed. */
+  armOpen: boolean;
+  /** Whether the open case is skipped, because an earlier case was chosen or the match is unchosen. */
+  skipping: boolean;
+  /** Whether a case has been chosen. */
+  chosen: boolean;
+  /** The value of the chosen case. */
+  result: Value | undefined;
 }
 
 /**

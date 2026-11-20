@@ -386,3 +386,11 @@ test('interpretTuff("let mut counter = 0; while (counter < 4) { counter += 1; } 
     ),
   ).toEqual({ ok: true, value: 4 });
 });
+
+test('interpretTuff("let x = match (true) { case true => 1; case false => 2; }; x") => 1', () => {
+  expect(
+    interpretTuff(
+      "let x = match (true) { case true => 1; case false => 2; }; x",
+    ),
+  ).toEqual({ ok: true, value: 1 });
+});
