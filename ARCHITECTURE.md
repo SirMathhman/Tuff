@@ -73,7 +73,7 @@ Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rule
 
 #### Interpreter (src/index.ts)
 
-Exports `interpretTuff`. Error types and messages live in `src/errors.ts`.
+Exports `interpretTuff`. Character scanning lives in `src/scanner.ts`, and error types and messages live in `src/errors.ts`.
 
 #### REPL (src/repl.ts)
 
@@ -85,7 +85,7 @@ Uses Bun's built-in `bun:test` runner. Each feature has a test named after its e
 
 ### Dependency direction
 
-`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends only on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
+`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on `scanner.ts` and `errors.ts`. `scanner.ts` depends only on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
 
 ### Implementation
 

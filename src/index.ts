@@ -19,11 +19,16 @@ import {
   unexpectedSemicolon,
 } from "./errors";
 
-enum Operator {
-  Add = "+",
-  Subtract = "-",
-  Multiply = "*",
-}
+import {
+  isCloser,
+  Operator,
+  readDigits,
+  readName,
+  skipSpaces,
+  toBracket,
+  toOperator,
+  isLetter,
+} from "./scanner";
 
 enum EntryKind {
   Operator = "operator",
@@ -86,53 +91,6 @@ interface ParserState {
   lastStatementEnded: boolean; // the most recent item was a statement, not an expression
 }
 
-function isDigit(ch: string): boolean {
-  return ch >= "0" && ch <= "9";
-}
-
-function isLetter(ch: string): boolean {
-  return (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
-}
-
-function isSpace(ch: string): boolean {
-  return ch.length === 1 && ch.trim() === "";
-}
-
-function toOperator(ch: string): Operator | undefined {
-  if (ch === "+") return Operator.Add;
-  if (ch === "-") return Operator.Subtract;
-  if (ch === "*") return Operator.Multiply;
-  return undefined;
-}
-
-function toBracket(ch: string): Bracket | undefined {
-  if (ch === "(") return Bracket.Paren;
-  if (ch === "{") return Bracket.Brace;
-  return undefined;
-}
-
-function isCloser(ch: string): boolean {
-  return ch === ")" || ch === "}";
-}
-
-function skipSpaces(source: string, pos: number): number {
-  let idx = pos;
-  while (isSpace(source.charAt(idx))) idx++;
-  return idx;
-}
-
-function readDigits(source: string, start: number): number {
-  let idx = start;
-  while (isDigit(source.charAt(idx))) idx++;
-  return idx;
-}
-
-function readName(source: string, start: number): number {
-  let idx = start;
-  while (isLetter(source.charAt(idx))) idx++;
-  return idx;
-}
-
 function precedence(op: Operator): number {
   return op === Operator.Multiply ? 2 : 1;
 }
@@ -188,7 +146,7 @@ function reduceOperators(
   return undefined;
 }
 
-// The newest open bracket on the stack, or null when none is open.
+// The newest open bracket on the stack, or undefined when none is open.
 function innermostGroup(ops: StackEntry[]): GroupEntry | undefined {
   for (let idx = ops.length - 1; idx >= 0; idx--) {
     const entry = ops[idx];
@@ -197,7 +155,7 @@ function innermostGroup(ops: StackEntry[]): GroupEntry | undefined {
   return undefined;
 }
 
-// The newest open bracket or `let` on the stack, or null when there is none.
+// The newest open bracket or `let` on the stack, or undefined when there is none.
 function innermostNonOperator(ops: StackEntry[]): StackEntry | undefined {
   for (let idx = ops.length - 1; idx >= 0; idx--) {
     const entry = ops[idx];
