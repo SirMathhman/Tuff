@@ -354,6 +354,19 @@ test("interpretTuff rejects unbounded recursion", () => {
   expect(interpretTuff("fn f(n) => f(n); f(1)").ok).toBe(false);
 });
 
+test("interpretTuff: a function may call one declared after it", () => {
+  expect(interpretTuff("fn a() => b(); fn b() => 1; a()")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('100U8') => 100", () => {
+  expect(interpretTuff("100U8")).toEqual({ ok: true, value: 100 });
+});
+
+test("interpretTuff rejects a literal too large for its suffix", () => {
+  expect(interpretTuff("256U8").ok).toBe(false);
+  expect(interpretTuff("128I8").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

@@ -283,7 +283,8 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
   while (/\d/.test(text.charAt(cursor.pos))) {
     cursor.pos++;
   }
-  return ok(Number(text.slice(start, cursor.pos)));
+  const digits = text.slice(start, cursor.pos);
+  return parseNumberSuffix(text, cursor, digits, start);
 }
 
 /**
@@ -1415,4 +1416,29 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err({ offset: start, expected: OUTLIVES_MESSAGE });
   }
   return ok(body.value);
+}
+
+/**
+ * Reads an optional integer type suffix ("U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64")
+ * after the digits of a literal, and checks that the value fits the type.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the suffix.
+ * @param digits - The digits of the literal.
+ * @param start - Offset of the literal, for error reporting.
+ * @returns An Ok result with the literal's value, or an Err result if it does not fit the suffix's type.
+ */
+function parseNumberSuffix(text: string, cursor: Cursor, digits: string, start: number): Result<number, Problem> {
+  const match = /^([UI])(8|16|32|64)(?![A-Za-z0-9_])/.exec(text.slice(cursor.pos));
+  if (match === null) {
+    return ok(Number(digits));
+  }
+  const [suffix = "", sign = "", bits = ""] = match;
+  cursor.pos += suffix.length;
+  const width = BigInt(bits);
+  const max = sign === "U" ? 2n ** width - 1n : 2n ** (width - 1n) - 1n;
+  if (BigInt(digits) > max) {
+    return err({ offset: start, expected: `a value that fits in ${suffix}` });
+  }
+  return ok(Number(digits));
 }
