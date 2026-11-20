@@ -1,3 +1,3 @@
-function evaluateTuff(tuffSource: string) {
-  return 0;
+export function evaluateTuff(tuffSource: string): number {
+  return Number(tuffSource);
 }
