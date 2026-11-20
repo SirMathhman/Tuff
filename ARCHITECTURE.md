@@ -47,7 +47,7 @@ Rules:
 
 ## Potential Problems
 
-- **Coercion masquerading as evaluation.** The current `evaluateTuff` delegates to `Number()`. That accepts `""` and whitespace as `0`, hex and exponent forms, and `Infinity`, and returns `NaN` for everything else. Callers cannot tell a valid result from a failure. This must be replaced by the `Result`-returning pipeline before the language grows.
+- **Coercion masquerading as evaluation.** Resolved: `evaluateTuff` is now a tokenizer and recursive-descent parser that returns a `Result`. The earlier `Number()` coercion accepted `""` and whitespace as `0`, hex and exponent forms, and `Infinity`.
 - **Public API surface growing before the contract is fixed.** Any export becomes a compatibility commitment. Return types should change only while the project has no external callers.
 - **Stringly-typed errors.** Plain string messages cannot be matched on, tested precisely, or localized. Use `TuffError` variants.
 - **Single-file growth.** `index.ts` is the natural place for "just one more function". Without the layout above it will exceed the file limit quickly.
@@ -71,7 +71,7 @@ Controls the architecture should have:
 1. Maximum source length, checked before lexing. **Missing.**
 2. Maximum nesting depth, checked during parsing and evaluation, producing a `TuffError`. **Missing.**
 3. Step budget in the evaluator, producing a `TuffError` when exhausted. **Missing.**
-4. No dynamic code execution anywhere in the pipeline. **Satisfied today** (`Number()` only), but must be enforced by a lint rule banning `eval` and `Function` constructors. **Lint rule missing.**
+4. No dynamic code execution anywhere in the pipeline. **Satisfied today** (no `eval` or `Function` in the code), but must be enforced by a lint rule banning `eval` and `Function` constructors. **Lint rule missing.**
 5. No ambient authority: the evaluator takes all capabilities as parameters. **Not yet applicable** (no capabilities exist), but the rule is recorded here so it is kept when they are added.
 6. Data exposure: error messages must not echo unbounded source text back to the caller. Spans identify the location; excerpts must be truncated. **Missing.**
 
@@ -79,7 +79,7 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 
 ## Future Work
 
-1. Replace `evaluateTuff`'s `Number()` coercion with the `Result`-returning pipeline: lexer, parser, evaluator, with `TuffError` variants carrying spans.
+1. Split the current lexer and parser (in `index.ts`) into the `src/` modules above, and add the evaluator stage. Done so far: `Result`, `TuffError` with spans, lexer, and parser in `index.ts`.
 2. Add lint enforcement of the modularity limits and the no-`eval` rule.
 3. Define the Tuff numeric and expression grammar explicitly in the lexer.
 4. Add the resource limits (source length, nesting depth, step budget) and tests that each one produces the right `TuffError`.
