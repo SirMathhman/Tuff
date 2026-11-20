@@ -428,3 +428,7 @@ test('evaluateTuff("if (true) 2 else { 1 / 0 }") is a DivisionByZero error at th
 test("writes made in the unchosen branch are undone", () => {
   expect(evaluateTuff("let mut x = 0; let y = if (false) { x = 1; 0 } else 2; x")).toEqual({ ok: true, value: 0 });
 });
+
+test('evaluateTuff("let mut x = 0; let y = if (true) 2 else { x = 1; 1 }; x") => 0', () => {
+  expect(evaluateTuff("let mut x = 0; let y = if (true) 2 else { x = 1; 1 }; x")).toEqual({ ok: true, value: 0 });
+});
