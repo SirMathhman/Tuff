@@ -1,6 +1,7 @@
 import type { Failure, Result, TuffError } from "./errors";
 import {
   Bracket,
+  blockEndsWithStatement,
   chainedComparison,
   closerFor,
   expectedClose,
@@ -12,15 +13,15 @@ import {
   expectedVariableName,
   notMutable,
   reservedName,
-  typeMismatch,
   undefinedName,
 } from "./errors";
-import { applySign, combine, isComparison, precedence } from "./operations";
+import { isComparison, precedence } from "./operations";
 import type { Value } from "./types";
 import type { Operator } from "./scanner";
 import {
   isCloser,
   isLetter,
+  matchingClose,
   readDigits,
   readName,
   signOf,
@@ -46,6 +47,8 @@ export interface Instruction {
   operator?: Operator;
   /** Whether a declared variable may be reassigned, when the kind is declare. */
   mutable?: boolean;
+  /** The body of a block, when the kind is enter. */
+  block?: Instruction[];
 }
 
 /**
@@ -64,6 +67,8 @@ export enum InstructionKind {
   Declare = "declare",
   /** Pop a value and store it into an existing variable. */
   Assign = "assign",
+  /** Run a block in a new scope; its final value stays on the value stack. */
+  Enter = "enter",
 }
 
 /**
@@ -95,6 +100,20 @@ export interface Pending {
  */
 export type Names = Map<string, boolean>;
 
+/**
+ * A piece of code still to compile: the program, or the body of a block.
+ */
+export interface Unit {
+  /** The instructions being filled in. */
+  code: Instruction[];
+  /** The offset where the unit's text starts. */
+  pos: number;
+  /** The variables visible at the start of the unit. */
+  names: Names;
+  /** Whether the unit is a block, which ends at its closing brace. */
+  block: boolean;
+}
+
 // Where reading an operand stopped, and whether the operand is complete.
 interface Advance {
   /** The offset after what was read. */
@@ -103,7 +122,7 @@ interface Advance {
   done: boolean;
 }
 
-// A compiled expression or statement, and the offset after it.
+// A compiled expression, and the offset after it.
 interface Compiled {
   /** The instructions. */
   code: Instruction[];
@@ -156,15 +175,16 @@ function emitPending(code: Instruction[], pending: Pending): void {
 export function compileExpression(
   source: string,
 ): Result<Instruction[], TuffError> {
-  const compiled = compileFrom(source, 0, new Map(), undefined);
-  if (!compiled.ok) return compiled;
-  const { value: inner } = compiled;
-  return { ok: true, value: inner.code };
+  const code: Instruction[] = [];
+  const queue: Unit[] = [{ code, pos: 0, names: new Map(), block: false }];
+  const drained = drain(source, queue);
+  if (!drained.ok) return drained;
+  return { ok: true, value: code };
 }
 
 /**
- * Compiles a program of let, assignment, and expression, with the same errors as
- * interpretTuff for the constructs it covers.
+ * Compiles a program of let, assignment, blocks, and expressions, with the same errors
+ * as interpretTuff for the constructs it covers.
  *
  * @param source - the program.
  * @returns the instructions, or a TuffError.
@@ -173,45 +193,92 @@ export function compileProgram(
   source: string,
 ): Result<Instruction[], TuffError> {
   const code: Instruction[] = [];
-  const names: Names = new Map();
-  let pos = 0;
+  const queue: Unit[] = [{ code, pos: 0, names: new Map(), block: false }];
+  const drained = drain(source, queue);
+  if (!drained.ok) return drained;
+  return { ok: true, value: code };
+}
+
+// Compiles every queued unit. Blocks found while compiling a unit are queued behind it,
+// so no unit recurses into another.
+function drain(source: string, queue: Unit[]): Result<true, TuffError> {
+  for (let index = 0; index < queue.length; index++) {
+    const unit = queue[index];
+    if (unit === undefined) break;
+    const compiled = compileUnit(source, unit, queue);
+    if (!compiled.ok) return compiled;
+  }
+  return { ok: true, value: true };
+}
+
+// Compiles the statements and final expression of one unit.
+function compileUnit(
+  source: string,
+  unit: Unit,
+  queue: Unit[],
+): Result<true, TuffError> {
+  const { code, names } = unit;
+  let pos = unit.pos;
   let statement = false;
   for (;;) {
     pos = skipSpaces(source, pos);
-    if (pos >= source.length) break;
+    if (pos >= source.length) {
+      if (unit.block) return expectedClose(source, pos, Bracket.Brace);
+      break;
+    }
+    if (unit.block && source.charAt(pos) === "}") {
+      if (statement) return blockEndsWithStatement(pos);
+      if (code.length === 0) return expectedNumber(source, pos);
+      return { ok: true, value: true };
+    }
     const end = readName(source, pos);
     const word = source.slice(pos, end);
-    const step =
-      word === "let"
-        ? compileLet(source, end, code, names)
-        : compileAssign(source, pos, code, names);
-    if (step !== undefined) {
-      if (!step.ok) return step;
-      pos = step.value;
+    if (word === "let") {
+      const next = compileLet(source, end, code, names, queue);
+      if (!next.ok) return next;
+      pos = next.value;
       statement = true;
       continue;
     }
-    const expression = compileFrom(source, pos, names, undefined);
+    const assigned = compileAssign(source, pos, code, names, queue);
+    if (assigned !== undefined) {
+      if (!assigned.ok) return assigned;
+      pos = assigned.value;
+      statement = true;
+      continue;
+    }
+    const expression = compileFrom(
+      source,
+      pos,
+      names,
+      undefined,
+      queue,
+      unit.block,
+    );
     if (!expression.ok) return expression;
     const { value: compiledExpr } = expression;
     code.push(...compiledExpr.code);
     pos = compiledExpr.next;
     statement = false;
+    if (unit.block && source.charAt(pos) === "}") {
+      return { ok: true, value: true };
+    }
   }
-  if (statement) {
+  if (!unit.block && statement) {
     code.push({ kind: InstructionKind.Push, where: source.length, value: 0 });
-  } else if (code.length === 0) {
+  } else if (!unit.block && code.length === 0) {
     return expectedNumber(source, pos);
   }
-  return { ok: true, value: code };
+  return { ok: true, value: true };
 }
 
-// Compiles `let [mut] NAME = value;` from the `let` keyword at `pos`.
+// Compiles `let [mut] NAME = value;` from the end of the `let` keyword.
 function compileLet(
   source: string,
   letEnd: number,
   code: Instruction[],
   names: Names,
+  queue: Unit[],
 ): Result<number, TuffError> {
   let nameStart = skipSpaces(source, letEnd);
   let nameEnd = readName(source, nameStart);
@@ -235,6 +302,8 @@ function compileLet(
     skipSpaces(source, equals + 1),
     names,
     "'let' statement",
+    queue,
+    false,
   );
   if (!value.ok) return value;
   const { value: compiledValue } = value;
@@ -264,6 +333,7 @@ function compileAssign(
   pos: number,
   code: Instruction[],
   names: Names,
+  queue: Unit[],
 ): Result<number, TuffError> | undefined {
   const end = readName(source, pos);
   if (end === pos) return undefined;
@@ -279,7 +349,14 @@ function compileAssign(
   if (compound) {
     code.push({ kind: InstructionKind.Load, where: pos, name });
   }
-  const value = compileFrom(source, valueStart, names, "assignment");
+  const value = compileFrom(
+    source,
+    valueStart,
+    names,
+    "assignment",
+    queue,
+    false,
+  );
   if (!value.ok) return value;
   const { value: compiledValue } = value;
   code.push(...compiledValue.code);
@@ -291,12 +368,15 @@ function compileAssign(
 }
 
 // Compiles an expression from `start`. With a statement noun, it stops at the ';' that
-// ends the statement, and a missing ';' is reported for that noun.
+// ends the statement, and a missing ';' is reported for that noun. In a block it stops at
+// the block's closing brace.
 function compileFrom(
   source: string,
   start: number,
   names: Names,
   noun: string | undefined,
+  queue: Unit[],
+  inBlock: boolean,
 ): Result<Compiled, TuffError> {
   const code: Instruction[] = [];
   const stack: Pending[] = [];
@@ -314,8 +394,9 @@ function compileFrom(
     ) {
       break;
     }
+    if (inBlock && !hasOpenBracket(stack) && ch === "}") break;
     if (expectOperand) {
-      const operand = readOperand(source, pos, code, stack, names);
+      const operand = readOperand(source, pos, code, stack, names, queue);
       if (!("next" in operand)) return operand;
       pos = operand.next;
       expectOperand = !operand.done;
@@ -353,13 +434,14 @@ function compileFrom(
   return { ok: true, value: { code, next: pos } };
 }
 
-// Reads an operand at `pos`: a sign, a bracket, a literal, or a name.
+// Reads an operand at `pos`: a sign, a bracket, a block, a literal, or a name.
 function readOperand(
   source: string,
   pos: number,
   code: Instruction[],
   stack: Pending[],
   names: Names,
+  queue: Unit[],
 ): Advance | Failure<TuffError> {
   let at = pos;
   const ch = source.charAt(at);
@@ -375,6 +457,16 @@ function readOperand(
   if (next === "(") {
     stack.push({ open: true, where: at });
     return { next: at + 1, done: false };
+  }
+  if (next === "{") {
+    const close = matchingClose(source, at);
+    if (close === undefined) {
+      return expectedClose(source, source.length, Bracket.Brace);
+    }
+    const body: Instruction[] = [];
+    code.push({ kind: InstructionKind.Enter, where: at, block: body });
+    queue.push({ code: body, pos: at + 1, names: new Map(names), block: true });
+    return { next: finishOperand(close + 1, code, stack), done: true };
   }
   if (isLetter(next)) {
     const end = readName(source, at);
@@ -465,81 +557,5 @@ function closeGroup(
     stack.pop();
     emitPending(code, top);
   }
-  return undefined;
-}
-
-/**
- * Runs compiled code with an explicit value stack.
- *
- * @param code - the instructions from compileExpression or compileProgram.
- * @param env - the variables, updated by declarations and assignments.
- * @returns the program's value, or a TuffError.
- */
-export function runCode(
-  code: Instruction[],
-  env: Map<string, Binding>,
-): Result<number, TuffError> {
-  const values: Value[] = [];
-  for (const instruction of code) {
-    const failure = step(instruction, values, env);
-    if (failure !== undefined) return failure;
-  }
-  const result = values.pop() ?? 0;
-  return {
-    ok: true,
-    value: typeof result === "boolean" ? Number(result) : result,
-  };
-}
-
-// Runs one instruction against the value stack.
-function step(
-  instruction: Instruction,
-  values: Value[],
-  env: Map<string, Binding>,
-): Failure<TuffError> | undefined {
-  const { kind, where } = instruction;
-  if (kind === InstructionKind.Push) {
-    values.push(instruction.value ?? 0);
-    return undefined;
-  }
-  if (kind === InstructionKind.Load) {
-    const name = instruction.name ?? "";
-    const binding = env.get(name);
-    if (binding === undefined) return undefinedName(where, name);
-    values.push(binding.value);
-    return undefined;
-  }
-  if (kind === InstructionKind.Sign) {
-    const signed = applySign(values.pop() ?? 0, instruction.sign ?? 1, where);
-    if (typeof signed === "object") return signed;
-    values.push(signed);
-    return undefined;
-  }
-  if (kind === InstructionKind.Declare) {
-    const name = instruction.name ?? "";
-    env.set(name, {
-      value: values.pop() ?? 0,
-      mutable: instruction.mutable ?? false,
-    });
-    return undefined;
-  }
-  if (kind === InstructionKind.Assign) {
-    const name = instruction.name ?? "";
-    const value = values.pop() ?? 0;
-    const binding = env.get(name);
-    if (binding === undefined) return undefinedName(where, name);
-    if (typeof binding.value !== typeof value) {
-      return typeMismatch(where, name, typeof binding.value, typeof value);
-    }
-    binding.value = value;
-    return undefined;
-  }
-  const right = values.pop() ?? 0;
-  const left = values.pop() ?? 0;
-  const { operator } = instruction;
-  if (operator === undefined) return undefined;
-  const combined = combine(left, operator, right, where);
-  if (typeof combined === "object") return combined;
-  values.push(combined);
   return undefined;
 }

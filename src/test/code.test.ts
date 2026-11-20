@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { compileExpression, compileProgram, runCode } from "../code";
+import { compileExpression, compileProgram } from "../code";
+import { runCode } from "../run";
 import { interpretTuff } from "../index";
 
 // Expressions with no variables: the compiled path must match interpretTuff exactly.
@@ -54,6 +55,26 @@ const SIGN_SOURCES = ["- 2", "1 - - 2", "-true"];
 for (const source of SIGN_SOURCES) {
   test(`compiled "${source}" matches interpretTuff`, () => {
     const compiled = compileExpression(source);
+    const actual = compiled.ok ? runCode(compiled.value, new Map()) : compiled;
+    expect(actual).toEqual(interpretTuff(source));
+  });
+}
+
+// Programs with blocks used as values: the compiled path must match interpretTuff.
+const BLOCK_PROGRAMS = [
+  "{ 1 + 2 }",
+  "let x = 1; { let x = 5; x } + x",
+  "let x = { let y = 2; y * 3 }; x",
+  "{ let x = 1; }",
+  "1 + { let x = 2; }",
+  "let mut x = 0; let y = { x = 3; 4 }; x + y",
+  "let x = 1; let y = { let x = 9; x }; x + y",
+  "{ }",
+];
+
+for (const source of BLOCK_PROGRAMS) {
+  test(`compiled block program "${source}" matches interpretTuff`, () => {
+    const compiled = compileProgram(source);
     const actual = compiled.ok ? runCode(compiled.value, new Map()) : compiled;
     expect(actual).toEqual(interpretTuff(source));
   });

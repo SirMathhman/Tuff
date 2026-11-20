@@ -29,7 +29,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Source files
 
 - `src/scanner.ts`: character classes, token readers, bracket matching.
-- `src/code.ts`: compiled expressions, not yet used by `interpretTuff`.
+- `src/code.ts` compiles, `src/run.ts` runs (not yet used by `interpretTuff`).
 - `src/errors/`: `core.ts` types, and constructors by family.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
@@ -109,7 +109,7 @@ Not implemented: `==`/`!=` on booleans, assignment outside statement starts, fun
 
 ### Parse once
 
-Compile function and loop bodies once, so calls stop multiplying parse work. A compiled body is an instruction list with no parser state, run per call against an environment. `src/code.ts` covers expressions, top-level `let`, and assignment, but `interpretTuff` does not use it. Once it does, retire `parse/` and move the sign, bracket, and precedence rules into one module that both sides import.
+Compile function and loop bodies once, so calls stop multiplying parse work. A compiled body is an instruction list with no parser state, run per call against an environment. `src/code.ts` covers expressions, `let`, assignment, and blocks, but `interpretTuff` does not use it. Once it does, retire `parse/` and move the sign, bracket, and precedence rules into one module that both sides import.
 
 ### Call limits
 
