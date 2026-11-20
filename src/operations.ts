@@ -113,10 +113,7 @@ export function applyTop(
     return undefined;
   }
   if (entry.operator === Operator.Divide && right === 0) {
-    const failure = valueError(lenient, divisionByZero(entry.where), 0);
-    if (typeof failure === "object") return failure;
-    values.push(failure);
-    return undefined;
+    return divisionByZero(entry.where);
   }
   values.push(apply(left, entry.operator, right));
   return undefined;
