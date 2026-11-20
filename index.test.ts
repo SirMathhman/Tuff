@@ -325,6 +325,30 @@ test("interpretTuff rejects a case pattern of a different type", () => {
   expect(interpretTuff("match (true) { case 1 => 1; case true => 2; }").ok).toBe(false);
 });
 
+test("interpretTuff('fn get() => 1; get()') => 1", () => {
+  expect(interpretTuff("fn get() => 1; get()")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: function with parameters", () => {
+  expect(interpretTuff("fn add(a, b) => a + b; add(2, 3)")).toEqual({ ok: true, value: 5 });
+});
+
+test("interpretTuff: function sees variables from its declaring scope", () => {
+  expect(interpretTuff("let k = 10; fn addK(a) => a + k; addK(1)")).toEqual({ ok: true, value: 11 });
+});
+
+test("interpretTuff rejects a call with the wrong number of arguments", () => {
+  expect(interpretTuff("fn f(a) => a; f()").ok).toBe(false);
+});
+
+test("interpretTuff rejects a call to an undefined function", () => {
+  expect(interpretTuff("g()").ok).toBe(false);
+});
+
+test("interpretTuff rejects unbounded recursion", () => {
+  expect(interpretTuff("fn f(n) => f(n); f(1)").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

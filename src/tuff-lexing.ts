@@ -189,3 +189,32 @@ export function locate(text: string, offset: number): Location {
   }
   return { line, column };
 }
+
+/**
+ * Finds the first character at or after start, outside any brackets, that satisfies a test.
+ * Stops with -1 at an unmatched closing bracket or the end of the text. Only scans characters.
+ *
+ * @param text - The source being scanned.
+ * @param start - Offset to start scanning from.
+ * @param isTarget - Returns true for the character sought.
+ * @returns The offset of the first match, or -1.
+ */
+export function findTopLevel(text: string, start: number, isTarget: (character: string, index: number) => boolean): number {
+  let depth = 0;
+  for (let index = start; index < text.length; index++) {
+    const character = text.charAt(index);
+    if (depth === 0 && isTarget(character, index)) {
+      return index;
+    }
+    if (character === "(" || character === "{") {
+      depth++;
+    } else if (character === ")" || character === "}") {
+      if (depth === 0) {
+        return -1;
+      }
+      depth--;
+    }
+  }
+  return -1;
+}
+

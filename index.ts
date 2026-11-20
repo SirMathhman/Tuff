@@ -1,26 +1,7 @@
 import { err, ok, type Result } from "./src/result";
-import { describeUnsupported, peek, peekName, peekStart, peekOperator, peekAfterName, peekCompoundOperator, skipSpaces, type Problem } from "./src/tuff-lexing";
-
-/**
- * A value of a Tuff expression: a number, a boolean from "true" or "false", or a reference.
- * Values of different types are never equal.
- */
-type Value = number | boolean | Reference;
-
-/**
- * A reference made with "&name" or "&mut name". Reading it with "*" gives the target's
- * current value; only a mutable reference can be assigned through with "*name = ...".
- */
-interface Reference {
-  /**
-   * The variable the reference points to.
-   */
-  readonly target: Binding;
-  /**
-   * True if the reference was made with "&mut".
-   */
-  readonly mutable: boolean;
-}
+import { describeUnsupported, peek, peekName, peekStart, peekOperator, peekAfterName, peekCompoundOperator, skipSpaces, type Problem, findTopLevel } from "./src/tuff-lexing";
+import { type Value, type Binding, type FunctionDef, type Cursor, type NamedVariable, type StatementStep } from "./src/tuff-types";
+import { lookup, lookupFunction, newScope, findFunctionBodyEnd, escapes, kindOf, isSuppressed, takeExit } from "./src/tuff-scope";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -40,132 +21,13 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "for",
   "loop",
   "break",
-]);
+        "fn"
+    ]);
 
 /**
  * Message for a value that would make a reference outlive the variable it points to.
  */
 const OUTLIVES_MESSAGE = "a value that does not refer to a variable declared inside a deeper block";
-
-/**
- * A variable's current value and whether it may be reassigned.
- */
-interface Binding {
-  /**
-   * The variable's current value.
-   */
-  value: Value;
-  /**
-   * True if the variable was declared with "let mut" and may be assigned.
-   */
-  readonly mutable: boolean;
-  /**
-   * Nesting depth of the scope that declares the variable; the program's scope is 0.
-   */
-  readonly depth: number;
-}
-
-/**
- * A set of variables introduced by one block, linked to the enclosing block.
- */
-interface Scope {
-  /**
-   * Variables declared directly in this block.
-   */
-  readonly vars: Map<string, Binding>;
-  /**
-   * The enclosing scope, or undefined for the program's outermost scope.
-   */
-  readonly parent?: Scope;
-  /**
-   * Nesting depth of this scope; the program's scope is 0.
-   */
-  readonly depth: number;
-}
-
-/**
- * Mutable read position shared by the parsing functions.
- */
-interface Cursor {
-  /**
-   * Zero-based offset of the next unread character.
-   */
-  pos: number;
-  /**
-   * The innermost scope whose variables are visible at the current position.
-   */
-  scope: Scope;
-  /**
-   * True inside a branch of "if" that is not taken: it is checked but its assignments do not run.
-   */
-  dead: boolean;
-  /**
-   * True inside a loop body, where "break" is allowed.
-   */
-  breakable: boolean;
-  /**
-   * Set when a "break" has run in the current loop iteration; later statements then take no effect.
-   */
-  exit?: LoopExit;
-}
-
-/**
- * Outcome of trying to parse one statement: either no statement starts here, or one was
- * parsed, possibly with a problem.
- */
-type StatementStep = NoStatement | ParsedStatement;
-
-/**
- * Outcome when no statement starts at the cursor.
- */
-interface NoStatement {
-  /**
-   * Always false for this outcome.
-   */
-  readonly matched: false;
-}
-
-/**
- * Outcome when a statement was parsed.
- */
-interface ParsedStatement {
-  /**
-   * Always true for this outcome.
-   */
-  readonly matched: true;
-  /**
-   * The first problem found in the statement, or undefined if it parsed.
-   */
-  readonly problem?: Problem;
-}
-
-/**
- * A variable found by name in the source.
- */
-interface NamedVariable {
-  /**
-   * The variable's name.
-   */
-  readonly name: string;
-  /**
-   * Offset of the variable's name in the source.
-   */
-  readonly start: number;
-  /**
-   * The variable's binding.
-   */
-  readonly binding: Binding;
-}
-
-/**
- * The value a "break" produced, which ends the enclosing loop.
- */
-interface LoopExit {
-  /**
-   * The value given to "break".
-   */
-  readonly value: Value;
-}
 
 /**
  * Interprets a Tuff program and returns its result.
@@ -218,10 +80,11 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
 function parseProgram(text: string): Result<number | boolean, Problem> {
   const cursor: Cursor = {
     pos: 0,
-    scope: { vars: new Map(), parent: undefined, depth: 0 },
+    scope: newScope(undefined),
     dead: false,
     breakable: false,
-  };
+      callDepth: 0
+};
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -371,8 +234,15 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       return parseMatch(text, cursor, start);
     }
     if (name === "loop") {
-      return parseLoop(text, cursor, start);
-    }
+            return parseLoop(text, cursor, start);
+          }
+        if (peek(text, cursor) === "(") {
+          const fn = lookupFunction(cursor.scope, name);
+          if (fn === undefined) {
+            return err({ offset: start, expected: `a function in scope (no "${name}" is defined)` });
+          }
+          return parseCall(text, cursor, name, start, fn);
+        }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
@@ -401,7 +271,7 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
   const blockStart = cursor.pos;
   cursor.pos++;
   const outer = cursor.scope;
-  cursor.scope = { vars: new Map(), parent: outer, depth: outer.depth + 1 };
+  cursor.scope = newScope(outer);
   const result = parseBlockBody(text, cursor);
   cursor.scope = outer;
   if (!result.ok) {
@@ -502,26 +372,14 @@ function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns True if the statement is "*target = ...".
  */
 function isDereferenceAssignment(text: string, start: number): boolean {
-  if (text.charAt(start) !== "*") {
-    return false;
-  }
-  let depth = 0;
-  for (let index = start + 1; index < text.length; index++) {
-    const character = text.charAt(index);
-    if (character === "(" || character === "{") {
-      depth++;
-    } else if (character === ")" || character === "}") {
-      if (depth === 0) {
-        return false;
-      }
-      depth--;
-    } else if (depth === 0 && character === ";") {
+    if (text.charAt(start) !== "*") {
       return false;
-    } else if (depth === 0 && character === "=") {
-      return text.charAt(index + 1) !== "=";
     }
-  }
-  return false;
+    const end = findTopLevel(text, start + 1, (character, position) =>
+      character === ";" ||
+        (character === "=" && text.charAt(position + 1) !== "=" && text.charAt(position - 1) !== "="),
+    );
+    return end >= 0 && text.charAt(end) === "=";
 }
 
 /**
@@ -582,22 +440,6 @@ function parseDereference(text: string, cursor: Cursor): Result<Value, Problem> 
 }
 
 /**
- * Reports whether a value is a reference to a variable declared deeper than the given depth,
- * so that storing it at that depth would let it outlive its variable.
- *
- * @param value - The value being stored or returned.
- * @param depth - The depth of the scope that will hold the value.
- * @returns True if the value is a reference that would outlive its target.
- */
-function escapes(value: Value, depth: number): boolean {
-  if (typeof value !== "object") {
-    return false;
-  }
-  const { target } = value;
-  return target.depth > depth;
-}
-
-/**
  * Parses "= expression;" after an assignment target, and checks the value before accepting it.
  *
  * @param text - The source being parsed.
@@ -649,19 +491,6 @@ function checkStore(value: Value, offset: number, target: Binding, description: 
     return { offset, expected: OUTLIVES_MESSAGE };
   }
   return undefined;
-}
-
-/**
- * Describes the kind of a value for error messages.
- *
- * @param value - The value to describe.
- * @returns "a number", "a boolean", or "a reference".
- */
-function kindOf(value: Value): string {
-  if (typeof value === "number") {
-    return "a number";
-  }
-  return typeof value === "boolean" ? "a boolean" : "a reference";
 }
 
 /**
@@ -736,8 +565,11 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
     return { matched: true, problem: inBreakContext(cursor, false, () => parseFor(text, cursor)) };
   }
   if (name === "break") {
-    return { matched: true, problem: parseBreak(text, cursor) };
-  }
+        return { matched: true, problem: parseBreak(text, cursor) };
+      }
+      if (name === "fn" && allowDeclaration) {
+        return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
+      }
   return NOT_A_STATEMENT;
 }
 
@@ -786,7 +618,7 @@ function isStatementBlock(text: string, cursor: Cursor): boolean {
   const savedScope = cursor.scope;
   cursor.dead = true;
   cursor.pos++;
-  cursor.scope = { vars: new Map(), parent: savedScope, depth: savedScope.depth + 1 };
+  cursor.scope = newScope(savedScope);
   const problem = parseStatements(text, cursor);
   const isStatement = problem === undefined && peek(text, cursor) === "}";
   cursor.pos = start;
@@ -911,7 +743,7 @@ function parseFor(text: string, cursor: Cursor): Problem | undefined {
   cursor.pos++;
   const outerScope = cursor.scope;
   const outerDead = cursor.dead;
-  cursor.scope = { vars: new Map(), parent: outerScope, depth: outerScope.depth + 1 };
+  cursor.scope = newScope(outerScope);
   const problem = parseForParts(text, cursor, outerDead);
   cursor.scope = outerScope;
   cursor.dead = outerDead;
@@ -1033,7 +865,7 @@ function parseStatementBlock(text: string, cursor: Cursor): Problem | undefined 
   peek(text, cursor);
   cursor.pos++;
   const outer = cursor.scope;
-  cursor.scope = { vars: new Map(), parent: outer, depth: outer.depth + 1 };
+  cursor.scope = newScope(outer);
   const problem = parseStatements(text, cursor);
   cursor.scope = outer;
   if (problem !== undefined) {
@@ -1241,17 +1073,6 @@ function parsePattern(text: string, cursor: Cursor, scrutinee: Value, dead: bool
 }
 
 /**
- * Reports whether assignments must take no effect: inside a dead branch, or after a "break"
- * has run in the current loop iteration.
- *
- * @param cursor - The current parse state.
- * @returns True if effects are suppressed.
- */
-function isSuppressed(cursor: Cursor): boolean {
-  return cursor.dead || cursor.exit !== undefined;
-}
-
-/**
  * Runs a parse with "break" allowed or disallowed, restoring the previous setting afterwards.
  *
  * @param cursor - The parse state, whose breakable flag is changed for the duration.
@@ -1265,18 +1086,6 @@ function inBreakContext<T>(cursor: Cursor, breakable: boolean, parse: () => T): 
   const result = parse();
   cursor.breakable = outerBreakable;
   return result;
-}
-
-/**
- * Returns the exit set by a "break" and clears it, so the next loop iteration starts fresh.
- *
- * @param cursor - The parse state.
- * @returns The exit, or undefined if no break ran.
- */
-function takeExit(cursor: Cursor): LoopExit | undefined {
-  const exit = cursor.exit;
-  cursor.exit = undefined;
-  return exit;
 }
 
 /**
@@ -1457,20 +1266,123 @@ function parseCondition(text: string, cursor: Cursor): Result<boolean, Problem> 
 }
 
 /**
- * Finds the value of a variable in the given scope or the scopes enclosing it.
- *
- * @param scope - The innermost scope to search first.
- * @param name - The variable name to look up.
- * @returns The binding of the nearest declaration of the name, or undefined if none is in scope.
+ * Maximum nesting of function calls, so unbounded recursion is reported as an error.
  */
-function lookup(scope: Scope, name: string): Binding | undefined {
-  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
-    const { vars } = current;
-    const binding = vars.get(name);
-    if (binding !== undefined) {
-      return binding;
+const MAX_CALL_DEPTH = 100;
+
+/**
+ * Parses "fn name(params) => expression;". The body is not evaluated here; it is re-parsed
+ * from its text on each call.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "fn".length;
+  const name = peekName(text, cursor);
+  if (name === "" || RESERVED_WORDS.has(name)) {
+    return { offset: cursor.pos, expected: "a function name" };
+  }
+  cursor.pos += name.length;
+  if (peek(text, cursor) !== "(") {
+    return { offset: cursor.pos, expected: `"("` };
+  }
+  cursor.pos++;
+  const paramNames: string[] = [];
+  while (peek(text, cursor) !== ")") {
+    const param = peekName(text, cursor);
+    if (param === "" || RESERVED_WORDS.has(param)) {
+      return { offset: cursor.pos, expected: `a parameter name or ")"` };
+    }
+    cursor.pos += param.length;
+    paramNames.push(param);
+    if (peek(text, cursor) === ",") {
+      cursor.pos++;
+    } else if (peek(text, cursor) !== ")") {
+      return { offset: cursor.pos, expected: `"," or ")"` };
     }
   }
+  cursor.pos++;
+  if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
+    return { offset: cursor.pos, expected: `"=>"` };
+  }
+  cursor.pos += 2;
+  peek(text, cursor);
+  const bodyStart = cursor.pos;
+  const bodyEnd = findFunctionBodyEnd(text, bodyStart);
+  if (bodyEnd < 0) {
+    return { offset: bodyStart, expected: `";" ending the function body` };
+  }
+  cursor.pos = bodyEnd + 1;
+  const { scope } = cursor;
+      const { functions } = scope;
+      functions.set(name, { paramNames, bodyStart, bodyEnd, scope });
   return undefined;
 }
 
+/**
+ * Parses the argument list of a call, evaluates the function body with the arguments bound to
+ * its parameters, and returns the body's value. The body is parsed from its text in a new scope
+ * whose parent is the scope the function was declared in.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the call.
+ * @param name - The function's name, for error reporting.
+ * @param start - Offset of the name, for error reporting.
+ * @param fn - The function being called.
+ * @returns An Ok result with the body's value, or an Err result with the first problem found.
+ */
+function parseCall(text: string, cursor: Cursor, name: string, start: number, fn: FunctionDef): Result<Value, Problem> {
+  peek(text, cursor);
+  cursor.pos++;
+  const args: Value[] = [];
+  while (peek(text, cursor) !== ")") {
+    const arg = parseExpression(text, cursor);
+    if (!arg.ok) {
+      return arg;
+    }
+    args.push(arg.value);
+    if (peek(text, cursor) === ",") {
+      cursor.pos++;
+    } else if (peek(text, cursor) !== ")") {
+      return err({ offset: cursor.pos, expected: `"," or ")"` });
+    }
+  }
+  cursor.pos++;
+  const { paramNames, scope: definingScope } = fn;
+      if (args.length !== paramNames.length) {
+        return err({ offset: start, expected: `${paramNames.length} argument(s) for "${name}"` });
+      }
+  if (cursor.callDepth >= MAX_CALL_DEPTH) {
+    return err({ offset: start, expected: `a call nested within ${MAX_CALL_DEPTH} levels` });
+  }
+  const savedPos = cursor.pos;
+  const savedScope = cursor.scope;
+  const callScope = newScope(definingScope);
+  const { vars } = callScope;
+      args.forEach((value, index) => {
+        const paramName = paramNames[index];
+        if (paramName !== undefined) {
+          vars.set(paramName, { value, mutable: false, depth: callScope.depth });
+        }
+      });
+  cursor.scope = callScope;
+  cursor.pos = fn.bodyStart;
+  cursor.callDepth++;
+  const body = parseExpression(text, cursor);
+  const endsAtSemicolon = peek(text, cursor) === ";";
+  cursor.callDepth--;
+  cursor.scope = savedScope;
+  cursor.pos = savedPos;
+  if (!body.ok) {
+    return body;
+  }
+  if (!endsAtSemicolon) {
+    return err({ offset: start, expected: `a function body that is a single expression` });
+  }
+  if (escapes(body.value, savedScope.depth)) {
+    return err({ offset: start, expected: OUTLIVES_MESSAGE });
+  }
+  return ok(body.value);
+}
