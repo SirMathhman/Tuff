@@ -109,7 +109,7 @@ export interface BindingEntry {
   /** Discriminates this entry as a binding. */
   kind: EntryKind.Binding;
   /** The array a let binds, or moves from another name. */
-  items?: Value[];
+  items?: Slot[];
   /** The element an assignment stores into, when assigning an array element. */
   index?: number;
   /** The variable name. */
@@ -183,7 +183,7 @@ export interface Cell {
   /** For a function, its body and the variables visible where it was declared. */
   func?: FuncDef;
   /** For an array, its elements. */
-  items?: Value[];
+  items?: Slot[];
   /** Whether an array was moved away by a let, so this name may not be used. */
   moved?: boolean;
 }
@@ -286,6 +286,21 @@ export enum MatchChoice {
 }
 
 /**
+ * The data of an array: its elements, and the shape they all share.
+ */
+export interface ArrayData {
+  /** The elements, each a value or a nested array. */
+  items: Slot[];
+  /** A description of the element shape, such as "number" or "[boolean]". */
+  shape: string;
+}
+
+/**
+ * An element of an array: a value, or a nested array.
+ */
+export type Slot = Value | ArrayData;
+
+/**
  * An array literal in progress: the elements read so far.
  */
 export interface ArrayEntry {
@@ -294,7 +309,9 @@ export interface ArrayEntry {
   /** Offset of the opening bracket. */
   where: number;
   /** The elements read so far. */
-  items: Value[];
+  items: Slot[];
+  /** A finished nested array, waiting to be taken as the next element. */
+  pending?: ArrayData;
 }
 
 /**
@@ -307,12 +324,14 @@ export interface IndexEntry {
   where: number;
   /** The sign written before the indexed name. */
   sign: number;
-  /** The variable holding the array being indexed. */
-  cell: Cell;
+  /** The variable holding the array, when the index is directly on a variable. */
+  cell?: Cell;
   /** The array's name. */
   name: string;
   /** Whether the index starts a statement, so it may be an element assignment. */
   statement: boolean;
+  /** The elements of the array being indexed. */
+  items: Slot[];
 }
 
 /**

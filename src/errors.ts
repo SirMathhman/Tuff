@@ -653,7 +653,7 @@ export function expectedText(
   return fail(
     `Expected '${text}' but found ${describe(source.charAt(where))}`,
     where,
-    `A function declaration and call need '${text}' at this position.`,
+    `'${text}' is required at this position to complete the syntax.`,
     `Add '${text}' here.`,
   );
 }

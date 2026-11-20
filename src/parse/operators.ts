@@ -43,6 +43,7 @@ import {
 import { closeLoopBody, closeLoopCondition } from "./loops";
 import {
   assignElement,
+  checkNestedEnd,
   closeSquare,
   nextElement,
   unclosedSquare,
@@ -290,6 +291,8 @@ export function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (pending?.kind === EntryKind.If) return awaitElse(state, pending);
   if (state.pos === source.length) return endOfInput(state);
   const ch = source.charAt(state.pos);
+  const nestedEnd = checkNestedEnd(state);
+  if (nestedEnd !== undefined) return nestedEnd;
   if (ch === ",") return nextElement(state);
   if (ch === "]") return closeSquare(state);
   if (ch === ";") {

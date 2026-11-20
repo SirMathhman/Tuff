@@ -2,6 +2,7 @@ import type { Failure, TuffError } from "../errors";
 import {
   arrayMixed,
   arrayNotBound,
+  arrayNotUsable,
   expectedNumber,
   expectedOperator,
   expectedText,
@@ -14,11 +15,13 @@ import {
 import { applySign, reduceOperators } from "../operations";
 import { skipSpaces } from "../scanner";
 import type {
+  ArrayData,
   ArrayEntry,
   BindingEntry,
   Cell,
   IndexEntry,
   ParserState,
+  Slot,
   Value,
 } from "../types";
 import { EntryKind, Step } from "../types";
@@ -30,7 +33,7 @@ import {
 } from "./helpers";
 
 /**
- * Starts an array literal, which must be the value of a let.
+ * Starts an array literal, which must be the value of a let or an element of one.
  *
  * @param state - the parser state.
  * @returns the next step.
@@ -44,19 +47,51 @@ export function openArray(state: ParserState): Step {
   return Step.Continue;
 }
 
-// Adds an element, requiring it to have the same type as the others.
+// The shape of an element: its type, or the shape of a nested array.
+function slotShape(slot: Slot): string {
+  return typeof slot === "object" ? slot.shape : typeof slot;
+}
+
+// Adds an element, requiring it to have the same shape as the others.
 function addElement(
   array: ArrayEntry,
-  value: Value,
+  slot: Slot,
   where: number,
 ): Failure<TuffError> | undefined {
   const { items } = array;
   const first = items[0];
-  if (first !== undefined && typeof first !== typeof value) {
+  if (first !== undefined && slotShape(first) !== slotShape(slot)) {
     return arrayMixed(where);
   }
-  items.push(value);
+  items.push(slot);
   return undefined;
+}
+
+// Takes the element that has just finished: a nested array, or the value on the stack.
+function takeSlot(array: ArrayEntry, values: Value[]): Slot {
+  const popped = values.pop() ?? 0;
+  const nested = array.pending;
+  array.pending = undefined;
+  return nested ?? popped;
+}
+
+/**
+ * Reports a finished nested array followed by anything other than a comma or `]`.
+ *
+ * @param state - the parser state.
+ * @returns a failure when the nested array is followed by something else, or undefined.
+ */
+export function checkNestedEnd(
+  state: ParserState,
+): Failure<TuffError> | undefined {
+  const open = innermostNonOperator(state.ops);
+  if (open?.kind !== EntryKind.Array || open.pending === undefined) {
+    return undefined;
+  }
+  const { source, pos } = state;
+  const ch = source.charAt(pos);
+  if (ch === "," || ch === "]") return undefined;
+  return expectedText(state.source, state.pos, "]");
 }
 
 /**
@@ -74,7 +109,7 @@ export function nextElement(state: ParserState): Failure<TuffError> | Step {
   if (state.expectOperand) return expectedNumber(source, state.pos);
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
-  const failure = addElement(array, values.pop() ?? 0, state.pos);
+  const failure = addElement(array, takeSlot(array, values), state.pos);
   if (failure !== undefined) return failure;
   state.pos++;
   state.expectOperand = true;
@@ -98,6 +133,13 @@ export function closeSquare(state: ParserState): Failure<TuffError> | Step {
   return closeArray(state, open);
 }
 
+// A finished array's data, with the shape of its elements.
+function dataOf(array: ArrayEntry): ArrayData {
+  const { items } = array;
+  const first = items[0] ?? 0;
+  return { items, shape: `[${slotShape(first)}]` };
+}
+
 function closeArray(
   state: ParserState,
   array: ArrayEntry,
@@ -106,14 +148,18 @@ function closeArray(
   if (state.expectOperand) return expectedNumber(source, state.pos);
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
-  const failure = addElement(array, values.pop() ?? 0, state.pos);
+  const failure = addElement(array, takeSlot(array, values), state.pos);
   if (failure !== undefined) return failure;
   ops.pop();
-  const binding = innermostNonOperator(ops);
-  if (binding?.kind !== EntryKind.Binding || binding.assign) {
+  const outer = innermostNonOperator(ops);
+  if (outer?.kind === EntryKind.Array) {
+    // A nested array: the enclosing array takes it as its next element.
+    outer.pending = dataOf(array);
+  } else if (outer?.kind === EntryKind.Binding && !outer.assign) {
+    outer.items = array.items;
+  } else {
     return arrayNotBound(array.where);
   }
-  binding.items = array.items;
   values.push(0);
   state.pos++;
   state.expectOperand = false;
@@ -122,8 +168,8 @@ function closeArray(
 }
 
 /**
- * Starts an index into a named array, after its opening bracket. At a statement start
- * the index may be the target of an element assignment.
+ * Starts an index into an array, after its opening bracket. At a statement start an
+ * index on a variable may be the target of an element assignment.
  *
  * @param state - the parser state.
  * @param cell - the array's variable.
@@ -151,6 +197,7 @@ export function openIndex(
     cell,
     name,
     statement,
+    items: cell.items ?? [],
   };
   ops.push(entry);
   state.pos = bracket + 1;
@@ -164,19 +211,38 @@ function closeIndex(
   index: IndexEntry,
 ): Failure<TuffError> | Step {
   const { source, ops, values, flags } = state;
-  const { cell, name } = index;
+  const { name, items } = index;
   if (state.expectOperand) return expectedNumber(source, state.pos);
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   const position = values.pop() ?? 0;
   ops.pop();
   if (typeof position !== "number") return indexNotInteger(state.pos);
-  const items = cell.items ?? [];
   if (position < 0 || position >= items.length) {
     return indexOutOfRange(state.pos, position, items.length);
   }
+  const element = items[position] ?? 0;
   const next = skipSpaces(source, state.pos + 1);
+  if (typeof element === "object") {
+    // A nested array: another index must follow it.
+    if (source.charAt(next) !== "[") return arrayNotUsable(index.where, name);
+    ops.push({
+      kind: EntryKind.Index,
+      where: index.where,
+      sign: index.sign,
+      name,
+      statement: false,
+      items: element.items,
+    });
+    state.pos = next + 1;
+    state.expectOperand = true;
+    flags.atStatementStart = false;
+    return Step.Continue;
+  }
+  if (source.charAt(next) === "[") return arrayNotUsable(index.where, name);
+  const { cell } = index;
   const assigning =
+    cell !== undefined &&
     index.statement &&
     source.charAt(next) === "=" &&
     source.charAt(next + 1) !== "=";
@@ -197,7 +263,6 @@ function closeIndex(
     flags.lastStatementEnded = false;
     return Step.Continue;
   }
-  const element = items[position] ?? 0;
   const signed = applySign(element, index.sign, index.where);
   if (typeof signed === "object") return signed;
   values.push(signed);
@@ -227,8 +292,8 @@ export function assignElement(
   }
   const items = target.items ?? [];
   const current = items[index];
-  if (current !== undefined && typeof current !== typeof value) {
-    return typeMismatch(where, name, typeof current, typeof value);
+  if (current !== undefined && slotShape(current) !== typeof value) {
+    return typeMismatch(where, name, slotShape(current), typeof value);
   }
   if (!isLenient(state)) items[index] = value;
   return undefined;

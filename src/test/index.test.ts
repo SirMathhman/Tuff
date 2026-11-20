@@ -415,3 +415,11 @@ test('interpretTuff("let mut array = [1, 2, 3]; array[0] = 9; array[0] + array[1
     ),
   ).toEqual({ ok: true, value: 11 });
 });
+
+test('interpretTuff("let array = [[1, 2], [3, 4]]; array[0][0] + array[0][1] + array[1][0] + array[1][1]") => 10', () => {
+  expect(
+    interpretTuff(
+      "let array = [[1, 2], [3, 4]]; array[0][0] + array[0][1] + array[1][0] + array[1][1]",
+    ),
+  ).toEqual({ ok: true, value: 10 });
+});
