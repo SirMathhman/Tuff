@@ -3,8 +3,14 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "lint": "eslint ."
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "eslint": "^10.15.0",
+    "eslint-plugin-jsdoc": "^65.5.0",
+    "typescript-eslint": "^8.73.0"
   },
   "peerDependencies": {
     "typescript": "^5"
