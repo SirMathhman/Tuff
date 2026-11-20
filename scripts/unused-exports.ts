@@ -107,9 +107,9 @@ for (const fileName of projectFiles) {
   }
 }
 
-for (const f of findings) {
+for (const finding of findings) {
   console.log(
-    `${f.file}: "${f.name}" is exported but not used by any other file; remove "export".`,
+    `${finding.file}: "${finding.name}" is exported but not used by any other file; remove "export".`,
   );
 }
 process.exitCode = findings.length > 0 ? 1 : 0;

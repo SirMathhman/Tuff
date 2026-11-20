@@ -14,6 +14,7 @@ export default tseslint.config(
     },
     rules: {
       "local/no-recursion": "error",
+      "id-length": ["error", { min: 2 }],
       // Exported top-level members must have JSDoc, with @param names and @returns.
       "jsdoc/require-jsdoc": [
         "error",
