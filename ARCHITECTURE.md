@@ -39,13 +39,13 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at t
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/helpers.ts`: shared lookups. `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
+- `src/helpers.ts`: shared lookups. `src/operands.ts`, `src/operators.ts`: parse steps. `src/references.ts`: `&` and `*` steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/*.test.ts`: `bun:test` suites.
 
 ### Dependency direction
 
-`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts` and `operations.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -95,7 +95,7 @@ Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` ro
 
 ### Reference aliasing
 
-While a `&mut` reference is in scope, reads and writes of its owner are errors. While any reference is in scope, writes to its owner are errors. `borrowedBy` in `helpers.ts` scans all visible scopes for this.
+A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `helpers.ts`).
 
 ## Security Concerns
 

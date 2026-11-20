@@ -7,8 +7,9 @@ import type {
   ParserState,
   Scope,
   StackEntry,
+  Value,
 } from "./types";
-import { EntryKind, IfPhase } from "./types";
+import { EntryKind, IfPhase, Step } from "./types";
 
 /**
  * Reports whether a reference to a cell is in scope. With exclusiveOnly, only `&mut`
@@ -152,4 +153,26 @@ export function completeBranch(
     if (typeof result === "object") return result;
     values.push(result);
   }
+}
+
+/**
+ * Pushes an operand onto the value stack and advances past its text.
+ *
+ * @param state - the parser state.
+ * @param value - the operand's value.
+ * @param end - the offset just past the operand's text.
+ * @returns the next step, or a failure.
+ */
+export function pushOperand(
+  state: ParserState,
+  value: Value,
+  end: number,
+): Failure<TuffError> | Step {
+  const { values, flags } = state;
+  flags.lastStatementEnded = false;
+  values.push(value);
+  state.pos = end;
+  state.expectOperand = false;
+  flags.atStatementStart = false;
+  return completeBranch(state) ?? Step.Continue;
 }
