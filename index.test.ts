@@ -64,6 +64,21 @@ test("interpretTuff('let x : Bool = 1; x') is an error: a number is not a Bool",
   expect(interpretTuff("let x : Bool = 1; x").ok).toBe(false);
 });
 
+test("interpretTuff('fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)') => 7", () => {
+  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)")).toEqual({
+    ok: true,
+    value: 7,
+  });
+});
+
+test("interpretTuff typed parameter rejects a wrong argument type", () => {
+  expect(interpretTuff("fn f(b : Bool) => b; f(1)").ok).toBe(false);
+});
+
+test("interpretTuff typed return type rejects a wrong result type", () => {
+  expect(interpretTuff("fn f(a : I32) : Bool => a; f(1)").ok).toBe(false);
+});
+
 test("interpretTuff('let x = true; let y = &x; let z : &&Bool = &y; **z') => 1", () => {
   expect(interpretTuff("let x = true; let y = &x; let z : &&Bool = &y; **z")).toEqual({ ok: true, value: 1 });
 });

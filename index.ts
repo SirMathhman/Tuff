@@ -11,7 +11,14 @@ import {
   type Problem,
   findTopLevel,
 } from "./src/tuff-lexing";
-import { type Value, type FunctionDef, type Cursor, type NamedVariable, type StatementStep } from "./src/tuff-types";
+import {
+  type Value,
+  type FunctionDef,
+  type Cursor,
+  type NamedVariable,
+  type Param,
+  type StatementStep,
+} from "./src/tuff-types";
 import {
   lookup,
   lookupFunction,
@@ -21,13 +28,14 @@ import {
   isSuppressed,
   takeExit,
   fitsIntegerType,
-  isDeclarableType,
   checkStore,
   checkDeclaration,
+  checkArgument,
   applyCompound,
   valuesEqual,
   OUTLIVES_MESSAGE,
 } from "./src/tuff-scope";
+import { parseNumberSuffix, parseTypeAnnotation } from "./src/tuff-annotations";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -922,33 +930,6 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
 }
 
 /**
- * Parses a type annotation after ":": a type name such as "U8" or "Bool", optionally
- * preceded by "&" or "&mut" to declare a reference to that type.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past the type.
- * @returns An Ok result with the normalized type, such as "&mut Bool", or an Err result with the problem found.
- */
-function parseTypeAnnotation(text: string, cursor: Cursor): Result<string, Problem> {
-  const typeStart = peekStart(text, cursor);
-  let prefix = "";
-  while (peek(text, cursor) === "&") {
-    cursor.pos++;
-    prefix += "&";
-    if (peekName(text, cursor) === "mut") {
-      cursor.pos += "mut".length;
-      prefix += "mut ";
-    }
-  }
-  const typeName = peekName(text, cursor);
-  if (!isDeclarableType(typeName)) {
-    return err({ offset: typeStart, expected: "an integer type such as U8 or I32, or Bool, optionally after &" });
-  }
-  cursor.pos += typeName.length;
-  return ok(`${prefix}${typeName}`);
-}
-
-/**
  * Parses an assignment to a variable declared with "let mut".
  *
  * @param text - The source being parsed.
@@ -1288,14 +1269,23 @@ function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undef
     return { offset: cursor.pos, expected: `"("` };
   }
   cursor.pos++;
-  const paramNames: string[] = [];
+  const params: Param[] = [];
   while (peek(text, cursor) !== ")") {
-    const param = peekName(text, cursor);
-    if (param === "" || RESERVED_WORDS.has(param)) {
+    const paramName = peekName(text, cursor);
+    if (paramName === "" || RESERVED_WORDS.has(paramName)) {
       return { offset: cursor.pos, expected: `a parameter name or ")"` };
     }
-    cursor.pos += param.length;
-    paramNames.push(param);
+    cursor.pos += paramName.length;
+    if (peek(text, cursor) === ":") {
+      cursor.pos++;
+      const annotation = parseTypeAnnotation(text, cursor);
+      if (!annotation.ok) {
+        return annotation.error;
+      }
+      params.push({ name: paramName, type: annotation.value });
+    } else {
+      params.push({ name: paramName });
+    }
     if (peek(text, cursor) === ",") {
       cursor.pos++;
     } else if (peek(text, cursor) !== ")") {
@@ -1303,6 +1293,15 @@ function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undef
     }
   }
   cursor.pos++;
+  let returnType: string | undefined;
+  if (peek(text, cursor) === ":") {
+    cursor.pos++;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return annotation.error;
+    }
+    returnType = annotation.value;
+  }
   if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
     return { offset: cursor.pos, expected: `"=>"` };
   }
@@ -1316,7 +1315,7 @@ function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undef
   cursor.pos = bodyEnd + 1;
   const { scope } = cursor;
   const { functions } = scope;
-  functions.set(name, { paramNames, bodyStart, bodyEnd, scope });
+  functions.set(name, { params, returnType, bodyStart, bodyEnd, scope });
   return undefined;
 }
 
@@ -1349,9 +1348,15 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     }
   }
   cursor.pos++;
-  const { paramNames, scope: definingScope } = fn;
-  if (args.length !== paramNames.length) {
-    return err({ offset: start, expected: `${paramNames.length} argument(s) for "${name}"` });
+  const { params, returnType, scope: definingScope } = fn;
+  if (args.length !== params.length) {
+    return err({ offset: start, expected: `${params.length} argument(s) for "${name}"` });
+  }
+  const argumentProblem = args
+    .map((value, index) => checkArgument(value, start, params[index]))
+    .find((problem) => problem !== undefined);
+  if (argumentProblem !== undefined) {
+    return err(argumentProblem);
   }
   if (cursor.callDepth >= MAX_CALL_DEPTH) {
     return err({ offset: start, expected: `a call nested within ${MAX_CALL_DEPTH} levels` });
@@ -1361,9 +1366,9 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   const callScope = newScope(definingScope);
   const { vars } = callScope;
   args.forEach((value, index) => {
-    const paramName = paramNames[index];
-    if (paramName !== undefined) {
-      vars.set(paramName, { value, mutable: false, depth: callScope.depth });
+    const param = params[index];
+    if (param !== undefined) {
+      vars.set(param.name, { value, mutable: false, depth: callScope.depth });
     }
   });
   cursor.scope = callScope;
@@ -1380,31 +1385,9 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   if (!endsAtSemicolon) {
     return err({ offset: start, expected: `a function body that is a single expression` });
   }
-  if (escapes(body.value, savedScope.depth)) {
-    return err({ offset: start, expected: OUTLIVES_MESSAGE });
+  const resultProblem = checkDeclaration(body.value, start, savedScope.depth, returnType);
+  if (resultProblem !== undefined) {
+    return err(resultProblem);
   }
   return ok(body.value);
-}
-
-/**
- * Reads an optional integer type suffix ("U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64")
- * after the digits of a literal, and checks that the value fits the type.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past the suffix.
- * @param digits - The digits of the literal.
- * @param start - Offset of the literal, for error reporting.
- * @returns An Ok result with the literal's value, or an Err result if it does not fit the suffix's type.
- */
-function parseNumberSuffix(text: string, cursor: Cursor, digits: string, start: number): Result<number, Problem> {
-  const match = /^([UI])(8|16|32|64)(?![A-Za-z0-9_])/.exec(text.slice(cursor.pos));
-  if (match === null) {
-    return ok(Number(digits));
-  }
-  const [suffix = ""] = match;
-  cursor.pos += suffix.length;
-  if (!fitsIntegerType(BigInt(digits), suffix)) {
-    return err({ offset: start, expected: `a value that fits in ${suffix}` });
-  }
-  return ok(Number(digits));
 }

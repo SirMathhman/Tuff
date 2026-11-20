@@ -60,10 +60,19 @@ export interface Scope {
   /** Functions declared directly in this scope. */
   readonly functions: Map<string, FunctionDef>;
 }
+/** A parameter of a function declared with "fn". */
+export interface Param {
+  /** The parameter's name. */
+  readonly name: string;
+  /** The declared type, such as "I32"; absent if the parameter is untyped. */
+  readonly type?: string;
+}
 /** A function declared with "fn". Its body is re-parsed from text on each call. */
 export interface FunctionDef {
-  /** Parameter names, in order. */
-  readonly paramNames: readonly string[];
+  /** Parameters, in order. */
+  readonly params: readonly Param[];
+  /** Declared return type, such as "I32"; undefined if the function has none. */
+  readonly returnType?: string;
   /** Offset where the body expression starts. */
   readonly bodyStart: number;
   /** Offset of the ";" that ends the body. */

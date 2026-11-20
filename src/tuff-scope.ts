@@ -9,6 +9,7 @@ import {
   type Cursor,
   type LoopExit,
   type Reference,
+  type Param,
 } from "./tuff-types";
 import { findTopLevel, type Problem } from "./tuff-lexing";
 import { ok, err, type Result } from "./result";
@@ -214,6 +215,28 @@ export function checkDeclaration(value: Value, offset: number, depth: number, ty
     }
   }
   return escapes(value, depth) ? { offset, expected: OUTLIVES_MESSAGE } : undefined;
+}
+
+/**
+ * Checks a value against a declared type: "Bool", an integer type, or a reference to either
+ * such as "&Bool" or "&mut U8".
+ *
+ * @param value - The value being stored.
+ * @param offset - Offset of the value's first character, for error reporting.
+ * @param type - The declared type.
+ * @returns The problem found, or undefined if the value has the declared type.
+ */
+/**
+ * Checks an argument against its parameter's declared type. An untyped parameter accepts any value.
+ *
+ * @param value - The argument's value.
+ * @param offset - Offset of the call, for error reporting.
+ * @param param - The parameter the argument is bound to, if any.
+ * @returns The problem found, or undefined if the argument may be bound.
+ */
+export function checkArgument(value: Value, offset: number, param?: Param): Problem | undefined {
+  const type = param?.type;
+  return type === undefined ? undefined : checkTypedValue(value, offset, type);
 }
 
 /**
