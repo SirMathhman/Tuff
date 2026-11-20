@@ -1,6 +1,6 @@
 export function interpretTuff(tuffSource: string): number {
-  return tuffSource
-    .split("+")
-    .map((operand) => parseInt(operand, 10))
-    .reduce((sum, operand) => sum + operand, 0);
+  const terms = tuffSource.replace(/\s/g, "").match(/[+-]?\d+/g) ?? [];
+  return terms
+    .map((term) => parseInt(term, 10))
+    .reduce((sum, term) => sum + term, 0);
 }
