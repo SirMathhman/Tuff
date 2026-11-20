@@ -4,10 +4,10 @@
 import type { Problem } from "./lexing";
 
 /**
- * A value of a Tuff expression: a number, a boolean from "true" or "false", or a reference.
+ * A value of a Tuff expression: a number, a boolean from "true" or "false", a reference, or an array.
  * Values of different types are never equal.
  */
-export type Value = number | boolean | Reference;
+export type Value = number | boolean | Reference | ArrayValue;
 /**
  * A reference made with "&name" or "&mut name". Reading it with "*" gives the target's
  * current value; only a mutable reference can be assigned through with "*name = ...".
@@ -21,6 +21,15 @@ export interface Reference {
    * True if the reference was made with "&mut".
    */
   readonly mutable: boolean;
+}
+/**
+ * An array made with "[a, b, c]". Its elements all have the same kind, and it is read with "name[index]".
+ */
+export interface ArrayValue {
+  /**
+   * The elements, in order.
+   */
+  readonly elements: readonly Value[];
 }
 /**
  * A variable's current value and whether it may be reassigned.

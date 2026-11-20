@@ -33,32 +33,13 @@ import {
   checkArgument,
   applyCompound,
   valuesEqual,
+  isReference,
   OUTLIVES_MESSAGE,
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
 import { hoistFunctions } from "./src/hoisting";
-
-/**
- * Words with a fixed meaning that cannot be used as variable names.
- * "true" evaluates to 1 and "false" to 0.
- */
-const RESERVED_WORDS: ReadonlySet<string> = new Set([
-  "let",
-  "mut",
-  "true",
-  "false",
-  "if",
-  "else",
-  "while",
-  "match",
-  "case",
-  "_",
-  "for",
-  "loop",
-  "break",
-  "fn",
-  "type",
-]);
+import { RESERVED_WORDS } from "./src/keywords";
+import { parseArrayLiteral, parseIndexing } from "./src/arrays";
 
 /**
  * Interprets a Tuff program and returns its result.
@@ -248,6 +229,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
   if (next === "&") {
     return parseReference(text, cursor);
   }
+  if (next === "[") {
+    return parseArrayLiteral(text, cursor, parseExpression);
+  }
   if (next === "*") {
     return parseDereference(text, cursor);
   }
@@ -278,7 +262,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
     }
-    return ok(binding.value);
+    return parseIndexing(text, cursor, start, binding.value, parseExpression);
   }
   if (!/\d/.test(next)) {
     return err({ offset: cursor.pos, expected: `a number, a variable, "(" or "{"` });
@@ -434,7 +418,7 @@ function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | und
     return target.error;
   }
   const ref = target.value;
-  if (typeof ref !== "object") {
+  if (!isReference(ref)) {
     return { offset: starOffset, expected: `a reference after "*"` };
   }
   if (!ref.mutable) {
@@ -467,7 +451,7 @@ function parseDereference(text: string, cursor: Cursor): Result<Value, Problem> 
   if (!inner.ok) {
     return inner;
   }
-  if (typeof inner.value !== "object") {
+  if (!isReference(inner.value)) {
     return err({ offset: starOffset, expected: `a reference after "*"` });
   }
   const { target: referencedVariable } = inner.value;

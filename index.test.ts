@@ -91,6 +91,41 @@ test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get r
   expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
 });
 
+test("interpretTuff('let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]') => 6", () => {
+  expect(interpretTuff("let array : [I32; 3] = [1, 2, 3]; array[0] + array[1] + array[2]")).toEqual({
+    ok: true,
+    value: 6,
+  });
+});
+
+test("interpretTuff array type with the wrong length is an error", () => {
+  expect(interpretTuff("let array : [I32; 2] = [1, 2, 3]; 1").ok).toBe(false);
+});
+
+test("interpretTuff array type with the wrong element type is an error", () => {
+  expect(interpretTuff("let array : [Bool; 2] = [1, 2]; 1").ok).toBe(false);
+});
+
+test("interpretTuff('let array = [1, 2, 3]; array[0] + array[1] + array[2]') => 6", () => {
+  expect(interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toEqual({ ok: true, value: 6 });
+});
+
+test("interpretTuff array index out of range is an error", () => {
+  expect(interpretTuff("let array = [1, 2]; array[2]").ok).toBe(false);
+});
+
+test("interpretTuff array with mixed element kinds is an error", () => {
+  expect(interpretTuff("let array = [1, true]; 1").ok).toBe(false);
+});
+
+test("interpretTuff indexing a number is an error", () => {
+  expect(interpretTuff("let x = 1; x[0]").ok).toBe(false);
+});
+
+test("interpretTuff comparing arrays with == is an error", () => {
+  expect(interpretTuff("let a = [1]; let b = [1]; a == b").ok).toBe(false);
+});
+
 test("interpretTuff('let x : I32 = get(); fn get() => 1; x') => 1", () => {
   expect(interpretTuff("let x : I32 = get(); fn get() => 1; x")).toEqual({ ok: true, value: 1 });
 });

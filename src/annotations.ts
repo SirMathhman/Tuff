@@ -37,16 +37,55 @@ export function parseTypeAnnotation(text: string, cursor: Cursor): Result<string
       prefix += "mut ";
     }
   }
+  if (peek(text, cursor) === "[") {
+    const array = parseArrayType(text, cursor);
+    if (!array.ok) {
+      return array;
+    }
+    return ok(`${prefix}${array.value}`);
+  }
   const typeName = peekName(text, cursor);
   const resolved = resolveTypeName(cursor.scope, typeName);
   if (resolved === undefined) {
     return err({
       offset: typeStart,
-      expected: "an integer type such as U8 or I32, Bool, or a type alias, optionally after &",
+      expected:
+        "an integer type such as U8 or I32, Bool, an array such as [I32; 3], or a type alias, optionally after &",
     });
   }
   cursor.pos += typeName.length;
   return ok(`${prefix}${resolved}`);
+}
+
+/**
+ * Parses "[Type; N]", an array type of N elements of Type.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "[", advanced past the array type.
+ * @returns An Ok result with the normalized type, such as "[I32;3]", or an Err result with the problem found.
+ */
+function parseArrayType(text: string, cursor: Cursor): Result<string, Problem> {
+  cursor.pos++;
+  const element = parseTypeAnnotation(text, cursor);
+  if (!element.ok) {
+    return element;
+  }
+  if (peek(text, cursor) !== ";") {
+    return err({ offset: cursor.pos, expected: `";" and a length in "[Type; N]"` });
+  }
+  cursor.pos++;
+  peek(text, cursor);
+  const digits = /^\d+/.exec(text.slice(cursor.pos));
+  if (digits === null) {
+    return err({ offset: cursor.pos, expected: `an array length such as 3` });
+  }
+  const [length = ""] = digits;
+  cursor.pos += length.length;
+  if (peek(text, cursor) !== "]") {
+    return err({ offset: cursor.pos, expected: `"]"` });
+  }
+  cursor.pos++;
+  return ok(`[${element.value};${length}]`);
 }
 
 /**

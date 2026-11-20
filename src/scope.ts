@@ -9,6 +9,7 @@ import {
   type Cursor,
   type LoopExit,
   type Reference,
+  type ArrayValue,
   type Param,
 } from "./types";
 import { findTopLevel, type Problem } from "./lexing";
@@ -26,6 +27,15 @@ interface ReferenceType {
    * The type the reference points to, such as "Bool", "U8" or "&Bool".
    */
   readonly inner: string;
+}
+/**
+ * A declared array type, split into its parts.
+ */
+interface ArrayType {
+  /** The type of each element, such as "I32" or "&Bool". */
+  readonly element: string;
+  /** The number of elements. */
+  readonly length: number;
 }
 
 /**
@@ -115,7 +125,11 @@ export function findFunctionBodyEnd(text: string, start: number): number {
  * @returns True if the value is a reference that would outlive its target.
  */
 export function escapes(value: Value, depth: number): boolean {
-  if (typeof value !== "object") {
+  if (isArray(value)) {
+    const { elements } = value;
+    return elements.some((element) => escapes(element, depth));
+  }
+  if (!isReference(value)) {
     return false;
   }
   const { target } = value;
@@ -131,7 +145,10 @@ export function kindOf(value: Value): string {
   if (typeof value === "number") {
     return "a number";
   }
-  return typeof value === "boolean" ? "a boolean" : "a reference";
+  if (typeof value === "boolean") {
+    return "a boolean";
+  }
+  return isArray(value) ? "an array" : "a reference";
 }
 /**
  * Reports whether assignments must take no effect: inside a dead branch, or after a "break"
@@ -210,7 +227,7 @@ export const OUTLIVES_MESSAGE = "a value that does not refer to a variable decla
  * @returns The problem found, or undefined if the value may be stored.
  */
 export function checkStore(value: Value, offset: number, target: Binding, description: string): Problem | undefined {
-  if (typeof value !== typeof target.value) {
+  if (kindOf(value) !== kindOf(target.value)) {
     return { offset, expected: `${kindOf(target.value)} to match the type of ${description}` };
   }
   if (typeof value === "number" && target.type !== undefined && !fitsIntegerType(BigInt(value), target.type)) {
@@ -283,6 +300,11 @@ function checkTypedValue(value: Value, offset: number, type: string): Problem | 
     }
     return undefined;
   }
+  const array = arrayTarget(type);
+  if (array !== undefined) {
+    const message = `an array of ${array.length} element(s) of ${array.element}`;
+    return typeMatches(value, type) ? undefined : { offset, expected: message };
+  }
   if (type === "Bool") {
     return typeof value === "boolean" ? undefined : { offset, expected: `a boolean for ${type}` };
   }
@@ -290,6 +312,21 @@ function checkTypedValue(value: Value, offset: number, type: string): Problem | 
     return { offset, expected: `a number for ${type}` };
   }
   return fitsIntegerType(BigInt(value), type) ? undefined : { offset, expected: `a value that fits in ${type}` };
+}
+
+/**
+ * Splits an array type such as "[I32;3]" into its element type and length.
+ *
+ * @param type - The declared type.
+ * @returns The element type and length, or undefined if the type is not an array type.
+ */
+function arrayTarget(type: string): ArrayType | undefined {
+  const match = /^\[(.+);(\d+)\]$/.exec(type);
+  if (match === null) {
+    return undefined;
+  }
+  const [, element = "", digits = "0"] = match;
+  return { element, length: Number(digits) };
 }
 
 /**
@@ -320,6 +357,14 @@ function typeMatches(value: Value, type: string): boolean {
   if (reference !== undefined) {
     return isReference(value) && typeMatches(targetValue(value), reference.inner);
   }
+  const array = arrayTarget(type);
+  if (array !== undefined) {
+    if (!isArray(value)) {
+      return false;
+    }
+    const { elements } = value;
+    return elements.length === array.length && elements.every((element) => typeMatches(element, array.element));
+  }
   if (type === "Bool") {
     return typeof value === "boolean";
   }
@@ -338,13 +383,23 @@ function targetValue(reference: Reference): Value {
 }
 
 /**
- * Reports whether a value is a reference rather than a number or boolean.
+ * Reports whether a value is a reference rather than a number, boolean or array.
  *
  * @param value - The value to check.
  * @returns True if the value is a reference.
  */
-function isReference(value: Value): value is Reference {
-  return typeof value === "object";
+export function isReference(value: Value): value is Reference {
+  return typeof value === "object" && "target" in value;
+}
+
+/**
+ * Reports whether a value is an array rather than a number, boolean or reference.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is an array.
+ */
+export function isArray(value: Value): value is ArrayValue {
+  return typeof value === "object" && "elements" in value;
 }
 /**
  * Applies a compound-assignment operator to two numbers.
@@ -373,10 +428,13 @@ export function applyCompound(op: string, left: number, right: number): number {
  * @returns An Ok result with whether the values are equal, or an Err result with the first problem found.
  */
 export function valuesEqual(left: Value, right: Value, offset: number): Result<boolean, Problem> {
-  if (typeof left !== typeof right) {
+  if (kindOf(left) !== kindOf(right)) {
     return err({ offset, expected: `a value of the same type as the left side of "=="` });
   }
-  if (typeof left === "object" && typeof right === "object") {
+  if (isArray(left) || isArray(right)) {
+    return err({ offset, expected: `numbers, booleans or references to compare with "=="` });
+  }
+  if (isReference(left) && isReference(right)) {
     const { target: leftTarget } = left;
     const { target: rightTarget } = right;
     const leftPointee = leftTarget.value;
