@@ -1,4 +1,13 @@
-import { NodeKind, Operator, StatementKind, type AssignStatement, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
+import {
+  NodeKind,
+  Operator,
+  StatementKind,
+  type AssignStatement,
+  type BlockNode,
+  type ChainNode,
+  type Expr,
+  type NameNode,
+} from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { NameRefs } from "./scope.ts";

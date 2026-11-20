@@ -1,4 +1,17 @@
-import { NodeKind, Operator, StatementKind, type AssignStatement, type BlockNode, type ChainNode, type ChainStep, type Expr, type LetStatement, type LiteralNode, type NameNode, type Statement } from "./ast.ts";
+import {
+  NodeKind,
+  Operator,
+  StatementKind,
+  type AssignStatement,
+  type BlockNode,
+  type ChainNode,
+  type ChainStep,
+  type Expr,
+  type LetStatement,
+  type LiteralNode,
+  type NameNode,
+  type Statement,
+} from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import type { Token } from "./lexer.ts";
 import { err, ok, type Result } from "./result.ts";
@@ -72,7 +85,13 @@ function parseAssign(input: Input, pos: number, depth: number, parseExpr: Parser
   return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
-function parseBlock(input: Input, pos: number, depth: number, parseExpr: Parser, closer: string | undefined): Step<BlockNode> {
+function parseBlock(
+  input: Input,
+  pos: number,
+  depth: number,
+  parseExpr: Parser,
+  closer: string | undefined,
+): Step<BlockNode> {
   const statements: Statement[] = [];
   const names = new Set<string>();
   let cursor = pos;
