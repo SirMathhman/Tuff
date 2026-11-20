@@ -29,7 +29,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Source files
 
 - `src/scanner.ts`: character classes, token readers, bracket matching.
-- `src/code.ts` compiles, `src/run.ts` runs (not yet used by `interpretTuff`).
+- `src/code.ts` compiles and `src/run.ts` runs, tried first.
 - `src/errors/`: `core.ts` types, and constructors by family.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
@@ -43,7 +43,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Implementation
 
-`interpretTuff` is one loop over explicit stacks, with no recursion.
+`interpretTuff` falls back to the parser (one loop over explicit stacks) for constructs the compiled path lacks.
 
 #### Stacks
 
@@ -107,7 +107,7 @@ Missing: `==`/`!=` on booleans, assignment outside statement starts, function pa
 
 ### Parse once
 
-Compile function and loop bodies once. A compiled body is an instruction list with no parser state, run by `run.ts`. `code.ts` covers expressions, `let`, assignment, and blocks. Still to compile: statement-start blocks, `if`, `match`, `while`, functions, arrays, and references. Then point `interpretTuff` at `compileProgram` and `runCode`, move the step budget into `runCode`, and retire `parse/`.
+Compile function and loop bodies once. A compiled body is an instruction list with no parser state, run by `run.ts`. `code.ts` covers expressions, `let`, assignment, and blocks. Still to compile: statement-start blocks, `if`, `match`, `while`, functions, arrays, and references. Then retire `parse/`.
 
 ### Call limits
 

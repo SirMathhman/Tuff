@@ -1,4 +1,5 @@
 import type { Failure, Result, TuffError } from "./errors";
+import { fail } from "./errors";
 import {
   Bracket,
   blockEndsWithStatement,
@@ -14,6 +15,7 @@ import {
   notMutable,
   reservedName,
   undefinedName,
+  unexpectedSemicolon,
 } from "./errors";
 import { isComparison, precedence } from "./operations";
 import type { Value } from "./types";
@@ -144,6 +146,39 @@ const RESERVED_NAMES = new Set([
   "case",
 ]);
 
+// The message of the marker that tells the caller to fall back to the parser.
+const UNSUPPORTED_WHAT = "Unsupported construct";
+
+// Words the compiled path does not handle yet; a program using one falls back to the parser.
+const UNSUPPORTED_WORDS = new Set([
+  "if",
+  "else",
+  "fn",
+  "while",
+  "match",
+  "case",
+  "mut",
+  "let",
+]);
+
+// A failure that means "not handled by the compiled path".
+function unsupportedAt(where: number): Failure<TuffError> {
+  return fail(
+    UNSUPPORTED_WHAT,
+    where,
+    "The compiled path does not handle this construct yet.",
+    "Fall back to the parser.",
+  );
+}
+
+// Whether the text at `pos` is a brace that opens an object literal: `{ name :`.
+function opensObject(source: string, pos: number): boolean {
+  const start = skipSpaces(source, pos + 1);
+  const end = readName(source, start);
+  if (end === start) return false;
+  return source.charAt(skipSpaces(source, end)) === ":";
+}
+
 // Whether an open bracket is still waiting to be closed.
 function hasOpenBracket(stack: Pending[]): boolean {
   return stack.some((pending) => pending.open);
@@ -191,11 +226,14 @@ export function compileExpression(
  */
 export function compileProgram(
   source: string,
-): Result<Instruction[], TuffError> {
+): Result<Instruction[], TuffError> | undefined {
   const code: Instruction[] = [];
   const queue: Unit[] = [{ code, pos: 0, names: new Map(), block: false }];
   const drained = drain(source, queue);
-  if (!drained.ok) return drained;
+  if (!drained.ok) {
+    const { error } = drained;
+    return error.what === UNSUPPORTED_WHAT ? undefined : drained;
+  }
   return { ok: true, value: code };
 }
 
@@ -231,6 +269,8 @@ function compileUnit(
       if (code.length === 0) return expectedNumber(source, pos);
       return { ok: true, value: true };
     }
+    if (source.charAt(pos) === ";") return unexpectedSemicolon(pos);
+    if (!unit.block && source.charAt(pos) === "{") return unsupportedAt(pos);
     const end = readName(source, pos);
     const word = source.slice(pos, end);
     if (word === "let") {
@@ -338,6 +378,7 @@ function compileAssign(
   const end = readName(source, pos);
   if (end === pos) return undefined;
   const name = source.slice(pos, end);
+  if (name === "true" || name === "false") return undefined;
   const equals = skipSpaces(source, end);
   const operator = compoundOperator(source.charAt(equals));
   const compound = operator !== undefined && source.charAt(equals + 1) === "=";
@@ -413,6 +454,7 @@ function compileFrom(
       if (noun !== undefined && !hasOpenBracket(stack)) {
         return expectedSemicolon(source, pos, noun);
       }
+      if (ch === ";") return unexpectedSemicolon(pos);
       return expectedOperator(source, pos, stack.length > 0);
     }
     const failure = pushOperator(operator, pos, code, stack);
@@ -454,11 +496,13 @@ function readOperand(
     }
   }
   const next = source.charAt(at);
+  if (next === "[" || next === "&" || next === "*") return unsupportedAt(at);
   if (next === "(") {
     stack.push({ open: true, where: at });
     return { next: at + 1, done: false };
   }
   if (next === "{") {
+    if (opensObject(source, at)) return unsupportedAt(at);
     const close = matchingClose(source, at);
     if (close === undefined) {
       return expectedClose(source, source.length, Bracket.Brace);
@@ -471,6 +515,7 @@ function readOperand(
   if (isLetter(next)) {
     const end = readName(source, at);
     const word = source.slice(at, end);
+    if (UNSUPPORTED_WORDS.has(word)) return unsupportedAt(at);
     if (word === "true" || word === "false") {
       code.push({
         kind: InstructionKind.Push,

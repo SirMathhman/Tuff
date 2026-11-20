@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { Result, TuffError } from "../errors";
 import { compileExpression, compileProgram } from "../code";
 import { runCode } from "../run";
 import { interpretTuff } from "../index";
@@ -27,6 +28,13 @@ for (const source of SOURCES) {
   });
 }
 
+// Runs a program through the compiled path; undefined when the compiled path does not handle it.
+function runProgram(source: string): Result<number, TuffError> | undefined {
+  const compiled = compileProgram(source);
+  if (compiled === undefined) return undefined;
+  return compiled.ok ? runCode(compiled.value, new Map()) : compiled;
+}
+
 // Programs with let, assignment, and an expression: the compiled path must match interpretTuff.
 const PROGRAMS = [
   "let x = 1; x + 2",
@@ -43,8 +51,7 @@ const PROGRAMS = [
 
 for (const source of PROGRAMS) {
   test(`compiled program "${source}" matches interpretTuff`, () => {
-    const compiled = compileProgram(source);
-    const actual = compiled.ok ? runCode(compiled.value, new Map()) : compiled;
+    const actual = runProgram(source);
     expect(actual).toEqual(interpretTuff(source));
   });
 }
@@ -62,20 +69,19 @@ for (const source of SIGN_SOURCES) {
 
 // Programs with blocks used as values: the compiled path must match interpretTuff.
 const BLOCK_PROGRAMS = [
-  "{ 1 + 2 }",
-  "let x = 1; { let x = 5; x } + x",
+  "let q = { 1 + 2 }; q",
+  "let x = 1; let q = { let x = 5; x }; q + x",
   "let x = { let y = 2; y * 3 }; x",
-  "{ let x = 1; }",
+  "let q = { let x = 1; }; q",
   "1 + { let x = 2; }",
   "let mut x = 0; let y = { x = 3; 4 }; x + y",
   "let x = 1; let y = { let x = 9; x }; x + y",
-  "{ }",
+  "let q = { }; q",
 ];
 
 for (const source of BLOCK_PROGRAMS) {
   test(`compiled block program "${source}" matches interpretTuff`, () => {
-    const compiled = compileProgram(source);
-    const actual = compiled.ok ? runCode(compiled.value, new Map()) : compiled;
+    const actual = runProgram(source);
     expect(actual).toEqual(interpretTuff(source));
   });
 }

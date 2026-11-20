@@ -6,6 +6,8 @@ import { Step } from "./types";
 import { stepOperand } from "./parse/operands";
 import { stepOperator } from "./parse/operators";
 import { finishCalls, startDeferredCheck } from "./parse/calls";
+import { compileProgram } from "./code";
+import { runCode } from "./run";
 
 // The most parse steps one program may take, so that repeated calls cannot run forever.
 const MAX_STEPS = 200000;
@@ -23,7 +25,7 @@ const MAX_STEPS = 200000;
  * @param tuffSource - the program to evaluate.
  * @returns the value on success, or a TuffError describing the first syntax error.
  */
-export function interpretTuff(tuffSource: string): Result<number, TuffError> {
+function interpretWithParser(tuffSource: string): Result<number, TuffError> {
   const state: ParserState = {
     source: tuffSource,
     pos: 0,
@@ -62,4 +64,18 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     ok: true,
     value: typeof result === "boolean" ? Number(result) : result,
   };
+}
+
+/**
+ * Evaluates a Tuff program. The compiled path runs first; a construct it does not handle
+ * yet falls back to the parser.
+ *
+ * @param tuffSource - the program to evaluate.
+ * @returns the value on success, or a TuffError describing the first error.
+ */
+export function interpretTuff(tuffSource: string): Result<number, TuffError> {
+  const compiled = compileProgram(tuffSource);
+  if (compiled === undefined) return interpretWithParser(tuffSource);
+  if (!compiled.ok) return compiled;
+  return runCode(compiled.value, new Map());
 }
