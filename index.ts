@@ -4,7 +4,8 @@ export type TuffError =
   | { kind: "UnexpectedCharacter"; span: Span }
   | { kind: "UnexpectedEnd"; span: Span }
   | { kind: "UnexpectedToken"; span: Span }
-  | { kind: "ExpectedClosingParen"; span: Span };
+  | { kind: "ExpectedClosingParen"; span: Span }
+  | { kind: "DivisionByZero"; span: Span };
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
@@ -12,18 +13,18 @@ type Token = { text: string; span: Span };
 type Input = { tokens: Token[]; end: Span };
 type Step<T> = Result<{ value: T; next: number }, TuffError>;
 type Operand = (input: Input, pos: number) => Step<number>;
-type BinaryOp = (a: number, b: number) => number;
+type BinaryOp = (a: number, b: number) => Result<number, "DivisionByZero">;
 
 const ok = <T>(value: T): { ok: true; value: T } => ({ ok: true, value });
 const err = <E>(error: E): { ok: false; error: E } => ({ ok: false, error });
 
 const ADDITIVE = new Map<string, BinaryOp>([
-  ["+", (a, b) => a + b],
-  ["-", (a, b) => a - b],
+  ["+", (a, b) => ok(a + b)],
+  ["-", (a, b) => ok(a - b)],
 ]);
 const MULTIPLICATIVE = new Map<string, BinaryOp>([
-  ["*", (a, b) => a * b],
-  ["/", (a, b) => a / b],
+  ["*", (a, b) => ok(a * b)],
+  ["/", (a, b) => (b === 0 ? err("DivisionByZero") : ok(a / b))],
 ]);
 
 function tokenize(source: string): Result<Token[], TuffError> {
@@ -73,11 +74,14 @@ function parseBinary(
   let { value, next } = first.value;
   for (;;) {
     const op = input.tokens[next];
-    const fn = op === undefined ? undefined : level.get(op.text);
+    if (op === undefined) return ok({ value, next });
+    const fn = level.get(op.text);
     if (fn === undefined) return ok({ value, next });
     const right = operand(input, next + 1);
     if (!right.ok) return right;
-    value = fn(value, right.value.value);
+    const applied = fn(value, right.value.value);
+    if (!applied.ok) return err({ kind: applied.error, span: op.span });
+    value = applied.value;
     next = right.value.next;
   }
 }

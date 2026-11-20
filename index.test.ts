@@ -18,6 +18,10 @@ test('evaluateTuff("abc") reports an UnexpectedCharacter error spanning "a"', ()
   expect(evaluateTuff("abc")).toEqual({ ok: false, error: { kind: "UnexpectedCharacter", span: { start: 0, end: 1 } } });
 });
 
+test('evaluateTuff("1 / 0") is a DivisionByZero error spanning the "/"', () => {
+  expect(evaluateTuff("1 / 0")).toEqual({ ok: false, error: { kind: "DivisionByZero", span: { start: 2, end: 3 } } });
+});
+
 test("hex and exponent forms are rejected", () => {
   expect(evaluateTuff("0x10")).toEqual({ ok: false, error: { kind: "UnexpectedCharacter", span: { start: 1, end: 2 } } });
   expect(evaluateTuff("1e3")).toEqual({ ok: false, error: { kind: "UnexpectedCharacter", span: { start: 1, end: 2 } } });
