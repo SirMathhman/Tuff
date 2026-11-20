@@ -234,7 +234,7 @@ export function evaluateTuff(source: string): Result<number, TuffError> {
   const tokenized = tokenize(source);
   if (!tokenized.ok) return tokenized;
   const input: Input = { tokens: tokenized.value, end: { start: source.length, end: source.length } };
-  const parsed = parseExpression(input, 0, 0, undefined);
+  const parsed = parseBlock(input, 0, 0, undefined, parseExpression);
   if (!parsed.ok) return parsed;
   const extra = input.tokens[parsed.value.next];
   if (extra !== undefined) return err({ kind: TuffErrorKind.UnexpectedToken, span: extra.span });

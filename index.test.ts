@@ -48,6 +48,10 @@ test('evaluateTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
   expect(evaluateTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test('evaluateTuff("let y = { let x = 2 + 3; x } * 4; y") => 20', () => {
+  expect(evaluateTuff("let y = { let x = 2 + 3; x } * 4; y")).toEqual({ ok: true, value: 20 });
+});
+
 test('evaluateTuff("x") is an UnknownName error spanning "x"', () => {
   expect(evaluateTuff("x")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 0, end: 1 } } });
 });
