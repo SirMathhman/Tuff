@@ -11,6 +11,33 @@ import type {
 import { EntryKind, IfPhase } from "./types";
 
 /**
+ * Reports whether a reference to a cell is in scope. With exclusiveOnly, only `&mut`
+ * references count.
+ *
+ * @param scopes - the stack of block scopes.
+ * @param cell - the variable that may be borrowed.
+ * @param exclusiveOnly - whether only `&mut` references count.
+ * @returns true when a matching reference is in scope.
+ */
+export function borrowedBy(
+  scopes: Scope[],
+  cell: Cell,
+  exclusiveOnly: boolean,
+): boolean {
+  for (const scope of scopes) {
+    for (const other of scope.values()) {
+      if (
+        other.target === cell &&
+        (!exclusiveOnly || other.exclusive === true)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Passes a reference yielded by a just-closed block or branch to the entry now on top:
  * a `let` takes it as its target, and an if-branch holds it until the if completes.
  *

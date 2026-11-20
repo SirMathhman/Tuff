@@ -9,6 +9,7 @@ import {
   expectedOperator,
   expectedSemicolon,
   nonBooleanCondition,
+  ownerBorrowed,
   typeMismatch,
   unexpectedSemicolon,
 } from "./errors";
@@ -36,6 +37,7 @@ import {
   isLenient,
   lookupCell,
   attachRef,
+  borrowedBy,
 } from "./helpers";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
@@ -119,6 +121,13 @@ function closeBinding(
   const value = values.pop() ?? 0;
   if (binding.assign) {
     const cell = binding.target ?? lookupCell(scopes, binding.name);
+    if (
+      binding.target === undefined &&
+      cell !== undefined &&
+      borrowedBy(scopes, cell, false)
+    ) {
+      return ownerBorrowed(binding.where, binding.name, true);
+    }
     if (cell !== undefined && typeof cell.value !== typeof value) {
       const failure = valueError(
         lenient,

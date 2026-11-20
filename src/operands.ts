@@ -14,6 +14,7 @@ import {
   mutableReference,
   notMutable,
   notReference,
+  ownerBorrowed,
   readOnlyReference,
   referenceNotLet,
   referenceOverlap,
@@ -40,7 +41,7 @@ import type {
   Value,
 } from "./types";
 import { EntryKind, IfPhase, Step } from "./types";
-import { completeBranch, isLenient, lookupCell } from "./helpers";
+import { borrowedBy, completeBranch, isLenient, lookupCell } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.
 const RESERVED_NAMES = new Set(["let", "mut", "true", "false", "if", "else"]);
@@ -186,6 +187,9 @@ function operandName(
     return undefinedName(state.pos, name);
   }
   if (cell.target !== undefined) return referenceUse(state.pos, name);
+  if (borrowedBy(scopes, cell, true)) {
+    return ownerBorrowed(state.pos, name, false);
+  }
   const value = applySign(cell.value, sign, state.pos, isLenient(state));
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
@@ -198,14 +202,7 @@ function conflictsWithReference(
   cell: Cell,
   exclusive: boolean,
 ): boolean {
-  for (const scope of scopes) {
-    for (const other of scope.values()) {
-      if (other.target === cell && (exclusive || other.exclusive === true)) {
-        return true;
-      }
-    }
-  }
-  return false;
+  return borrowedBy(scopes, cell, !exclusive);
 }
 
 /**

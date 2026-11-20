@@ -527,6 +527,27 @@ export function readOnlyReference(
 }
 
 /**
+ * Reports a read or assignment of a variable while a reference to it is live.
+ *
+ * @param where - the offset of the variable.
+ * @param name - the variable being used.
+ * @param writing - whether the use is an assignment rather than a read.
+ * @returns a failure describing the borrowed variable.
+ */
+export function ownerBorrowed(
+  where: number,
+  name: string,
+  writing: boolean,
+): Failure<TuffError> {
+  return fail(
+    `Cannot ${writing ? "assign to" : "read"} '${name}' while a reference to it is in scope`,
+    where,
+    "A variable cannot change while a reference to it is in scope, and cannot be read while a '&mut' reference is.",
+    `End the reference's block before using '${name}' directly.`,
+  );
+}
+
+/**
  * Reports a division whose divisor is zero.
  *
  * @param where - the offset of the division operator.

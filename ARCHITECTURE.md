@@ -27,7 +27,6 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Examples
 
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
-- `interpretTuff("7 / 0")` returns an error at offset 2: `what` is `Division by zero`.
 - `interpretTuff("let x = 1; let y = &x; *y")` returns `{ ok: true, value: 1 }`.
 
 ## Structure
@@ -41,12 +40,12 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at t
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
 - `src/helpers.ts`: shared lookups. `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
-- `src/repl.ts`: stdin REPL. Run with `bun run repl`.
+- `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/*.test.ts`: `bun:test` suites.
 
 ### Dependency direction
 
-`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`, which depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts` and `operations.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -96,7 +95,7 @@ Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` ro
 
 ### Reference aliasing
 
-Only references are checked against each other. Reading or assigning the owner ignores live references, so `let mut x = 0; let y = &x; x = 5; *y` gives 5. Target: freeze the owner while borrowed.
+While a `&mut` reference is in scope, reads and writes of its owner are errors. While any reference is in scope, writes to its owner are errors. `borrowedBy` in `helpers.ts` scans all visible scopes for this.
 
 ## Security Concerns
 
@@ -116,7 +115,7 @@ The REPL reads each stdin line with no length limit. No maximum source length or
 
 ### Known gaps
 
-Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
+Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores. Also missing: REPL bindings across lines, and REPL output of `why` and `fix`.
 
 ### Module names
 
@@ -128,7 +127,7 @@ Build an AST in a parse module, then evaluate it separately. Lenient branches be
 
 ### Error classes
 
-Value errors go through `valueError`; static errors do not. Target: tag each `TuffError` as static or value at construction, so the error itself drives the gate.
+Value errors go through `valueError`; static errors do not. Target: tag each `TuffError` as static or value at construction.
 
 ### Numbers and output
 
