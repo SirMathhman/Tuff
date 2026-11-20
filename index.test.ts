@@ -56,6 +56,63 @@ test("interpretTuff('let x = true; x') => 1", () => {
   expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
 });
 
+test("interpretTuff('let x : Bool = true; x') => 1", () => {
+  expect(interpretTuff("let x : Bool = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('let x : Bool = 1; x') is an error: a number is not a Bool", () => {
+  expect(interpretTuff("let x : Bool = 1; x").ok).toBe(false);
+});
+
+test("interpretTuff('let x = true; let y = &x; let z : &&Bool = &y; **z') => 1", () => {
+  expect(interpretTuff("let x = true; let y = &x; let z : &&Bool = &y; **z")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('let x = 1; let y = &x; let z : &&Bool = &y; **z') is an error: wrong inner type", () => {
+  expect(interpretTuff("let x = 1; let y = &x; let z : &&Bool = &y; **z").ok).toBe(false);
+});
+
+test("interpretTuff('let mut x = true; let mut y = &mut x; let z : &mut &mut Bool = &mut y; *(*z) = false; x') => 0", () => {
+  expect(
+    interpretTuff("let mut x = true; let mut y = &mut x; let z : &mut &mut Bool = &mut y; *(*z) = false; x"),
+  ).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test("interpretTuff('let mut x = true; let mut y = &mut x; let z : &mut &Bool = &mut y; *z') is an error: inner reference is not mutable", () => {
+  expect(interpretTuff("let mut x = true; let mut y = &mut x; let z : &mut &Bool = &mut y; *z").ok).toBe(false);
+});
+
+test("interpretTuff('let x = true; let y = &x; let z : &Bool = &y; *z') is an error: one level too few", () => {
+  expect(interpretTuff("let x = true; let y = &x; let z : &Bool = &y; *z").ok).toBe(false);
+});
+
+test("interpretTuff('let x = true; let y : &Bool = &x; *y') => 1", () => {
+  expect(interpretTuff("let x = true; let y : &Bool = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('let x = 1; let y : &U8 = &x; *y') => 1", () => {
+  expect(interpretTuff("let x = 1; let y : &U8 = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('let x = 1; let y : &Bool = &x; *y') is an error: reference to a number is not &Bool", () => {
+  expect(interpretTuff("let x = 1; let y : &Bool = &x; *y").ok).toBe(false);
+});
+
+test("interpretTuff('let x = true; let y : &Bool = true; *y') is an error: a value is not a reference", () => {
+  expect(interpretTuff("let x = true; let y : &Bool = true; *y").ok).toBe(false);
+});
+
+test("interpretTuff('let mut x = true; let y : &mut Bool = &mut x; *y = false; x') => 0", () => {
+  expect(interpretTuff("let mut x = true; let y : &mut Bool = &mut x; *y = false; x")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff('let x = true; let y : &mut Bool = &x; *y') is an error: &mut needs a mutable reference", () => {
+  expect(interpretTuff("let x = true; let y : &mut Bool = &x; *y").ok).toBe(false);
+});
+
 test("interpretTuff('false') => 0", () => {
   expect(interpretTuff("false")).toEqual({ ok: true, value: 0 });
 });

@@ -21,7 +21,7 @@ import {
   isSuppressed,
   takeExit,
   fitsIntegerType,
-  isIntegerType,
+  isDeclarableType,
   checkStore,
   checkDeclaration,
   applyCompound,
@@ -905,14 +905,11 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
   let type: string | undefined;
   if (peek(text, cursor) === ":") {
     cursor.pos++;
-    peek(text, cursor);
-    const typeStart = cursor.pos;
-    const typeName = peekName(text, cursor);
-    if (!isIntegerType(typeName)) {
-      return { offset: typeStart, expected: "an integer type such as U8 or I32" };
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return annotation.error;
     }
-    cursor.pos += typeName.length;
-    type = typeName;
+    type = annotation.value;
   }
   const { depth } = cursor.scope;
   const init = parseInitializer(text, cursor, (value, offset) => checkDeclaration(value, offset, depth, type));
@@ -922,6 +919,33 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
   const { vars } = cursor.scope;
   vars.set(name, { value: init.value, mutable, depth, type });
   return undefined;
+}
+
+/**
+ * Parses a type annotation after ":": a type name such as "U8" or "Bool", optionally
+ * preceded by "&" or "&mut" to declare a reference to that type.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the type.
+ * @returns An Ok result with the normalized type, such as "&mut Bool", or an Err result with the problem found.
+ */
+function parseTypeAnnotation(text: string, cursor: Cursor): Result<string, Problem> {
+  const typeStart = peekStart(text, cursor);
+  let prefix = "";
+  while (peek(text, cursor) === "&") {
+    cursor.pos++;
+    prefix += "&";
+    if (peekName(text, cursor) === "mut") {
+      cursor.pos += "mut".length;
+      prefix += "mut ";
+    }
+  }
+  const typeName = peekName(text, cursor);
+  if (!isDeclarableType(typeName)) {
+    return err({ offset: typeStart, expected: "an integer type such as U8 or I32, or Bool, optionally after &" });
+  }
+  cursor.pos += typeName.length;
+  return ok(`${prefix}${typeName}`);
 }
 
 /**

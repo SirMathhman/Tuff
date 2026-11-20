@@ -1,9 +1,31 @@
 /**
  * Scope lookup and small value helpers for the Tuff parser. Nothing here parses text.
  */
-import { type Value, type Binding, type Scope, type FunctionDef, type Cursor, type LoopExit } from "./tuff-types";
+import {
+  type Value,
+  type Binding,
+  type Scope,
+  type FunctionDef,
+  type Cursor,
+  type LoopExit,
+  type Reference,
+} from "./tuff-types";
 import { findTopLevel, type Problem } from "./tuff-lexing";
 import { ok, err, type Result } from "./result";
+
+/**
+ * A declared reference type, split into its parts.
+ */
+interface ReferenceType {
+  /**
+   * True if the type is "&mut" rather than "&".
+   */
+  readonly mutable: boolean;
+  /**
+   * The type the reference points to, such as "Bool", "U8" or "&Bool".
+   */
+  readonly inner: string;
+}
 
 /**
  * Finds the value of a variable in the given scope or the scopes enclosing it.
@@ -119,6 +141,16 @@ export function isIntegerType(typeName: string): boolean {
 }
 
 /**
+ * Reports whether a name is a type that a declaration may annotate: an integer type or "Bool".
+ *
+ * @param typeName - The name to check.
+ * @returns True if the name is a declarable type.
+ */
+export function isDeclarableType(typeName: string): boolean {
+  return isIntegerType(typeName) || typeName === "Bool";
+}
+
+/**
  * Reports whether an integer fits an integer type. An unknown type name fits nothing.
  *
  * @param value - The integer to check.
@@ -176,14 +208,96 @@ export function checkStore(value: Value, offset: number, target: Binding, descri
  */
 export function checkDeclaration(value: Value, offset: number, depth: number, type?: string): Problem | undefined {
   if (type !== undefined) {
-    if (typeof value !== "number") {
-      return { offset, expected: `a number for ${type}` };
-    }
-    if (!fitsIntegerType(BigInt(value), type)) {
-      return { offset, expected: `a value that fits in ${type}` };
+    const problem = checkTypedValue(value, offset, type);
+    if (problem !== undefined) {
+      return problem;
     }
   }
   return escapes(value, depth) ? { offset, expected: OUTLIVES_MESSAGE } : undefined;
+}
+
+/**
+ * Checks a value against a declared type: "Bool", an integer type, or a reference to either
+ * such as "&Bool" or "&mut U8".
+ *
+ * @param value - The value being stored.
+ * @param offset - Offset of the value's first character, for error reporting.
+ * @param type - The declared type.
+ * @returns The problem found, or undefined if the value has the declared type.
+ */
+function checkTypedValue(value: Value, offset: number, type: string): Problem | undefined {
+  const reference = referenceTarget(type);
+  if (reference !== undefined) {
+    if (!isReference(value) || !typeMatches(targetValue(value), reference.inner)) {
+      return { offset, expected: `a reference to ${reference.inner} for ${type}` };
+    }
+    if (reference.mutable && !value.mutable) {
+      return { offset, expected: `a mutable reference (made with "&mut") for ${type}` };
+    }
+    return undefined;
+  }
+  if (type === "Bool") {
+    return typeof value === "boolean" ? undefined : { offset, expected: `a boolean for ${type}` };
+  }
+  if (typeof value !== "number") {
+    return { offset, expected: `a number for ${type}` };
+  }
+  return fitsIntegerType(BigInt(value), type) ? undefined : { offset, expected: `a value that fits in ${type}` };
+}
+
+/**
+ * Splits a reference type such as "&Bool", "&mut U8" or "&&Bool" into its outermost reference and the type it points to.
+ *
+ * @param type - The declared type.
+ * @returns The inner type and whether the outer reference is mutable, or undefined if the type is not a reference.
+ */
+function referenceTarget(type: string): ReferenceType | undefined {
+  const match = /^&(mut )?(.+)$/.exec(type);
+  if (match === null) {
+    return undefined;
+  }
+  const [, mutPart, inner = ""] = match;
+  return { mutable: mutPart !== undefined, inner };
+}
+
+/**
+ * Reports whether a value has a declared type: "Bool", an integer type, or a reference of any depth to one of them.
+ * Mutability of references is checked only by the caller, at the outermost level.
+ *
+ * @param value - The value to check.
+ * @param type - The declared type.
+ * @returns True if the value has the type.
+ */
+function typeMatches(value: Value, type: string): boolean {
+  const reference = referenceTarget(type);
+  if (reference !== undefined) {
+    return isReference(value) && typeMatches(targetValue(value), reference.inner);
+  }
+  if (type === "Bool") {
+    return typeof value === "boolean";
+  }
+  return typeof value === "number" && fitsIntegerType(BigInt(value), type);
+}
+
+/**
+ * Reads the current value of the variable a reference points to.
+ *
+ * @param reference - The reference to read through.
+ * @returns The target variable's current value.
+ */
+function targetValue(reference: Reference): Value {
+  const { target } = reference;
+  return target.value;
+}
+
+/**
+ * Reports whether a value is a reference rather than a number or boolean.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a reference.
+ */
+function isReference(value: Value): value is Reference {
+  return typeof value === "object";
 }
 /**
  * Applies a compound-assignment operator to two numbers.
