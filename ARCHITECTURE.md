@@ -4,8 +4,6 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ## Definitions
 
-Core terms and invariants of the language and its results.
-
 ### Grammar
 
 Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, a variable, or a parenthesized or braced expression.
@@ -23,8 +21,6 @@ A block's value is its final expression, so it cannot end with a statement. A pr
 Results are `{ ok: true, value }` or `{ ok: false, error }`. `TuffError` has four parts: `what`, `where` (a zero-based offset), `why`, and `fix`.
 
 ### Examples
-
-Each example below shows the result of `interpretTuff` on the given input.
 
 #### Sums and differences
 
@@ -45,8 +41,6 @@ Each example below shows the result of `interpretTuff` on the given input.
 - `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
 
 #### Errors
-
-Each example below gives an error at the stated offset.
 
 ##### Operand examples
 
@@ -72,8 +66,6 @@ Each example below gives an error at the stated offset.
 - `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `x` is out of scope.
 
 ## Structure
-
-Module layout, dependency direction, and the quality gates that enforce them.
 
 ### Source files
 
@@ -106,18 +98,6 @@ A value stack holds numbers. An operator stack holds pending operators, open bra
 #### Precedence
 
 A pending operator is applied first when it binds at least as tightly, so operators are left-associative. `)` and `}` apply pending operators back to their bracket, then scale the value by the sign before it.
-
-#### Operand errors
-
-No digits, name, or opening bracket where an operand belongs gives `Expected a number, a variable, '(', or '{'`. A name that is not declared gives `Name 'x' is not defined`.
-
-#### Operator and bracket errors
-
-A character that is not an operator gives `Expected '+', '-', or '*'`. Inside brackets, `')'` and `'}'` are also listed. Input ending inside a bracket gives `Expected ')'` or `Expected '}'`.
-
-#### Statement errors
-
-A `let` with no name, a keyword as its name, no `=`, or no `;` has its own message. A misplaced `let`, a stray `;`, reassigning a plain `let`, and assigning an undeclared name each have a message too.
 
 ### Configuration
 
@@ -153,11 +133,9 @@ Exported top-level functions, classes, interfaces, type aliases, and enums need 
 
 #### Exports and Markdown
 
-The unused-export check fails on any export that no other file uses. Markdown lint caps bullet lists at 10 items, subsections at 6, and section text at 250 characters.
+The unused-export check fails on any export that no other file uses. Markdown lint caps bullet lists at 10 items and each markdown file at 7500 characters.
 
 ## Potential Problems
-
-Known risks, limits, and failure modes.
 
 ### Numeric precision
 
@@ -173,8 +151,6 @@ The sum can exceed the double range without any `TuffError`. A 400-digit literal
 
 ## Security Concerns
 
-Trust boundaries, untrusted input, and the controls with their known gaps.
-
 ### Trust boundary
 
 `interpretTuff` performs no I/O and takes only a string from its caller. The REPL reads untrusted stdin and is the only path where untrusted text reaches the interpreter.
@@ -188,8 +164,6 @@ Explicit stacks mean nesting costs memory, not call frames. Future I/O must go b
 The REPL reads each stdin line with no length limit, and no maximum source length is enforced. No maximum nesting depth is enforced, so deeply nested input can use a lot of memory.
 
 ## Future Work
-
-Planned changes and remaining gaps.
 
 ### Known gaps
 
