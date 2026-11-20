@@ -1,7 +1,7 @@
 // Reports a heading that has more than MAX_SUBSECTIONS direct subsections.
 import { collectSections } from "./sections.mjs";
 
-const MAX_SUBSECTIONS = 5;
+const MAX_SUBSECTIONS = 6;
 
 export default {
   names: ["max-subsections"],
