@@ -25,6 +25,9 @@ export interface Parsed {
 // Parses a parenthesized group whose "(" sits just before `start`.
 type GroupParser = (source: string, start: number) => Result<Parsed, TuffError>;
 
+// Deeper nesting is reported as a TuffError rather than exhausting the call stack.
+const MAX_NESTING_DEPTH = 256;
+
 function isDigit(c: string): boolean {
   return c >= "0" && c <= "9";
 }
@@ -126,12 +129,24 @@ function parseTerm(source: string, start: number, parseGroup: GroupParser): Resu
   return { ok: true, value: { value, end: pos } };
 }
 
-// expression: term ( ("+" | "-") term )*. When grouped, it stops before ")" and
-// the returned end points at that ")". Offsets refer to the unmodified source.
-function parseExpression(source: string, start: number, grouped: boolean): Result<Parsed, TuffError> {
+// expression: term ( ("+" | "-") term )*. When depth > 0 it is inside parentheses:
+// it stops before ")" and the returned end points at that ")". Offsets refer to
+// the unmodified source.
+function parseExpression(source: string, start: number, depth: number): Result<Parsed, TuffError> {
+  const grouped = depth > 0;
   // Passing the group parser down keeps parseFactor and parseTerm free of a
   // direct dependency on parseExpression.
-  const parseGroup: GroupParser = (s, p) => parseExpression(s, p, true);
+  const parseGroup: GroupParser = (s, p) => {
+    if (depth + 1 > MAX_NESTING_DEPTH) {
+      return fail(
+        `Parentheses are nested more than ${MAX_NESTING_DEPTH} levels deep`,
+        p - 1,
+        "Each '(' adds a level of nesting, and nesting beyond the limit cannot be evaluated safely.",
+        "Remove some parentheses or split the expression.",
+      );
+    }
+    return parseExpression(s, p, depth + 1);
+  };
 
   let pos = skipSpaces(source, start);
   let total = 0;
@@ -156,7 +171,7 @@ function parseExpression(source: string, start: number, grouped: boolean): Resul
 }
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  const result = parseExpression(tuffSource, 0, false);
+  const result = parseExpression(tuffSource, 0, 0);
   if (!result.ok) return result;
   return { ok: true, value: result.value.value };
 }

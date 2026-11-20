@@ -30,9 +30,9 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 A recursive-descent parser over the original source, using character checks (no regular expressions) and skipping whitespace. A sign must touch its digits or its `(`. Whitespace is allowed around operators.
 
-1. `parseExpression` parses terms joined by `+` or `-`, starting from `0`. Inside parentheses (`grouped`), it stops at `)`.
+1. `parseExpression(source, start, depth)` parses terms joined by `+` or `-`, starting from `0`. At `depth > 0` (inside parentheses) it stops at `)`. A group that would exceed `MAX_NESTING_DEPTH` (256) returns the error "Parentheses are nested more than 256 levels deep" at the offending `(`, instead of exhausting the call stack.
 2. `parseTerm` parses factors joined by `*`.
-3. `parseFactor` reads an optional sign, then either digits or a parenthesized expression (which calls `parseExpression` recursively).
+3. `parseFactor` reads an optional sign, then either digits or a parenthesized group. It reaches the group through a `GroupParser` parameter that `parseExpression` supplies, so `parseFactor` and `parseTerm` never call `parseExpression` directly. The recursion is confined to `parseExpression`.
 
 Errors:
 
@@ -71,7 +71,8 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 ## Potential Problems
 
 - **Integer precision:** numbers are parsed with `parseInt` into JavaScript doubles. Values above `Number.MAX_SAFE_INTEGER` are silently rounded, so `9007199254740993 + 0` returns `9007199254740992` with `ok: true`. The result is wrong without any error.
-- **Overflow is unreported:** the sum can exceed the double range or lose precision without any `TuffError`.
+- **Overflow is unreported:** the sum can exceed the double range or lose precision without any `TuffError`. A literal of 400 digits parses to `Infinity` with `ok: true`.
+- **Stack overflow on deep nesting:** each `(` adds several call frames (`parseExpression`, `parseTerm`, `parseFactor`, and the group closure). About 20,000 nested parentheses throw `RangeError: Maximum call stack size exceeded`. The exception escapes `interpretTuff` instead of returning a `TuffError`, which breaks the no-exceptions rule and would propagate out of the REPL's line handler.
 
 ## Security Concerns
 
@@ -81,11 +82,13 @@ The ideal architecture keeps these rules as the project grows:
 
 - Source text is untrusted. It must never be passed to `eval`, `Function`, or a shell.
 - Input length must be bounded before it is scanned. The current scanner has no length limit. Control: a maximum source length, returned as a `TuffError`.
+- Nesting depth must be bounded. The recursive parser has no depth limit, so hostile input can exhaust the call stack. Control: a maximum parenthesis depth, returned as a `TuffError` at the offending `(`. Gap: none exists yet.
 - Any future I/O (file reads, module imports, network) sits behind an explicit capability parameter, so `interpretTuff` stays pure. Gap: none of these exist yet.
 
 ## Future Work
 
 - Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-pass scanner is a stopgap.
+- Replace call-stack recursion with an explicit-stack parser (for example shunting-yard) so nesting depth is limited by a documented `TuffError`, not by the JavaScript call stack.
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report line and column in addition to the offset in `where`.
 - Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.
