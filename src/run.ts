@@ -1,5 +1,8 @@
 import type { Failure, Result, TuffError } from "./errors";
-import { typeMismatch, undefinedName } from "./errors";
+import { tooMuchWork, typeMismatch, undefinedName } from "./errors";
+
+// The most instructions one run may execute, so a runaway loop stops with an error.
+const MAX_STEPS = 200000;
 import { applySign, combine } from "./operations";
 import type { Binding, Instruction } from "./code";
 import { InstructionKind } from "./code";
@@ -41,6 +44,7 @@ export function runCode(
   const values: Value[] = [];
   const top: Scope = { vars: env, parent: undefined };
   const frames: Frame[] = [{ code, pc: 0, scope: top }];
+  let steps = 0;
   for (;;) {
     const frame = frames[frames.length - 1];
     if (frame === undefined) break;
@@ -51,6 +55,8 @@ export function runCode(
       continue;
     }
     frame.pc++;
+    steps++;
+    if (steps > MAX_STEPS) return tooMuchWork(instruction.where);
     if (instruction.kind === InstructionKind.Enter) {
       const inner: Scope = { vars: new Map(), parent: scope };
       frames.push({ code: instruction.block ?? [], pc: 0, scope: inner });

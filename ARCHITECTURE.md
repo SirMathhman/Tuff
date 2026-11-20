@@ -39,7 +39,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Dependency direction
 
-`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/`. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, `matches.ts`, and `arrays.ts` depend on `helpers.ts`, never on each other; the last three also use `operations.ts`. `operands.ts` depends on those five, and `operators.ts` depends on `loops.ts`, `matches.ts`, and `arrays.ts`. `code.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `types.ts`; nothing depends on it yet. `index.ts` depends on all of them; `repl.ts` and the tests on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
+`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/`. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`; the family files (`references`, `calls`, `loops`, `matches`, `arrays`) depend on `helpers.ts` and never on each other; `operands.ts` and `operators.ts` depend on them. `code.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `types.ts`. `run.ts` depends on `code.ts`, `errors/`, `operations.ts`, and `types.ts`. `index.ts` depends on all of them; `repl.ts` and the tests on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
@@ -73,11 +73,11 @@ Each call and loop pass reparses its body within one step budget: a loop of abou
 
 ### Failure detection
 
-Failures and values share a return type, told apart by `typeof`.
+Failures and values share a return type, told apart by `typeof`. `values.pop() ?? 0` in `code.ts` and `run.ts` turns a broken stack into 0.
 
 ### Two evaluators
 
-`code.ts` and `parse/` share the sign rule (`signOf`), bracket matching, and precedence; differential tests check the rest.
+`parse/` and `code.ts` with `run.ts` duplicate the rules; differential tests check them.
 
 ### Numeric precision
 
@@ -91,33 +91,31 @@ A live `&mut` blocks reads and writes of its owner; any live reference blocks wr
 
 ### Trust boundary
 
-`interpretTuff` performs no I/O. The REPL, reading untrusted stdin, is the only path for untrusted text.
+`interpretTuff` does no I/O; only the REPL, reading untrusted stdin, takes untrusted text.
 
 ### Controls
 
-Explicit stacks mean nesting costs memory, not JavaScript frames; open calls are capped at 100, and a program takes at most 200,000 steps. Future I/O goes behind a capability parameter.
+Explicit stacks keep nesting off the JavaScript call stack; open calls are capped at 100, and a program takes at most 200,000 steps. Any runner must enforce the same step budget. Future I/O goes behind a capability parameter.
 
 ### Gaps
 
-Neither a REPL line nor a source program has a length limit.
+Neither a REPL line nor a source program has a length limit. `runCode` enforces the same budget.
 
 ## Future Work
 
-### Known gaps
-
-Not implemented: `==`/`!=` on booleans, assignment outside statement starts, function parameters, names with digits or underscores, arrays as arguments, `break`/`continue`, a `while` ending a block, `if`/`else` with assignment branches, REPL bindings across lines, and REPL `why`/`fix` output.
+Missing: `==`/`!=` on booleans, assignment outside statement starts, function parameters, names with digits or underscores, arrays as arguments, `break`/`continue`, a `while` ending a block, `if`/`else` with assignment branches, REPL bindings across lines, and REPL `why`/`fix` output.
 
 ### Parse once
 
-Compile function and loop bodies once, so calls stop multiplying parse work. A compiled body is an instruction list with no parser state, run per call against an environment. `src/code.ts` covers expressions, `let`, assignment, and blocks, but `interpretTuff` does not use it. Once it does, retire `parse/` and move the sign, bracket, and precedence rules into one module that both sides import.
+Compile function and loop bodies once. A compiled body is an instruction list with no parser state, run by `run.ts`. `code.ts` covers expressions, `let`, assignment, and blocks. Still to compile: statement-start blocks, `if`, `match`, `while`, functions, arrays, and references. Then point `interpretTuff` at `compileProgram` and `runCode`, move the step budget into `runCode`, and retire `parse/`.
 
 ### Call limits
 
-Give loops their own pass limit. Keep borrow state on the cell. Move calls to their own frame stack, apart from pending operators.
+Give loops their own pass limit. Keep borrow state on the cell. Move calls onto `run.ts`'s frame stack.
 
 ### Module names
 
-Rename `operations.ts` to `reduce.ts` (too close to `operators.ts`) and `code.ts` to `compile.ts`. Split parse steps by statement, bracket, and `if`. `src/errors/` is at its 10-file cap.
+Rename `operations.ts` to `reduce.ts` (too close to `operators.ts`) and `code.ts` to `compile.ts`; `run.ts` keeps its name. Split parse steps by statement, bracket, and `if`. `src/errors/` is at its 10-file cap.
 
 ### Errors and data
 
