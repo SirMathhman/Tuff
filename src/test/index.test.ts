@@ -326,3 +326,7 @@ test('interpretTuff("fn get() => 1; get()") => 1', () => {
     value: 1,
   });
 });
+
+test('interpretTuff("fn get() => 1;") => 0', () => {
+  expect(interpretTuff("fn get() => 1;")).toEqual({ ok: true, value: 0 });
+});
