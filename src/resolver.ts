@@ -140,6 +140,11 @@ function resolveBlockBody(
       letCount++;
       continue;
     }
+    if (statement.kind === StatementKind.Block) {
+      const checked = resolveExpr(statement.block, blocks, refs);
+      if (!checked.ok) return checked;
+      continue;
+    }
     if (statement.kind === StatementKind.AssignThrough) {
       const target = resolveExpr(statement.target, blocks, refs);
       if (!target.ok) return target;

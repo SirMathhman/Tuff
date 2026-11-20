@@ -30,6 +30,8 @@ export enum StatementKind {
   Assign = "Assign",
   /** An assignment through a mutable reference, `*x = value;`. */
   AssignThrough = "AssignThrough",
+  /** A braced block used as a statement. Its value is discarded. */
+  Block = "Block",
 }
 
 /** The binary operators. */
@@ -152,8 +154,16 @@ export interface AssignThroughStatement {
   value: Expr;
 }
 
+/** A braced block used as a statement, such as `{ x = 1; }`. Its value is discarded. */
+export interface BlockStatement {
+  /** Always `StatementKind.Block`. */
+  kind: StatementKind.Block;
+  /** The block, which has no final expression. */
+  block: BlockNode;
+}
+
 /** A statement inside a block. */
-export type Statement = LetStatement | AssignStatement | AssignThroughStatement;
+export type Statement = LetStatement | AssignStatement | AssignThroughStatement | BlockStatement;
 
 /** Zero or more statements followed by one final expression. */
 export interface BlockNode {

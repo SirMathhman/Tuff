@@ -486,3 +486,14 @@ test("two arms with the same pattern are a DuplicatePattern error at the later a
     error: { kind: TuffErrorKind.DuplicatePattern, span: { start: 30, end: 31 } },
   });
 });
+
+test('evaluateTuff("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; { x = 1; } x")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("let x = 1; { let y = x; }") is an UnexpectedToken error at the closing brace', () => {
+  expect(evaluateTuff("let x = 1; { let y = x; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 24, end: 25 } },
+  });
+});

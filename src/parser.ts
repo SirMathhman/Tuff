@@ -5,6 +5,7 @@ import {
   type AssignStatement,
   type AssignThroughStatement,
   type BlockNode,
+  type BlockStatement,
   type BooleanNode,
   type BorrowNode,
   type ChainNode,
@@ -124,6 +125,62 @@ function parseAssignThrough(
   return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
+/** Tokens that continue an expression, so a braced block followed by one of them is a value, not a statement. */
+const CONTINUATIONS = new Set<string>(["+", "-", "*", "/"]);
+
+/**
+ * Finds the index of the `}` that closes the `{` at `open`.
+ *
+ * @param tokens - The tokens being parsed.
+ * @param open - The index of an opening `{`.
+ * @returns The index of its closing `}`, or `undefined` if it is not closed.
+ */
+function matchingBrace(tokens: Token[], open: number): number | undefined {
+  let level = 0;
+  for (let index = open; index < tokens.length; index++) {
+    const text = tokens[index]?.text;
+    if (text === "{") level++;
+    if (text === "}") level--;
+    if (level === 0) return index;
+  }
+  return undefined;
+}
+
+/**
+ * Parses a braced block used as a statement. It is a statement when the token after its `}` starts a
+ * new statement, rather than continuing an expression or closing the enclosing block.
+ *
+ * @param input - The tokens being parsed.
+ * @param pos - The index of the opening `{`.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the block's contents.
+ * @param closer - The token that closes the enclosing block, if any.
+ * @returns The statement, an error, or `undefined` if the braced block is an expression instead.
+ */
+function parseBraceStatement(
+  input: Input,
+  pos: number,
+  depth: number,
+  parseExpr: Parser,
+  closer: string | undefined,
+): Step<BlockStatement> | undefined {
+  const close = matchingBrace(input.tokens, pos);
+  if (close === undefined) return undefined;
+  const after = input.tokens[close + 1];
+  if (after === undefined || after.text === closer || CONTINUATIONS.has(after.text)) return undefined;
+  const open = input.tokens[pos];
+  if (open === undefined) return undefined;
+  if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: open.span });
+  const inner = parseBlock(input, pos + 1, depth + 1, parseExpr, "}");
+  if (!inner.ok) return inner;
+  if (inner.value.value.result !== undefined) return err({ kind: TuffErrorKind.UnexpectedToken, span: after.span });
+  if (inner.value.value.statements.length === 0) {
+    return err({ kind: TuffErrorKind.UnexpectedToken, span: input.tokens[inner.value.next]?.span ?? input.end });
+  }
+  const statement: BlockStatement = { kind: StatementKind.Block, block: inner.value.value };
+  return ok({ value: statement, next: inner.value.next + 1 });
+}
+
 function parseBlock(
   input: Input,
   pos: number,
@@ -136,14 +193,11 @@ function parseBlock(
   let cursor = pos;
   for (;;) {
     const token = input.tokens[cursor];
+    if (token === undefined && (closer !== undefined || statements.length === 0)) {
+      return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    }
     if (token === undefined || token.text === closer) {
-      if (closer !== undefined) {
-        // A braced block must end in a final expression, so the closing bracket is where one was expected.
-        return token === undefined
-          ? err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end })
-          : err({ kind: TuffErrorKind.UnexpectedToken, span: token.span });
-      }
-      if (statements.length === 0) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+      // A block with no final expression is returned as such; callers that need a value reject it.
       const block: BlockNode = { kind: NodeKind.Block, statements, result: undefined };
       return ok({ value: block, next: cursor });
     }
@@ -153,6 +207,15 @@ function parseBlock(
       statements.push(statement.value.value);
       cursor = statement.value.next;
       continue;
+    }
+    if (token.text === "{") {
+      const statement = parseBraceStatement(input, cursor, depth, parseExpr, closer);
+      if (statement !== undefined) {
+        if (!statement.ok) return statement;
+        statements.push(statement.value.value);
+        cursor = statement.value.next;
+        continue;
+      }
     }
     if (isName(token.text) && input.tokens[cursor + 1]?.text === "=") {
       const statement = parseAssign(input, cursor, depth, parseExpr);
@@ -326,7 +389,12 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     if (close.text !== closer) {
       return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });
     }
-    return ok({ value: inner.value.value, next: inner.value.next + 1 });
+    // A braced block used as a value must end in a final expression, so the closing bracket is where one was expected.
+    const value = inner.value.value;
+    if (value.kind === NodeKind.Block && value.result === undefined) {
+      return err({ kind: TuffErrorKind.UnexpectedToken, span: close.span });
+    }
+    return ok({ value, next: inner.value.next + 1 });
   }
   if (token.text === "if") return parseIf(input, pos, depth, parseExpr);
   if (token.text === "match") return parseMatch(input, pos, depth, parseExpr);

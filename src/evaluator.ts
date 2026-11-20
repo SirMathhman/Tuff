@@ -170,6 +170,11 @@ function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame<Value>): Res
       frame.push(value.value);
       continue;
     }
+    if (statement.kind === StatementKind.Block) {
+      const ran = evaluateIn(statement.block, env);
+      if (!ran.ok) return ran;
+      continue;
+    }
     const assigned =
       statement.kind === StatementKind.AssignThrough
         ? evaluateAssignThrough(statement, env)
