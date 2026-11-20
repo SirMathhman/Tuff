@@ -39,7 +39,7 @@ interface Reference {
  * Words with a fixed meaning that cannot be used as variable names.
  * "true" evaluates to 1 and "false" to 0.
  */
-const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false"]);
+const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false", "if", "else"]);
 
 /**
  * Message for a value that would make a reference outlive the variable it points to.
@@ -94,6 +94,10 @@ interface Cursor {
    * The innermost scope whose variables are visible at the current position.
    */
   scope: Scope;
+  /**
+   * True inside a branch of "if" that is not taken: it is checked but its assignments do not run.
+   */
+  dead: boolean;
 }
 
 /**
@@ -125,6 +129,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
  *   factor     := number | "true" | "false" | name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
+ *               | "if" "(" expression ")" expression "else" expression
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
  * group sub-expressions. "true" and "false" evaluate to 1 and 0, and "==" yields
@@ -138,7 +143,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
 function parseProgram(text: string): Result<number | boolean, Problem> {
-  const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined, depth: 0 } };
+  const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined, depth: 0 }, dead: false };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -279,6 +284,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (name === "true" || name === "false") {
       return ok(name === "true");
     }
+    if (name === "if") {
+      return parseIf(text, cursor);
+    }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
@@ -320,6 +328,65 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
   if (escapes(result.value, outer.depth)) {
     return err({ offset: blockStart, expected: `a value that does not refer to a variable declared inside the block` });
   }
+  return result;
+}
+
+/**
+ * Parses "if (condition) then-expression else else-expression" after the "if" keyword.
+ * Both branches are parsed and checked, but only the chosen one takes effect: assignments
+ * in the other branch are checked and then skipped.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the expression.
+ * @returns An Ok result with the chosen branch's value, or an Err result with the first problem found.
+ */
+function parseIf(text: string, cursor: Cursor): Result<Value, Problem> {
+  if (peek(text, cursor) !== "(") {
+    return err({ offset: cursor.pos, expected: `"("` });
+  }
+  cursor.pos++;
+  peek(text, cursor);
+  const conditionStart = cursor.pos;
+  const condition = parseExpression(text, cursor);
+  if (!condition.ok) {
+    return condition;
+  }
+  if (typeof condition.value !== "boolean") {
+    return err({ offset: conditionStart, expected: "a boolean condition" });
+  }
+  if (peek(text, cursor) !== ")") {
+    return err({ offset: cursor.pos, expected: `")"` });
+  }
+  cursor.pos++;
+  const outerDead = cursor.dead;
+  const thenResult = parseBranch(text, cursor, outerDead || !condition.value);
+  if (!thenResult.ok) {
+    return thenResult;
+  }
+  if (peekName(text, cursor) !== "else") {
+    return err({ offset: cursor.pos, expected: `"else"` });
+  }
+  cursor.pos += "else".length;
+  const elseResult = parseBranch(text, cursor, outerDead || condition.value);
+  if (!elseResult.ok) {
+    return elseResult;
+  }
+  return condition.value ? thenResult : elseResult;
+}
+
+/**
+ * Parses one branch of an "if" expression, marking it dead when it is not the branch taken.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the branch.
+ * @param dead - True if this branch is not taken.
+ * @returns An Ok result with the branch's value, or an Err result with the first problem found.
+ */
+function parseBranch(text: string, cursor: Cursor, dead: boolean): Result<Value, Problem> {
+  const outerDead = cursor.dead;
+  cursor.dead = dead;
+  const result = parseExpression(text, cursor);
+  cursor.dead = outerDead;
   return result;
 }
 
@@ -415,7 +482,9 @@ function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | und
   if (!init.ok) {
     return init.error;
   }
-  ref.target.value = init.value;
+  if (!cursor.dead) {
+    ref.target.value = init.value;
+  }
   return undefined;
 }
 
@@ -597,7 +666,9 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
   if (!init.ok) {
     return init.error;
   }
-  binding.value = init.value;
+  if (!cursor.dead) {
+    binding.value = init.value;
+  }
   return undefined;
 }
 

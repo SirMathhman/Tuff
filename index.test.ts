@@ -128,6 +128,27 @@ test("interpretTuff rejects '*' applied to a non-reference", () => {
   expect(interpretTuff("let x = 1; *x").ok).toBe(false);
 });
 
+test("interpretTuff('if (true) 2 else 3') => 2", () => {
+  expect(interpretTuff("if (true) 2 else 3")).toEqual({ ok: true, value: 2 });
+});
+
+test("interpretTuff('if (false) 2 else 3') => 3", () => {
+  expect(interpretTuff("if (false) 2 else 3")).toEqual({ ok: true, value: 3 });
+});
+
+test("interpretTuff: an untaken if branch does not run its assignments", () => {
+  expect(interpretTuff("let mut x = 0; let y = if (false) { x = 1; 0 } else 0; x")).toEqual({ ok: true, value: 0 });
+  expect(interpretTuff("let mut x = 0; let y = if (true) { x = 1; 0 } else 0; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff rejects an if condition that is not a boolean", () => {
+  expect(interpretTuff("if (1) 2 else 3").ok).toBe(false);
+});
+
+test("interpretTuff rejects an if without else", () => {
+  expect(interpretTuff("if (true) 2").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });
