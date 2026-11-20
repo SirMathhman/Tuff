@@ -9,6 +9,8 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Evaluation**: a pure function from Tuff source to a `Result`. It performs no I/O, reads no environment, and never executes host JavaScript (no `eval`, no `new Function`).
 - **Result**: the only error channel. A function returns `{ ok: true, value }` or `{ ok: false, error }`. Exceptions are not used for expected failures, and a function never returns `NaN` or another sentinel to signal failure.
 - **TuffError**: a discriminated union (error enum) of failure kinds. Each variant carries enough data to answer: what the error is, where in the source it occurred (span: start and end offsets), why it is an error, and what the caller can change to fix it.
+- **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow literal union naming the failure (for example `"DivisionByZero"`). The operator never sees source positions. The parser attaches the operator token's span and widens the failure to a `TuffError`.
+- **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
 - **Invariant 1**: the same source always yields the same `Result`. There is no hidden state between calls.
 - **Invariant 2**: evaluation always terminates or returns a `TuffError` for resource exhaustion. It never hangs the caller.
 - **Invariant 3**: a module under `src/` never imports from `index.ts`.
@@ -47,7 +49,7 @@ Rules:
 
 ## Potential Problems
 
-- **Coercion masquerading as evaluation.** Resolved: `evaluateTuff` is now a tokenizer and recursive-descent parser that returns a `Result`. The earlier `Number()` coercion accepted `""` and whitespace as `0`, hex and exponent forms, and `Infinity`.
+- **Non-finite numbers.** IEEE arithmetic does not fail on its own. Digit literals with more than about 308 digits parse to `Infinity`, and `Infinity - Infinity` or an overflowing product yields `Infinity` or `NaN` as a plain value. Without a finite-result check, these escape the `Result` channel.
 - **Public API surface growing before the contract is fixed.** Any export becomes a compatibility commitment. Return types should change only while the project has no external callers.
 - **Stringly-typed errors.** Plain string messages cannot be matched on, tested precisely, or localized. Use `TuffError` variants.
 - **Single-file growth.** `index.ts` is the natural place for "just one more function". Without the layout above it will exceed the file limit quickly.
@@ -79,11 +81,11 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 
 ## Future Work
 
-1. Split the current lexer and parser (in `index.ts`) into the `src/` modules above, and add the evaluator stage. Done so far: `Result`, `TuffError` with spans, lexer, and parser in `index.ts`.
+1. Split `index.ts` into the `src/` layout above, keeping `index.ts` as a thin re-export, and add the evaluator stage.
 2. Add lint enforcement of the modularity limits and the no-`eval` rule.
 3. Define the Tuff numeric and expression grammar explicitly in the lexer.
-4. Add the resource limits (source length, nesting depth, step budget) and tests that each one produces the right `TuffError`.
-5. Split `index.ts` into the `src/` layout above, keeping `index.ts` as a thin re-export.
+4. Add the finite-result check (a `NumericOverflow` variant for overflow and `NaN`) to every operator path.
+5. Add the resource limits (source length, nesting depth, step budget) and tests that each one produces the right `TuffError`.
 6. Define a host-capability interface before any feature needs I/O.
 
 ## Performance

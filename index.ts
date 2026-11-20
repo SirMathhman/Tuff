@@ -48,12 +48,12 @@ function tokenize(source: string): Result<Token[], TuffError> {
   return ok(tokens);
 }
 
-function parseFactor(input: Input, pos: number): Step<number> {
+function parseFactor(input: Input, pos: number, parseExpr: Operand): Step<number> {
   const token = input.tokens[pos];
   if (token === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
   if (token.text === "(" || token.text === "{") {
     const closer = token.text === "(" ? ")" : "}";
-    const inner = parseExpression(input, pos + 1);
+    const inner = parseExpr(input, pos + 1);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
     if (close === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
@@ -87,12 +87,12 @@ function parseBinary(
   }
 }
 
-function parseTerm(input: Input, pos: number): Step<number> {
-  return parseBinary(input, pos, MULTIPLICATIVE, parseFactor);
+function parseTerm(input: Input, pos: number, parseExpr: Operand): Step<number> {
+  return parseBinary(input, pos, MULTIPLICATIVE, (i, p) => parseFactor(i, p, parseExpr));
 }
 
 function parseExpression(input: Input, pos: number): Step<number> {
-  return parseBinary(input, pos, ADDITIVE, parseTerm);
+  return parseBinary(input, pos, ADDITIVE, (i, p) => parseTerm(i, p, parseExpression));
 }
 
 export function evaluateTuff(source: string): Result<number, TuffError> {
