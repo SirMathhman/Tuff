@@ -1,34 +1,48 @@
-/** The bindings of one block, linked to the enclosing block's scope. */
-export interface Scope<V> {
-  /** The names bound directly in this block. */
-  locals: Map<string, V>;
-  /** The enclosing scope, or `undefined` at the top level. */
-  outer: Scope<V> | undefined;
+import type { NameNode } from "./ast.ts";
+
+/** Where a name use is bound: how many blocks out, and its position in that block. */
+export interface NameRef {
+  /** Number of blocks to walk outward; 0 means the innermost block. */
+  depth: number;
+  /** Position of the binding within its block. */
+  index: number;
+}
+
+/** The binding of every name use in the program, keyed by the use's AST node. */
+export type NameRefs = Map<NameNode, NameRef>;
+
+/** A `let` binding within one block. */
+export interface Slot {
+  /** Position among the block's `let` statements. */
+  index: number;
+  /** Whether the binding may be assigned (`let mut`). */
+  mutable: boolean;
+}
+
+/** The names bound so far in one block. */
+export type NameTable = Map<string, Slot>;
+
+/** A binding found by name lookup. */
+export interface Found {
+  /** Where the binding is. */
+  ref: NameRef;
+  /** Whether the binding may be assigned (`let mut`). */
+  mutable: boolean;
 }
 
 /**
- * Creates an empty scope nested in `outer`.
+ * Finds a name, searching the innermost block first.
  *
- * @param outer - The enclosing scope, or `undefined` at the top level.
- * @returns A new scope with no bindings.
- */
-export function createScope<V>(outer: Scope<V> | undefined): Scope<V> {
-  return { locals: new Map<string, V>(), outer };
-}
-
-/**
- * Finds a name, searching the innermost scope first.
- *
- * @param scope - The scope to search, or `undefined` for none.
+ * @param blocks - The open blocks' name tables, outermost first.
  * @param name - The name to find.
- * @returns The bound value, or `undefined` if no enclosing scope binds `name`.
+ * @returns The binding, or `undefined` if no open block binds `name`.
  */
-export function lookup<V>(scope: Scope<V> | undefined, name: string): V | undefined {
-  let current = scope;
-  while (current !== undefined) {
-    const value = current.locals.get(name);
-    if (value !== undefined) return value;
-    current = current.outer;
+export function findName(blocks: NameTable[], name: string): Found | undefined {
+  for (let level = blocks.length - 1; level >= 0; level--) {
+    const slot = blocks[level]?.get(name);
+    if (slot !== undefined) {
+      return { ref: { depth: blocks.length - 1 - level, index: slot.index }, mutable: slot.mutable };
+    }
   }
   return undefined;
 }

@@ -1,32 +1,7 @@
-import { NodeKind, StatementKind, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
+import { NodeKind, StatementKind, type BlockNode, type ChainNode, type Expr } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
-
-/** Where a name use is bound: how many blocks out, and its position in that block. */
-export interface NameRef {
-  /** Number of blocks to walk outward; 0 means the innermost block. */
-  depth: number;
-  /** Position of the binding within its block. */
-  index: number;
-}
-
-/** The binding of every name use in the program, keyed by the use's AST node. */
-export type NameRefs = Map<NameNode, NameRef>;
-
-/** A name bound in one block: its position among that block's `let` statements, and whether it may be assigned. */
-interface Slot {
-  index: number;
-  mutable: boolean;
-}
-
-/** The names bound so far in one block. */
-type NameTable = Map<string, Slot>;
-
-/** A found binding: where it is, and whether it may be assigned. */
-interface Found {
-  ref: NameRef;
-  mutable: boolean;
-}
+import { findName, type NameRefs, type NameTable } from "./scope.ts";
 
 /**
  * Binds every name use to its binding and checks that names are bound and assignments are allowed.
@@ -43,22 +18,12 @@ export function resolve(program: BlockNode): Result<NameRefs, TuffError> {
   return ok(refs);
 }
 
-function findSlot(blocks: NameTable[], name: string): Found | undefined {
-  for (let level = blocks.length - 1; level >= 0; level--) {
-    const slot = blocks[level]?.get(name);
-    if (slot !== undefined) {
-      return { ref: { depth: blocks.length - 1 - level, index: slot.index }, mutable: slot.mutable };
-    }
-  }
-  return undefined;
-}
-
 function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:
       return ok(undefined);
     case NodeKind.Name: {
-      const found = findSlot(blocks, expr.name);
+      const found = findName(blocks, expr.name);
       if (found === undefined) return err({ kind: TuffErrorKind.UnknownName, span: expr.span });
       refs.set(expr, found.ref);
       return ok(undefined);
@@ -103,7 +68,7 @@ function resolveBlockBody(
       letCount++;
       continue;
     }
-    const target = findSlot(blocks, statement.target.name);
+    const target = findName(blocks, statement.target.name);
     if (target === undefined) return err({ kind: TuffErrorKind.UnknownName, span: statement.target.span });
     if (!target.mutable) return err({ kind: TuffErrorKind.ImmutableAssignment, span: statement.target.span });
     refs.set(statement.target, target.ref);
