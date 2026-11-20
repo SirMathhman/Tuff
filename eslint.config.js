@@ -20,6 +20,10 @@ export default tseslint.config(
           selector: "ThrowStatement",
           message: "Return a Result (see src/result.ts) instead of throwing.",
         },
+        {
+          selector: "ClassDeclaration",
+          message: "Do not declare classes; use functions and plain objects instead.",
+        },
       ],
       "jsdoc/require-jsdoc": [
         "error",
