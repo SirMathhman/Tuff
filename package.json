@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint . && npm run cpd",
+    "cpd": "tsc -p tsconfig.cpd.json && pmd cpd --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals --dir node_modules/.cpd"
   },
   "devDependencies": {
     "@types/bun": "latest",

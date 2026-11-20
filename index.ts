@@ -42,9 +42,9 @@ interface Reference {
 const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false"]);
 
 /**
- * Matches the start of a statement that assigns through a reference: "*name =" but not "*name ==".
+ * Message for a value that would make a reference outlive the variable it points to.
  */
-const DEREFERENCE_ASSIGNMENT = /^\*\s*[A-Za-z_][A-Za-z0-9_]*\s*=(?!=)/;
+const OUTLIVES_MESSAGE = "a value that does not refer to a variable declared inside a deeper block";
 
 /**
  * A variable's current value and whether it may be reassigned.
@@ -120,7 +120,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * Grammar:
  *   program    := statement* expression
  *   block      := "{" statement* expression "}"
- *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" name "=" expression ";"
+ *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" factor "=" expression ";"
  *   expression := sum ("==" sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
@@ -355,7 +355,40 @@ function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
 }
 
 /**
- * Parses "*name = expression;", which assigns through a mutable reference stored in a variable.
+ * Reports whether the statement starting at the given offset assigns through a reference,
+ * that is, whether a "=" (not "==") follows the "*" target before the statement ends.
+ * Only scans characters; it does not parse or evaluate anything.
+ *
+ * @param text - The source being parsed.
+ * @param start - Offset of the leading "*".
+ * @returns True if the statement is "*target = ...".
+ */
+function isDereferenceAssignment(text: string, start: number): boolean {
+  if (text.charAt(start) !== "*") {
+    return false;
+  }
+  let depth = 0;
+  for (let i = start + 1; i < text.length; i++) {
+    const c = text.charAt(i);
+    if (c === "(" || c === "{") {
+      depth++;
+    } else if (c === ")" || c === "}") {
+      if (depth === 0) {
+        return false;
+      }
+      depth--;
+    } else if (depth === 0 && c === ";") {
+      return false;
+    } else if (depth === 0 && c === "=") {
+      return text.charAt(i + 1) !== "=";
+    }
+  }
+  return false;
+}
+
+/**
+ * Parses "*target = expression;", which assigns through a mutable reference. The target
+ * is any factor that evaluates to a reference, such as "*y" or "*(*z)".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past the assignment.
@@ -365,39 +398,24 @@ function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | und
   peek(text, cursor);
   const starOffset = cursor.pos;
   cursor.pos++;
-  const name = peekName(text, cursor);
-  const nameStart = cursor.pos;
-  cursor.pos += name.length;
-  const holder = lookup(cursor.scope, name);
-  if (holder === undefined) {
-    return { offset: nameStart, expected: `a variable in scope (no "${name}" is defined)` };
+  const target = parseFactor(text, cursor);
+  if (!target.ok) {
+    return target.error;
   }
-  const ref = holder.value;
+  const ref = target.value;
   if (typeof ref !== "object") {
-    return { offset: nameStart, expected: `a reference after "*"` };
+    return { offset: starOffset, expected: `a reference after "*"` };
   }
   if (!ref.mutable) {
     return { offset: starOffset, expected: `a mutable reference (made with "&mut") to assign through` };
   }
-  peek(text, cursor);
-  cursor.pos++;
-  peek(text, cursor);
-  const valueStart = cursor.pos;
-  const value = parseExpression(text, cursor);
-  if (!value.ok) {
-    return value.error;
+  const init = parseInitializer(text, cursor, (value, offset) =>
+    checkStore(value, offset, ref.target, "the referenced variable"),
+  );
+  if (!init.ok) {
+    return init.error;
   }
-  if (typeof value.value !== typeof ref.target.value) {
-    return { offset: valueStart, expected: `${kindOf(ref.target.value)} to match the type of the referenced variable` };
-  }
-  if (escapes(value.value, ref.target.depth)) {
-    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
-  }
-  if (peek(text, cursor) !== ";") {
-    return { offset: cursor.pos, expected: `";"` };
-  }
-  cursor.pos++;
-  ref.target.value = value.value;
+  ref.target.value = init.value;
   return undefined;
 }
 
@@ -434,6 +452,60 @@ function escapes(value: Value, depth: number): boolean {
 }
 
 /**
+ * Parses "= expression;" after an assignment target, and checks the value before accepting it.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the initializer.
+ * @param check - Returns a problem if the value may not be stored, given its offset.
+ * @returns An Ok result with the value, or an Err result with the first problem found.
+ */
+function parseInitializer(
+  text: string,
+  cursor: Cursor,
+  check: (value: Value, offset: number) => Problem | undefined,
+): Result<Value, Problem> {
+  if (peek(text, cursor) !== "=") {
+    return err({ offset: cursor.pos, expected: `"="` });
+  }
+  cursor.pos++;
+  peek(text, cursor);
+  const valueStart = cursor.pos;
+  const value = parseExpression(text, cursor);
+  if (!value.ok) {
+    return value;
+  }
+  const problem = check(value.value, valueStart);
+  if (problem !== undefined) {
+    return err(problem);
+  }
+  if (peek(text, cursor) !== ";") {
+    return err({ offset: cursor.pos, expected: `";"` });
+  }
+  cursor.pos++;
+  return value;
+}
+
+/**
+ * Checks that a value may be stored in a variable: it must have the variable's type, and
+ * a reference must not outlive the variable it points to.
+ *
+ * @param value - The value to store.
+ * @param offset - Offset of the value's first character, for error reporting.
+ * @param target - The variable that will receive the value.
+ * @param description - How the variable is named in the error message.
+ * @returns The problem found, or undefined if the value may be stored.
+ */
+function checkStore(value: Value, offset: number, target: Binding, description: string): Problem | undefined {
+  if (typeof value !== typeof target.value) {
+    return { offset, expected: `${kindOf(target.value)} to match the type of ${description}` };
+  }
+  if (escapes(value, target.depth)) {
+    return { offset, expected: OUTLIVES_MESSAGE };
+  }
+  return undefined;
+}
+
+/**
  * Describes the kind of a value for error messages.
  *
  * @param value - The value to describe.
@@ -461,7 +533,7 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
       problem = parseDeclaration(text, cursor);
     } else if (name !== "" && peekAfterName(text, cursor, name) === "=") {
       problem = parseAssignment(text, cursor);
-    } else if (name === "" && DEREFERENCE_ASSIGNMENT.test(text.slice(peekStart(text, cursor)))) {
+    } else if (name === "" && isDereferenceAssignment(text, peekStart(text, cursor))) {
       problem = parseDereferenceAssignment(text, cursor);
     } else {
       break;
@@ -492,24 +564,14 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     return { offset: cursor.pos, expected: "a variable name" };
   }
   cursor.pos += name.length;
-  if (peek(text, cursor) !== "=") {
-    return { offset: cursor.pos, expected: `"="` };
+  const depth = cursor.scope.depth;
+  const init = parseInitializer(text, cursor, (value, offset) =>
+    escapes(value, depth) ? { offset, expected: OUTLIVES_MESSAGE } : undefined,
+  );
+  if (!init.ok) {
+    return init.error;
   }
-  cursor.pos++;
-  peek(text, cursor);
-  const valueStart = cursor.pos;
-  const value = parseExpression(text, cursor);
-  if (!value.ok) {
-    return value.error;
-  }
-  if (escapes(value.value, cursor.scope.depth)) {
-    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
-  }
-  if (peek(text, cursor) !== ";") {
-    return { offset: cursor.pos, expected: `";"` };
-  }
-  cursor.pos++;
-  cursor.scope.vars.set(name, { value: value.value, mutable, depth: cursor.scope.depth });
+  cursor.scope.vars.set(name, { value: init.value, mutable, depth });
   return undefined;
 }
 
@@ -531,25 +593,11 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
   if (!binding.mutable) {
     return { offset: start, expected: `a mutable variable (declare "${name}" with "let mut")` };
   }
-  peek(text, cursor);
-  cursor.pos++;
-  peek(text, cursor);
-  const valueStart = cursor.pos;
-  const value = parseExpression(text, cursor);
-  if (!value.ok) {
-    return value.error;
+  const init = parseInitializer(text, cursor, (value, offset) => checkStore(value, offset, binding, `"${name}"`));
+  if (!init.ok) {
+    return init.error;
   }
-  if (typeof value.value !== typeof binding.value) {
-    return { offset: valueStart, expected: `${kindOf(binding.value)} to match the type of "${name}"` };
-  }
-  if (escapes(value.value, binding.depth)) {
-    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
-  }
-  if (peek(text, cursor) !== ";") {
-    return { offset: cursor.pos, expected: `";"` };
-  }
-  cursor.pos++;
-  binding.value = value.value;
+  binding.value = init.value;
   return undefined;
 }
 
