@@ -322,3 +322,45 @@ test("a reference used as an arithmetic operand is a ReferenceAsValue error at t
 test('evaluateTuff("let mut x = 0; let y = &mut x; let z = &y; *(*z) = 1; x") => 1', () => {
   expect(evaluateTuff("let mut x = 0; let y = &mut x; let z = &y; *(*z) = 1; x")).toEqual({ ok: true, value: 1 });
 });
+
+test("a reference that escapes its block through an outer assignment is a ReferenceEscapes error", () => {
+  expect(evaluateTuff("let mut a = 1; let mut p = &a; let z = { let b = 2; p = &b; 0 }; *p")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.ReferenceEscapes, span: { start: 56, end: 57 } },
+  });
+});
+
+test("writing through a shared reference is an ImmutableAssignment error at the statement", () => {
+  expect(evaluateTuff("let mut x = 1; let r = &x; *r = 2; x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.ImmutableAssignment, span: { start: 27, end: 28 } },
+  });
+});
+
+test("borrowing a plain let mutably is an ImmutableAssignment error at the name", () => {
+  expect(evaluateTuff("let x = 1; let r = &mut x; r")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.ImmutableAssignment, span: { start: 24, end: 25 } },
+  });
+});
+
+test("a reference used as an arithmetic operand is a ReferenceAsValue error at the operator", () => {
+  expect(evaluateTuff("let x = 1; 1 + &x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.ReferenceAsValue, span: { start: 13, end: 14 } },
+  });
+});
+
+test("dereferencing a number is a NotAReference error at the *", () => {
+  expect(evaluateTuff("let x = 1; *x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NotAReference, span: { start: 11, end: 12 } },
+  });
+});
+
+test("assigning a reference to a number binding is a TypeMismatch error at the target", () => {
+  expect(evaluateTuff("let mut x = 1; x = &x; x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.TypeMismatch, span: { start: 15, end: 16 } },
+  });
+});
