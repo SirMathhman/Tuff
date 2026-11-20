@@ -436,3 +436,10 @@ test('evaluateTuff("let mut x = 0; let y = if (true) 2 else { x = 1; 1 }; x") =>
 test('evaluateTuff("if (false) { let mut x = 1; x = 2; 0 } else 5") => 5', () => {
   expect(evaluateTuff("if (false) { let mut x = 1; x = 2; 0 } else 5")).toEqual({ ok: true, value: 5 });
 });
+
+test('evaluateTuff("if (true) 2 else { true + true }") is a BooleanOperand error at the +', () => {
+  expect(evaluateTuff("if (true) 2 else { true + true }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.BooleanOperand, span: { start: 24, end: 25 } },
+  });
+});
