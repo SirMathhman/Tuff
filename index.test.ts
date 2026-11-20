@@ -162,6 +162,30 @@ test("interpretTuff: a statement block's assignments run once", () => {
   expect(interpretTuff("let mut x = 0; { x = x + 1; x } * 2")).toEqual({ ok: true, value: 2 });
 });
 
+test("interpretTuff('let mut x = 0; if (true) { x = 1; } else { x = 2; } x') => 1", () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: statement if takes the else branch when false, and works without else", () => {
+  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } else { x = 2; } x")).toEqual({ ok: true, value: 2 });
+  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } x")).toEqual({ ok: true, value: 0 });
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: statement if with single-statement branches", () => {
+  expect(interpretTuff("let mut x = 0; if (true) x = 1; else x = 2; x")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("let mut x = 0; if (false) x = 1; else x = 2; x")).toEqual({ ok: true, value: 2 });
+  expect(interpretTuff("let mut x = 0; if (false) x = 1; x")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff rejects a program that ends with a statement if", () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; }").ok).toBe(false);
+});
+
+test("interpretTuff rejects a statement if with a non-boolean condition", () => {
+  expect(interpretTuff("let mut x = 0; if (1) { x = 1; } x").ok).toBe(false);
+});
+
 test("interpretTuff rejects a program that ends with a statement block", () => {
   expect(interpretTuff("let mut x = 0; { x = 1; }").ok).toBe(false);
 });

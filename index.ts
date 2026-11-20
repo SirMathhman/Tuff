@@ -126,6 +126,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   block      := "{" statement* expression "}"
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" factor "=" expression ";"
  *               | "{" statement* "}"   (a block with no final expression)
+ *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *   expression := sum ("==" sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
@@ -613,23 +614,77 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
  */
 function parseStatements(text: string, cursor: Cursor): Problem | undefined {
   while (true) {
-    const name = peekName(text, cursor);
-    let problem: Problem | undefined;
-    if (name === "let") {
-      problem = parseDeclaration(text, cursor);
-    } else if (name !== "" && peekAfterName(text, cursor, name) === "=") {
-      problem = parseAssignment(text, cursor);
-    } else if (name === "" && isDereferenceAssignment(text, peekStart(text, cursor))) {
-      problem = parseDereferenceAssignment(text, cursor);
-    } else if (name === "" && isStatementBlock(text, cursor)) {
-      problem = parseStatementBlock(text, cursor);
-    } else {
+    const step = parseOneStatement(text, cursor, true);
+    if (!step.matched) {
       return undefined;
     }
-    if (problem !== undefined) {
-      return problem;
+    if (step.problem !== undefined) {
+      return step.problem;
     }
   }
+}
+
+/**
+ * Outcome of trying to parse one statement: either no statement starts here, or one was
+ * parsed, possibly with a problem.
+ */
+type StatementStep = { readonly matched: false } | { readonly matched: true; readonly problem: Problem | undefined };
+
+const NOT_A_STATEMENT: StatementStep = { matched: false };
+
+/**
+ * Parses one statement at the cursor if one starts there.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the statement if one was parsed.
+ * @param allowDeclaration - Whether a "let" declaration is accepted here.
+ * @returns The statement step; NOT_A_STATEMENT if no statement starts at the cursor.
+ */
+function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boolean): StatementStep {
+  const name = peekName(text, cursor);
+  if (name === "let" && allowDeclaration) {
+    return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name !== "" && peekAfterName(text, cursor, name) === "=") {
+    return { matched: true, problem: parseAssignment(text, cursor) };
+  }
+  if (name === "" && isDereferenceAssignment(text, peekStart(text, cursor))) {
+    return { matched: true, problem: parseDereferenceAssignment(text, cursor) };
+  }
+  if (name === "" && isStatementBlock(text, cursor)) {
+    return { matched: true, problem: parseStatementBlock(text, cursor) };
+  }
+  if (name === "if" && isStatementIf(text, cursor)) {
+    return { matched: true, problem: parseStatementIf(text, cursor) };
+  }
+  return NOT_A_STATEMENT;
+}
+
+/**
+ * Advances past one statement used as a branch of an "if" statement, in a dry run.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the branch when it matches.
+ * @returns True if a statement other than a declaration parsed without problems.
+ */
+function skipStatementBranch(text: string, cursor: Cursor): boolean {
+  const step = parseOneStatement(text, cursor, false);
+  return step.matched && step.problem === undefined;
+}
+
+/**
+ * Parses one statement used as a branch of an "if" statement.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the branch.
+ * @returns The first problem found, or undefined if the branch parsed.
+ */
+function parseBranchStatement(text: string, cursor: Cursor): Problem | undefined {
+  const step = parseOneStatement(text, cursor, false);
+  if (!step.matched) {
+    return { offset: cursor.pos, expected: "a statement" };
+  }
+  return step.problem;
 }
 
 /**
@@ -657,6 +712,104 @@ function isStatementBlock(text: string, cursor: Cursor): boolean {
   cursor.dead = savedDead;
   cursor.scope = savedScope;
   return isStatement;
+}
+
+/**
+ * Decides whether the "if" at the cursor is a statement: each branch is a single statement
+ * (other than a declaration), and the else branch may be omitted. Like isStatementBlock, this is a dry run
+ * that leaves the cursor, dead flag and scope unchanged.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, which is left unchanged.
+ * @returns True if the "if" at the cursor is a statement.
+ */
+function isStatementIf(text: string, cursor: Cursor): boolean {
+  if (peekName(text, cursor) !== "if") {
+    return false;
+  }
+  const start = cursor.pos;
+  const savedDead = cursor.dead;
+  const savedScope = cursor.scope;
+  cursor.dead = true;
+  const isStatement = dryRunStatementIf(text, cursor);
+  cursor.pos = start;
+  cursor.dead = savedDead;
+  cursor.scope = savedScope;
+  return isStatement;
+}
+
+/**
+ * Advances through an "if" statement shape without effects, reporting whether it matches.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced as the shape is matched.
+ * @returns True if the text matches "if (condition) { ... }" optionally followed by "else { ... }".
+ */
+function dryRunStatementIf(text: string, cursor: Cursor): boolean {
+  cursor.pos += "if".length;
+  if (peek(text, cursor) !== "(") {
+    return false;
+  }
+  cursor.pos++;
+  const condition = parseExpression(text, cursor);
+  if (!condition.ok || typeof condition.value !== "boolean") {
+    return false;
+  }
+  if (peek(text, cursor) !== ")") {
+    return false;
+  }
+  cursor.pos++;
+  if (!skipStatementBranch(text, cursor)) {
+    return false;
+  }
+  if (peekName(text, cursor) !== "else") {
+    return true;
+  }
+  cursor.pos += "else".length;
+  return skipStatementBranch(text, cursor);
+}
+
+/**
+ * Parses an "if" statement. Only the branch taken runs; the other is checked and skipped.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the statement.
+ * @returns The first problem found, or undefined if the statement parsed.
+ */
+function parseStatementIf(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "if".length;
+  if (peek(text, cursor) !== "(") {
+    return { offset: cursor.pos, expected: `"("` };
+  }
+  cursor.pos++;
+  peek(text, cursor);
+  const conditionStart = cursor.pos;
+  const condition = parseExpression(text, cursor);
+  if (!condition.ok) {
+    return condition.error;
+  }
+  if (typeof condition.value !== "boolean") {
+    return { offset: conditionStart, expected: "a boolean condition" };
+  }
+  if (peek(text, cursor) !== ")") {
+    return { offset: cursor.pos, expected: `")"` };
+  }
+  cursor.pos++;
+  const outerDead = cursor.dead;
+  cursor.dead = outerDead || !condition.value;
+  const thenProblem = parseBranchStatement(text, cursor);
+  cursor.dead = outerDead;
+  if (thenProblem !== undefined) {
+    return thenProblem;
+  }
+  if (peekName(text, cursor) !== "else") {
+    return undefined;
+  }
+  cursor.pos += "else".length;
+  cursor.dead = outerDead || condition.value;
+  const elseProblem = parseBranchStatement(text, cursor);
+  cursor.dead = outerDead;
+  return elseProblem;
 }
 
 /**
