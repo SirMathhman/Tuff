@@ -59,13 +59,15 @@ export interface Scope {
   readonly depth: number;
   /** Functions declared directly in this scope. */
   readonly functions: Map<string, FunctionDef>;
+  /** Type aliases declared directly in this scope, mapping each name to the type it stands for. */
+  readonly types: Map<string, string>;
 }
 /** A parameter of a function declared with "fn". */
 export interface Param {
   /** The parameter's name. */
   readonly name: string;
-  /** The declared type, such as "I32"; absent if the parameter is untyped. */
-  readonly type?: string;
+  /** The declared type, such as "I32". Every parameter must have one. */
+  readonly type: string;
 }
 /** A function declared with "fn". Its body is re-parsed from text on each call. */
 export interface FunctionDef {

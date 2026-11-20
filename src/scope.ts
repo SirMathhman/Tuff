@@ -69,7 +69,31 @@ export function lookupFunction(scope: Scope, name: string): FunctionDef | undefi
  * @returns The new scope.
  */
 export function newScope(parent?: Scope): Scope {
-  return { vars: new Map(), functions: new Map(), parent, depth: parent === undefined ? 0 : parent.depth + 1 };
+  return {
+    vars: new Map(),
+    functions: new Map(),
+    types: new Map(),
+    parent,
+    depth: parent === undefined ? 0 : parent.depth + 1,
+  };
+}
+
+/**
+ * Finds the type a type alias stands for, in the given scope or the scopes enclosing it.
+ *
+ * @param scope - The innermost scope to search first.
+ * @param name - The alias name to look up.
+ * @returns The aliased type, or undefined if no alias with that name is in scope.
+ */
+export function lookupType(scope: Scope, name: string): string | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { types } = current;
+    const found = types.get(name);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 /**
  * Returns the offset of the ";" that ends a function body, or -1 if there is none. Only scans

@@ -35,7 +35,7 @@ import {
   valuesEqual,
   OUTLIVES_MESSAGE,
 } from "./src/scope";
-import { parseNumberSuffix, parseTypeAnnotation } from "./src/annotations";
+import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -56,6 +56,7 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "loop",
   "break",
   "fn",
+  "type",
 ]);
 
 /**
@@ -555,6 +556,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "type" && allowDeclaration) {
+    return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };
   }
   if (name !== "" && peekAfterName(text, cursor, name) === "=") {
     return { matched: true, problem: parseAssignment(text, cursor) };
@@ -1276,16 +1280,15 @@ function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undef
       return { offset: cursor.pos, expected: `a parameter name or ")"` };
     }
     cursor.pos += paramName.length;
-    if (peek(text, cursor) === ":") {
-      cursor.pos++;
-      const annotation = parseTypeAnnotation(text, cursor);
-      if (!annotation.ok) {
-        return annotation.error;
-      }
-      params.push({ name: paramName, type: annotation.value });
-    } else {
-      params.push({ name: paramName });
+    if (peek(text, cursor) !== ":") {
+      return { offset: cursor.pos, expected: `": " and a type for parameter "${paramName}"` };
     }
+    cursor.pos++;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return annotation.error;
+    }
+    params.push({ name: paramName, type: annotation.value });
     if (peek(text, cursor) === ",") {
       cursor.pos++;
     } else if (peek(text, cursor) !== ")") {

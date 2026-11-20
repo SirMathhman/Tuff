@@ -79,6 +79,34 @@ test("interpretTuff typed return type rejects a wrong result type", () => {
   expect(interpretTuff("fn f(a : I32) : Bool => a; f(1)").ok).toBe(false);
 });
 
+test("interpretTuff('type Temp = I32; let temp : Temp = 1; temp') => 1", () => {
+  expect(interpretTuff("type Temp = I32; let temp : Temp = 1; temp")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff type alias of a reference type works inside &", () => {
+  expect(interpretTuff("type B = Bool; let x = true; let y : &B = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff type alias of an alias works", () => {
+  expect(interpretTuff("type A = I32; type B = A; let x : B = 2; x")).toEqual({ ok: true, value: 2 });
+});
+
+test("interpretTuff type alias enforces its type", () => {
+  expect(interpretTuff("type Temp = I32; let temp : Temp = true; temp").ok).toBe(false);
+});
+
+test("interpretTuff('fn untypedParam(param) : I32 => 0;') is an error: no final expression", () => {
+  expect(interpretTuff("fn untypedParam(param) : I32 => 0;").ok).toBe(false);
+});
+
+test("interpretTuff('fn untypedParam(param) : I32 => 0; 1') is an error: parameter has no type", () => {
+  expect(interpretTuff("fn untypedParam(param) : I32 => 0; 1").ok).toBe(false);
+});
+
+test("interpretTuff unknown type name is rejected", () => {
+  expect(interpretTuff("let x : Nope = 1; x").ok).toBe(false);
+});
+
 test("interpretTuff('let x = true; let y = &x; let z : &&Bool = &y; **z') => 1", () => {
   expect(interpretTuff("let x = true; let y = &x; let z : &&Bool = &y; **z")).toEqual({ ok: true, value: 1 });
 });
@@ -407,15 +435,15 @@ test("interpretTuff('fn get() => 1; get()') => 1", () => {
 });
 
 test("interpretTuff: function with parameters", () => {
-  expect(interpretTuff("fn add(a, b) => a + b; add(2, 3)")).toEqual({ ok: true, value: 5 });
+  expect(interpretTuff("fn add(a : I32, b : I32) => a + b; add(2, 3)")).toEqual({ ok: true, value: 5 });
 });
 
 test("interpretTuff: function sees variables from its declaring scope", () => {
-  expect(interpretTuff("let k = 10; fn addK(a) => a + k; addK(1)")).toEqual({ ok: true, value: 11 });
+  expect(interpretTuff("let k = 10; fn addK(a : I32) => a + k; addK(1)")).toEqual({ ok: true, value: 11 });
 });
 
 test("interpretTuff rejects a call with the wrong number of arguments", () => {
-  expect(interpretTuff("fn f(a) => a; f()").ok).toBe(false);
+  expect(interpretTuff("fn f(a : I32) => a; f()").ok).toBe(false);
 });
 
 test("interpretTuff rejects a call to an undefined function", () => {
@@ -423,7 +451,7 @@ test("interpretTuff rejects a call to an undefined function", () => {
 });
 
 test("interpretTuff rejects unbounded recursion", () => {
-  expect(interpretTuff("fn f(n) => f(n); f(1)").ok).toBe(false);
+  expect(interpretTuff("fn f(n : I32) => f(n); f(1)").ok).toBe(false);
 });
 
 test("interpretTuff: a function may call one declared after it", () => {
