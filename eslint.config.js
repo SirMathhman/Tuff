@@ -14,11 +14,16 @@ export default tseslint.config(
       "no-eval": "error",
       "no-implied-eval": "error",
       "no-new-func": "error",
+      "no-nested-ternary": "error",
       "no-restricted-syntax": [
         "error",
         {
           selector: "ThrowStatement",
           message: "Return a Result (see src/result.ts) instead of throwing.",
+        },
+        {
+          selector: "ForStatement[init=null][test=null][update=null]",
+          message: "Do not use for(;;); use while (true) instead.",
         },
         {
           selector: "ClassDeclaration",

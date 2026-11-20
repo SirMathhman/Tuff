@@ -77,7 +77,11 @@ interface Cursor {
 export function interpretTuff(tuffSource: string): Result<number, string> {
   const result = parseProgram(tuffSource);
   if (result.ok) {
-    return ok(typeof result.value === "boolean" ? (result.value ? 1 : 0) : result.value);
+    const value = result.value;
+    if (typeof value === "boolean") {
+      return ok(value ? 1 : 0);
+    }
+    return ok(value);
   }
   return err(describeUnsupported(tuffSource, result.error));
 }
@@ -159,7 +163,7 @@ function parseSum(text: string, cursor: Cursor): Result<Value, Problem> {
     return first;
   }
   let value = first.value;
-  for (;;) {
+  while (true) {
     const op = peek(text, cursor);
     if (op !== "+" && op !== "-") {
       return ok(value);
@@ -284,7 +288,7 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
 function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
-  for (;;) {
+  while (true) {
     const name = peekName(text, cursor);
     let problem: Problem | undefined;
     if (name === "let") {
