@@ -64,6 +64,30 @@ export function applySign(
 }
 
 /**
+ * Combines two values with an operator. A boolean operand or a zero divisor is a failure.
+ *
+ * @param left - the left operand.
+ * @param operator - the operator.
+ * @param right - the right operand.
+ * @param where - the offset of the operator.
+ * @returns the result, or a failure.
+ */
+export function combine(
+  left: Value,
+  operator: Operator,
+  right: Value,
+  where: number,
+): Failure<TuffError> | Value {
+  if (typeof left === "boolean" || typeof right === "boolean") {
+    return booleanOperand(where, operator);
+  }
+  if (operator === Operator.Divide && right === 0) {
+    return divisionByZero(where);
+  }
+  return apply(left, operator, right);
+}
+
+/**
  * Pops the newest operator and applies it to the two newest values. A boolean
  * operand is a failure, even in an unchosen branch.
  *
@@ -79,13 +103,9 @@ export function applyTop(
   if (entry?.kind !== EntryKind.Operator) return undefined;
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
-  if (typeof left === "boolean" || typeof right === "boolean") {
-    return booleanOperand(entry.where, entry.operator);
-  }
-  if (entry.operator === Operator.Divide && right === 0) {
-    return divisionByZero(entry.where);
-  }
-  values.push(apply(left, entry.operator, right));
+  const result = combine(left, entry.operator, right, entry.where);
+  if (typeof result === "object") return result;
+  values.push(result);
   return undefined;
 }
 

@@ -20,6 +20,7 @@ import {
 import { applySign } from "../operations";
 import { operandRef } from "./references";
 import {
+  Operator,
   isLetter,
   readDigits,
   readName,
@@ -115,12 +116,22 @@ function startLet(
   return Step.Continue;
 }
 
+// The operator of a compound assignment such as `+=`, given its first character.
+function compoundOperator(ch: string): Operator | undefined {
+  if (ch === "+") return Operator.Add;
+  if (ch === "-") return Operator.Subtract;
+  if (ch === "*") return Operator.Multiply;
+  if (ch === "/") return Operator.Divide;
+  return undefined;
+}
+
 // Reads `NAME =` at a statement start and leaves the parser ready for the value.
 function startAssign(
   state: ParserState,
   name: string,
   nameStart: number,
   equals: number,
+  operator: Operator | undefined,
 ): Failure<TuffError> | Step {
   const { source, ops, scopes, flags } = state;
   const cell = lookupCell(scopes, name);
@@ -132,6 +143,7 @@ function startAssign(
     mutable: false,
     assign: true,
     where: nameStart,
+    operator,
   });
   state.pos = skipSpaces(source, equals + 1);
   state.expectOperand = true;
@@ -160,7 +172,16 @@ function operandName(
   }
   const equals = skipSpaces(source, end);
   if (flags.atStatementStart && !signed && source.charAt(equals) === "=") {
-    return startAssign(state, name, state.pos, equals);
+    return startAssign(state, name, state.pos, equals, undefined);
+  }
+  const compound = compoundOperator(source.charAt(equals));
+  if (
+    flags.atStatementStart &&
+    !signed &&
+    compound !== undefined &&
+    source.charAt(equals + 1) === "="
+  ) {
+    return startAssign(state, name, state.pos, equals + 1, compound);
   }
   const cell = lookupCell(scopes, name);
   if (cell === undefined) {

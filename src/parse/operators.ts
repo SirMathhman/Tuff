@@ -16,6 +16,7 @@ import {
 } from "../errors";
 import {
   applyTop,
+  combine,
   closeGroup,
   isComparison,
   precedence,
@@ -124,15 +125,26 @@ function closeBinding(
     ) {
       return ownerBorrowed(binding.where, binding.name, true);
     }
-    if (cell !== undefined && typeof cell.value !== typeof value) {
+    let next = value;
+    if (binding.operator !== undefined && cell !== undefined) {
+      const combined = combine(
+        cell.value,
+        binding.operator,
+        value,
+        binding.where,
+      );
+      if (typeof combined === "object") return combined;
+      next = combined;
+    }
+    if (cell !== undefined && typeof cell.value !== typeof next) {
       return typeMismatch(
         binding.where,
         binding.name,
         typeof cell.value,
-        typeof value,
+        typeof next,
       );
     }
-    if (cell !== undefined && !lenient) cell.value = value;
+    if (cell !== undefined && !lenient) cell.value = next;
   } else {
     const cell =
       binding.target === undefined

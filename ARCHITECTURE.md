@@ -6,11 +6,11 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`, and a braced body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it; a sign after such a block starts a new operand. A program ending in `let` is 0. Blocks `{ ... }` scope bindings.
+`let [mut] NAME = expression;` binds an ASCII name; `let` is reserved. `NAME = expression;` and `NAME op= expression;` (`op` is `+ - * /`) reassign a `let mut` name at a statement start, keeping its type. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it; a sign then starts an operand. A program ending in `let` is 0. Blocks `{ ... }` scope bindings.
 
 ### References
 
@@ -18,18 +18,13 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Every error there is reported, and assignments have no effect.
+The unchosen branch of an `if` is parsed for syntax only: its errors are reported, but its assignments have no effect.
 
 ### Results and errors
 
 Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`. A `fix` is an edit the grammar allows, so it never asks for something the same error forbids.
 
-### Examples
-
-- `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
-- `interpretTuff("let x = 1; let y = &x; *y")` returns `{ ok: true, value: 1 }`.
-
-## Structure
+### Structure
 
 ### Source files
 
@@ -65,11 +60,11 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### Lint rules
 
-ESLint adds local rules and restricted syntax to its recommended set (`eslint.config.ts`). `local/no-recursion` checks one file and can false-positive on method names.
+ESLint adds local and restricted-syntax rules to its recommended set (`eslint.config.ts`). `local/no-recursion` checks one file and can false-positive on method names.
 
 #### Size and naming
 
-Functions are capped at 100 lines, files at 500, and names need two characters. A directory may hold at most 10 files, subdirectories excluded (`scripts/max-files-per-dir.ts`). Exported top-level declarations need JSDoc, and exported types used by exports must be exported. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
+Functions are capped at 100 lines, files at 500, and names need two characters. A directory may hold at most 10 files, subdirectories excluded (`scripts/max-files-per-dir.ts`). Exported declarations need JSDoc, and types they use must be exported. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
 
 ## Potential Problems
 
@@ -91,7 +86,7 @@ Failures and values share a return type, told apart by `typeof === "object"`. Th
 
 ### Numeric precision
 
-Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently: `9007199254740993 + 0` gives `9007199254740992`. Results can overflow to `Infinity` with no `TuffError`, and `1 / -2` gives `-0`, which the REPL prints.
+Numbers are doubles, so values above `Number.MAX_SAFE_INTEGER` round silently (`9007199254740993 + 0` gives `9007199254740992`), and overflow yields `Infinity` with no `TuffError`.
 
 ### Reference aliasing
 
@@ -99,7 +94,7 @@ A live `&mut` blocks reads and writes of its owner, and any live reference block
 
 ### Misleading fixes
 
-Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. Missing-name errors name the preceding token, as in `*3`.
+Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. An else-less `if` in a braced body that ends in a statement reports `blockEndsWithStatement`, whose fix omits the missing `else`. An assignment missing `;` can get `let` wording.
 
 ## Security Concerns
 
@@ -119,7 +114,7 @@ The REPL reads each stdin line with no length limit. No maximum source length or
 
 ### Known gaps
 
-Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores. Also missing: REPL bindings across lines, and REPL output of `why` and `fix`.
+Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores. Also missing: statement-level `if` with `else` whose braces end in assignments, REPL bindings across lines, and REPL output of `why` and `fix`.
 
 ### Module names
 
@@ -139,4 +134,4 @@ Replace `number` with `bigint` or a decimal type. Report line and column in `whe
 
 ## Performance
 
-Each token and variable access scans stacks and scopes. Profile first.
+Token and variable access scans stacks and scopes. Profile first.

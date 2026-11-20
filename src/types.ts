@@ -104,6 +104,8 @@ export interface BindingEntry {
   assign: boolean;
   /** Offset of the variable name. */
   where: number;
+  /** The operator of a compound assignment such as `+=`, if any. */
+  operator?: Operator;
   /** The variable a `let` reference points to, once `&name` is read. */
   target?: Cell;
   /** Whether the reference is a `&mut` one. */
