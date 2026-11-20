@@ -1,6 +1,7 @@
 import type { Failure, TuffError } from "../errors";
 import {
   Bracket,
+  caseAfterWildcard,
   expectedCase,
   expectedClose,
   expectedSemicolon,
@@ -11,7 +12,7 @@ import {
 import { applySign, reduceOperators } from "../operations";
 import { readDigits, readName, skipSpaces } from "../scanner";
 import type { MatchEntry, ParserState, StackEntry, Value } from "../types";
-import { EntryKind, GroupPart, Step } from "../types";
+import { EntryKind, GroupPart, MatchChoice, Step } from "../types";
 import { completeBranch, innermostNonOperator, isLenient } from "./helpers";
 import { matchingClose } from "./loops";
 
@@ -63,7 +64,7 @@ export function startMatch(
     scrutinee: undefined,
     armOpen: false,
     skipping: false,
-    chosen: false,
+    choice: MatchChoice.None,
     result: undefined,
   });
   state.pos = open;
@@ -109,12 +110,17 @@ export function startArm(
   const match = openMatch(ops);
   if (match === undefined) return unexpectedSemicolon(state.pos);
   const literalStart = skipSpaces(source, keywordEnd);
+  if (match.choice === MatchChoice.Wildcard)
+    return caseAfterWildcard(literalStart);
   const wordEnd = readName(source, literalStart);
   const word = source.slice(literalStart, wordEnd);
   const digitsEnd = readDigits(source, literalStart);
-  let literal: Value;
+  const wildcard = source.charAt(literalStart) === "_";
+  let literal: Value | undefined;
   let end: number;
-  if (word === "true" || word === "false") {
+  if (wildcard) {
+    end = literalStart + 1;
+  } else if (word === "true" || word === "false") {
     literal = word === "true";
     end = wordEnd;
   } else if (digitsEnd > literalStart) {
@@ -127,10 +133,12 @@ export function startArm(
   if (source.slice(arrow, arrow + 2) !== "=>") {
     return expectedText(source, arrow, "=>");
   }
-  const taken = !match.chosen && literal === match.scrutinee;
+  const open = match.choice === MatchChoice.None;
+  const taken = open && (wildcard || literal === match.scrutinee);
   match.armOpen = true;
   match.skipping = !taken;
-  if (taken) match.chosen = true;
+  if (taken)
+    match.choice = wildcard ? MatchChoice.Wildcard : MatchChoice.Literal;
   if (match.skipping) state.skipDepth++;
   state.pos = skipSpaces(source, arrow + 2);
   state.expectOperand = true;
@@ -207,14 +215,15 @@ export function closeMatchBody(
   if (match.armOpen) {
     return expectedSemicolon(source, closePos, "'case' arm");
   }
-  if (!match.chosen && !isLenient(state)) return noMatch(match.where);
+  const chosen = match.choice !== MatchChoice.None;
+  if (!chosen && !isLenient(state)) return noMatch(match.where);
   scopes.pop();
   ops.pop();
   ops.pop();
   state.depth--;
   state.pos = closePos + 1;
   flags.atStatementStart = false;
-  const value = match.chosen ? (match.result ?? 0) : 0;
+  const value = chosen ? (match.result ?? 0) : 0;
   const signed = applySign(value, match.sign, match.where);
   if (typeof signed === "object") return signed;
   values.push(signed);

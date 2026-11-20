@@ -743,6 +743,21 @@ export function expectedCase(
 }
 
 /**
+ * Reports a case written after the wildcard `_`, which would never run.
+ *
+ * @param where - the offset of the case keyword.
+ * @returns a failure describing the unreachable case.
+ */
+export function caseAfterWildcard(where: number): Failure<TuffError> {
+  return fail(
+    "A 'case' cannot follow the '_' case",
+    where,
+    "The '_' case matches every value, so a case after it would never run.",
+    "Move '_' to the last case, or remove the case after it.",
+  );
+}
+
+/**
  * Reports a match whose value matches none of its cases.
  *
  * @param where - the offset of the `match` keyword.

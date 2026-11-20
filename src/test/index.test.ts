@@ -394,3 +394,10 @@ test('interpretTuff("let x = match (true) { case true => 1; case false => 2; }; 
     ),
   ).toEqual({ ok: true, value: 1 });
 });
+
+test('interpretTuff("let x = match (true) { case _ => 1; }; x") => 1', () => {
+  expect(interpretTuff("let x = match (true) { case _ => 1; }; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

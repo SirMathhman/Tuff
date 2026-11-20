@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first case whose literal equals `v`. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. A statement call may end with `;`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case; `case _` must be last. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. A statement call may end with `;`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
 
 ### Statements and scope
 
@@ -18,7 +18,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only: its errors are reported, but its assignments have no effect.
+The unchosen branch of an `if`, and each unchosen `case` of a `match`, is parsed for syntax only: its errors are reported, but its assignments have no effect. An unmatched `match` is not reported there.
 
 ### Results and errors
 
@@ -28,11 +28,11 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Source files
 
-- `src/scanner.ts`: character classes, token readers, and `Operator`.
+- `src/scanner.ts`: character classes, token readers, bracket matching, and `Operator`.
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/parse/`: `helpers.ts` (shared lookups and transitions), `operands.ts` (with `*`), `operators.ts`, `references.ts` (`&`), `calls.ts` (`fn`), and `loops.ts` (`while`).
+- `src/parse/`: `helpers.ts` (shared lookups and transitions), `operands.ts` (with `*`), `operators.ts`, `references.ts` (`&`), `calls.ts` (`fn`), `loops.ts` (`while`), and `matches.ts` (`match`, `case`).
 - `src/index.ts`: `interpretTuff`. `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/`: `bun:test` suites and shared messages.
 

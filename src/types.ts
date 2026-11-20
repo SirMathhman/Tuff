@@ -260,6 +260,18 @@ export interface LoopEntry {
 }
 
 /**
+ * How a match's case was chosen: not yet, by a literal, or by the wildcard `_`.
+ */
+export enum MatchChoice {
+  /** No case has been chosen yet. */
+  None = "none",
+  /** A case whose literal equals the scrutinee was chosen. */
+  Literal = "literal",
+  /** The wildcard `_` case was chosen. */
+  Wildcard = "wildcard",
+}
+
+/**
  * A match expression in progress: its scrutinee, and which case has been chosen.
  */
 export interface MatchEntry {
@@ -279,8 +291,8 @@ export interface MatchEntry {
   armOpen: boolean;
   /** Whether the open case is skipped, because an earlier case was chosen or the match is unchosen. */
   skipping: boolean;
-  /** Whether a case has been chosen. */
-  chosen: boolean;
+  /** Which case, if any, has been chosen. */
+  choice: MatchChoice;
   /** The value of the chosen case. */
   result: Value | undefined;
 }
