@@ -460,6 +460,31 @@ test('interpretTuff("let mut x = 0; let y = { x = 1; x }; x") => 1', () => {
   });
 });
 
+test('interpretTuff("{ let x = 1; { 2 } }") => 2', () => {
+  expect(interpretTuff("{ let x = 1; { 2 } }")).toEqual({ ok: true, value: 2 });
+});
+
+test('interpretTuff("let mut x = 1; { let mut x = 5; x = 2; x } + x") => 3', () => {
+  expect(
+    interpretTuff("let mut x = 1; { let mut x = 5; x = 2; x } + x"),
+  ).toEqual({
+    ok: true,
+    value: 3,
+  });
+});
+
+test('interpretTuff("let mut x = 1; { let x = 5; x = 2; } x") => error', () => {
+  expect(interpretTuff("let mut x = 1; { let x = 5; x = 2; } x")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign to 'x' because it was not declared with 'let mut'",
+      where: 28,
+      why: "Only variables declared with 'let mut' can be reassigned.",
+      fix: "Declare 'x' with 'let mut x = ...;' to allow reassignment.",
+    },
+  });
+});
+
 test('interpretTuff("1 - -2") => 3', () => {
   expect(interpretTuff("1 - -2")).toEqual({ ok: true, value: 3 });
 });
