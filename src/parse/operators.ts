@@ -92,15 +92,21 @@ function pushOperator(
   return undefined;
 }
 
+// Reports a missing ';' after the pending let or assignment, if one is open.
+function missingSemicolon(state: ParserState): Failure<TuffError> | undefined {
+  const pending = innermostNonOperator(state.ops);
+  if (pending?.kind !== EntryKind.Binding) return undefined;
+  return expectedSemicolon(state.source, state.pos, pending.assign);
+}
+
 function endOfInput(state: ParserState): Failure<TuffError> | Step {
   const { source, ops } = state;
   const group = innermostGroup(ops);
   if (state.depth > 0 && group !== undefined) {
     return expectedClose(source, state.pos, group.bracket);
   }
-  if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
-    return expectedSemicolon(source, state.pos);
-  }
+  const missing = missingSemicolon(state);
+  if (missing !== undefined) return missing;
   return Step.End;
 }
 
@@ -186,9 +192,8 @@ function closeBracket(
   ch: string,
 ): Failure<TuffError> | Step {
   const { source, ops, values, scopes, flags } = state;
-  if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
-    return expectedSemicolon(source, state.pos);
-  }
+  const missing = missingSemicolon(state);
+  if (missing !== undefined) return missing;
   const group = innermostGroup(ops);
   if (group === undefined) return expectedOperator(source, state.pos, true);
   if (ch !== closerFor(group.bracket)) {
@@ -256,9 +261,8 @@ export function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
   const op = toOperator(source, state.pos);
   if (op === undefined) {
-    if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
-      return expectedSemicolon(source, state.pos);
-    }
+    const missing = missingSemicolon(state);
+    if (missing !== undefined) return missing;
     return expectedOperator(source, state.pos, state.depth > 0);
   }
   return pushOperator(state, op) ?? Step.Continue;

@@ -24,7 +24,7 @@ The unchosen branch of an `if` is parsed for syntax only: its errors are reporte
 
 Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`. A `fix` is an edit the grammar allows, so it never asks for something the same error forbids.
 
-### Structure
+## Structure
 
 ### Source files
 
@@ -36,11 +36,11 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
 - `src/parse/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/parse/operands.ts`, `src/parse/operators.ts`: parse steps, with `*` in `operands.ts`. `src/parse/references.ts`: `&` steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL (`bun run repl`).
-- `src/test/*.test.ts`: `bun:test` suites.
+- `src/test/*.test.ts`: `bun:test` suites. `src/test/test-messages.ts` holds shared expected messages.
 
 ### Dependency direction
 
-`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
@@ -48,7 +48,7 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`.
 
 #### Stacks
 
-The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps from name to cell, searched innermost first. A reference cell has a target cell and no value of its own. A skip counter counts unchosen branches.
+Value, operator, and scope stacks, plus a skip counter for unchosen branches. No call frames are used.
 
 #### Precedence
 
@@ -92,9 +92,9 @@ Numbers are doubles, so values above `Number.MAX_SAFE_INTEGER` round silently (`
 
 A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `src/parse/helpers.ts`).
 
-### Misleading fixes
+### Cross-file cycles
 
-Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. An assignment missing `;` can get `let` wording.
+The recursion lint rule sees one file, so import cycles between files go unchecked.
 
 ## Security Concerns
 
@@ -111,6 +111,10 @@ Explicit stacks mean nesting costs memory, not call frames. Future I/O must go b
 The REPL reads each stdin line with no length limit. No maximum source length or nesting depth is enforced, so deep input can use a lot of memory.
 
 ## Future Work
+
+### Cycle check
+
+Lint rejects import cycles between project files, before the module split.
 
 ### Known gaps
 

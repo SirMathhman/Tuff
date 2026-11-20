@@ -244,16 +244,20 @@ export function expectedEquals(
  * Reports a statement that does not end with `;`.
  * @param source - the program being parsed.
  * @param where - the offset where `;` should appear.
+ * @param assign - whether the unfinished statement is an assignment rather than a let.
  * @returns a failure describing the missing `;`.
  */
 export function expectedSemicolon(
   source: string,
   where: number,
+  assign: boolean,
 ): Failure<TuffError> {
   return fail(
     `Expected ';' but found ${describe(source.charAt(where))}`,
     where,
-    "Every 'let' statement must end with ';'.",
+    assign
+      ? "Every assignment must end with ';'."
+      : "Every 'let' statement must end with ';'.",
     "Add ';' after the value.",
   );
 }
@@ -284,6 +288,25 @@ export function notMutable(where: number, name: string): Failure<TuffError> {
     where,
     "Only variables declared with 'let mut' can be reassigned.",
     `Declare '${name}' with 'let mut ${name} = ...;' to allow reassignment.`,
+  );
+}
+
+/**
+ * Reports an assignment to a reference name, which cannot be given another variable.
+ *
+ * @param where - the offset of the reference's name.
+ * @param name - the reference being assigned.
+ * @returns a failure describing the reassignment.
+ */
+export function referenceReassign(
+  where: number,
+  name: string,
+): Failure<TuffError> {
+  return fail(
+    `Cannot reassign reference '${name}'`,
+    where,
+    "A reference always points to the same variable, so it cannot be given another one.",
+    "Declare a new variable with a different name instead.",
   );
 }
 

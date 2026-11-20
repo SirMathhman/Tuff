@@ -12,6 +12,7 @@ import {
   notReference,
   ownerBorrowed,
   readOnlyReference,
+  referenceReassign,
   referenceUse,
   reservedName,
   undefinedName,
@@ -133,6 +134,7 @@ function startAssign(
   const { source, ops, scopes, flags } = state;
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);
+  if (cell.target !== undefined) return referenceReassign(nameStart, name);
   if (!cell.mutable) return notMutable(nameStart, name);
   ops.push({
     kind: EntryKind.Binding,

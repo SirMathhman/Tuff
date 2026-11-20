@@ -116,3 +116,15 @@ test('interpretTuff("let mut x = 0; { x = 1; } * 2") => error without let', () =
     },
   });
 });
+
+test('interpretTuff("let x = 1; let r = &x; r = 2; r") => error without let mut', () => {
+  expect(interpretTuff("let x = 1; let r = &x; r = 2; r")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot reassign reference 'r'",
+      where: 23,
+      why: "A reference always points to the same variable, so it cannot be given another one.",
+      fix: "Declare a new variable with a different name instead.",
+    },
+  });
+});

@@ -499,3 +499,45 @@ test('interpretTuff("if (false) { let x = 0; x = 1; x } else { 3 }") => error', 
     },
   });
 });
+
+test('interpretTuff("let mut x = 0; if (true) { if (true) { x = 7; } } x") => error', () => {
+  expect(
+    interpretTuff("let mut x = 0; if (true) { if (true) { x = 7; } } x"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Expected 'else' but found '}'",
+      where: 48,
+      why: "An 'if' expression needs an 'else' branch so that it always has a value.",
+      fix: "Add 'else' followed by a value.",
+    },
+  });
+});
+
+test('interpretTuff("let mut x = 0; if (false) { x = 1; if (true) { x = 2 } } x") => error', () => {
+  expect(
+    interpretTuff("let mut x = 0; if (false) { x = 1; if (true) { x = 2 } } x"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Expected ';' but found '}'",
+      where: 53,
+      why: "Every assignment must end with ';'.",
+      fix: "Add ';' after the value.",
+    },
+  });
+});
+
+test('interpretTuff("let mut x = 0; if (true) { x = 1; } x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let mut x = 0; if (false) { x = 1; } x") => 0', () => {
+  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } x")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});

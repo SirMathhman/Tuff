@@ -112,7 +112,8 @@ export function operandRef(
   }
   const after = skipSpaces(source, end);
   if (carrier === undefined) {
-    if (source.charAt(after) !== ";") return expectedSemicolon(source, after);
+    if (source.charAt(after) !== ";")
+      return expectedSemicolon(source, after, false);
     binding.target = cell;
     binding.exclusive = exclusive;
   } else {
