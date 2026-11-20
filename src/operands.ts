@@ -6,9 +6,14 @@ import {
   expectedEquals,
   expectedIfParen,
   expectedNumber,
+  expectedSemicolon,
   expectedVariableName,
   letNotAllowed,
+  mutableReference,
   notMutable,
+  notReference,
+  referenceNotLet,
+  referenceUse,
   reservedName,
   undefinedName,
   unexpectedSemicolon,
@@ -168,7 +173,54 @@ function operandName(
   if (cell === undefined) {
     return undefinedName(state.pos, name);
   }
+  if (cell.target !== undefined) return referenceUse(state.pos, name);
   const value = applySign(cell.value, sign, state.pos, isLenient(state));
+  if (typeof value === "object") return value;
+  return pushOperand(state, value, end);
+}
+
+// Reads `&NAME`, which must be the whole value of a `let`. The reference is recorded
+// on the binding, and a placeholder goes on the value stack for the statement end.
+function operandRef(
+  state: ParserState,
+  signed: boolean,
+): Failure<TuffError> | Step {
+  const { source, ops, scopes } = state;
+  const top = ops[ops.length - 1];
+  if (signed || top?.kind !== EntryKind.Binding || top.assign) {
+    return referenceNotLet(state.pos);
+  }
+  if (top.mutable) return mutableReference(top.where, top.name);
+  const nameStart = skipSpaces(source, state.pos + 1);
+  const end = readName(source, nameStart);
+  if (end === nameStart) return expectedVariableName(source, nameStart);
+  const name = source.slice(nameStart, end);
+  const cell = lookupCell(scopes, name);
+  if (cell === undefined) return undefinedName(nameStart, name);
+  if (cell.target !== undefined) return referenceUse(nameStart, name);
+  const semicolon = skipSpaces(source, end);
+  if (source.charAt(semicolon) !== ";") {
+    return expectedSemicolon(source, semicolon);
+  }
+  top.target = cell;
+  return pushOperand(state, 0, end);
+}
+
+// Reads `*NAME`, which yields the value of the variable the reference points to.
+function operandDeref(
+  state: ParserState,
+  sign: number,
+): Failure<TuffError> | Step {
+  const { source, scopes } = state;
+  const nameStart = skipSpaces(source, state.pos + 1);
+  const end = readName(source, nameStart);
+  if (end === nameStart) return expectedVariableName(source, nameStart);
+  const name = source.slice(nameStart, end);
+  const cell = lookupCell(scopes, name);
+  if (cell === undefined) return undefinedName(nameStart, name);
+  const target = cell.target;
+  if (target === undefined) return notReference(nameStart, name);
+  const value = applySign(target.value, sign, state.pos, isLenient(state));
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
 }
@@ -233,6 +285,8 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
   }
   const bracket = toBracket(ch);
   if (bracket !== undefined) return openBracket(state, bracket, sign);
+  if (ch === "&") return operandRef(state, signed);
+  if (ch === "*") return operandDeref(state, sign);
   if (isLetter(ch)) return operandName(state, sign, signed);
   return operandNumber(state, sign);
 }

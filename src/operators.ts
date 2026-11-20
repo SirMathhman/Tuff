@@ -133,7 +133,10 @@ function closeBinding(
     }
     if (cell !== undefined && !lenient) cell.value = value;
   } else {
-    const cell = { value, mutable: binding.mutable };
+    const cell =
+      binding.target === undefined
+        ? { value, mutable: binding.mutable }
+        : { value, mutable: false, target: binding.target };
     const scope = scopes[scopes.length - 1];
     scope?.set(binding.name, cell);
   }

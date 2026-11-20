@@ -86,6 +86,8 @@ export interface BindingEntry {
   assign: boolean;
   /** Offset of the variable name. */
   where: number;
+  /** The variable a `let` reference points to, once `&name` is read. */
+  target?: Cell;
 }
 
 /**
@@ -121,6 +123,8 @@ export interface Cell {
   value: Value;
   /** Whether the variable may be reassigned. */
   mutable: boolean;
+  /** For a reference, the variable it points to; its value is unused. */
+  target?: Cell;
 }
 
 /**

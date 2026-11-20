@@ -400,6 +400,13 @@ test('interpretTuff("if (false) { 1 / { let x = 0; x }} else 1") => error', () =
   });
 });
 
+test('interpretTuff("let x = 1; let y = &x; *y") => 1', () => {
+  expect(interpretTuff("let x = 1; let y = &x; *y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,
