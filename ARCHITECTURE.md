@@ -6,11 +6,11 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case (`case _` must be last), or is an error at `match` if none matches. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, `NAME[e]`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case (`case _` must be last), or is an error at `match` if none matches. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds an ASCII name; `let` is reserved. `NAME = expression;` and `NAME op= expression;` (`op` is `+ - * /`) reassign a `let mut` name at a statement start, keeping its type. A block's value is its final expression, unless a top-level block ends in an assignment (discarded). A program ending in `let` is 0. `while (c) { b }` repeats `b` while boolean `c` holds. It has no value, so a block cannot end in it.
+`let [mut] NAME = expression;` binds an ASCII name; `let` is reserved. `let a = [e, ...];` makes an array of one type, and `let b = a;` moves it. `NAME = expression;` and `NAME op= expression;` (`op` is `+ - * /`) reassign a `let mut` name at a statement start, keeping its type. A block's value is its final expression, unless a top-level block ends in an assignment (discarded). A program ending in `let` is 0. `while (c) { b }` repeats `b` while boolean `c` holds. It has no value, so a block cannot end in it.
 
 ### References
 
@@ -72,7 +72,7 @@ Steps are capped at 200,000. Each call and loop pass reparses its body. Both sha
 
 ### Failure detection
 
-Failures and values share a return type, told apart by `typeof === "object"`. This holds only while values are numbers and booleans.
+Failures and values share a return type, told apart by `typeof === "object"`.
 
 ### Numeric precision
 
@@ -116,4 +116,4 @@ Give `TuffError` a kind enum, so tests match kinds rather than message text. Spl
 
 ## Performance
 
-Each loop pass rescans its text. Variable access scans stacks and scopes. Call depth scans the operator stack; a counter would avoid that. Profile first.
+Each loop pass rescans its text. Variable access scans stacks and scopes. Profile first.

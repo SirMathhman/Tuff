@@ -7,6 +7,8 @@ import {
   expectedIfParen,
   expectedNumber,
   expectedVariableName,
+  arrayMoved,
+  arrayNotUsable,
   letNotAllowed,
   notAFunction,
   notMutable,
@@ -23,6 +25,7 @@ import { applySign } from "../operations";
 import { operandRef } from "./references";
 import { startCall, startFn } from "./calls";
 import { loopPartAt, startWhile } from "./loops";
+import { openArray, openIndex } from "./arrays";
 import { inMatchBody, matchPartAt, startArm, startMatch } from "./matches";
 import {
   Operator,
@@ -159,6 +162,7 @@ function startAssign(
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);
   if (cell.target !== undefined) return referenceReassign(nameStart, name);
+  if (cell.items !== undefined) return arrayNotUsable(nameStart, name);
   if (!cell.mutable) return notMutable(nameStart, name);
   ops.push({
     kind: EntryKind.Binding,
@@ -223,6 +227,10 @@ function operandName(
   if (cell === undefined) {
     return undefinedName(state.pos, name);
   }
+  if (cell.moved === true) return arrayMoved(state.pos, name);
+  if (cell.items !== undefined) {
+    return arrayOperand(state, cell, name, sign, end);
+  }
   if (cell.func !== undefined) {
     return startCall(state, name, state.pos, end, cell.func, sign);
   }
@@ -286,6 +294,34 @@ function operandDeref(
   const value = applySign(target.value, sign, state.pos);
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
+}
+
+// Reads an array name: an index into it, or a let that moves it into a new name.
+function arrayOperand(
+  state: ParserState,
+  cell: Cell,
+  name: string,
+  sign: number,
+  end: number,
+): Failure<TuffError> | Step {
+  const { source, ops } = state;
+  const next = skipSpaces(source, end);
+  const items = cell.items ?? [];
+  if (source.charAt(next) === "[") {
+    return openIndex(state, items, sign, next);
+  }
+  const top = ops[ops.length - 1];
+  if (
+    top?.kind === EntryKind.Binding &&
+    !top.assign &&
+    sign === 1 &&
+    source.charAt(next) === ";"
+  ) {
+    top.items = items;
+    cell.moved = true;
+    return pushOperand(state, 0, end);
+  }
+  return arrayNotUsable(state.pos, name);
 }
 
 function operandNumber(
@@ -360,6 +396,8 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
     state.pos++;
     ch = source.charAt(state.pos);
   }
+  if (ch === "[")
+    return signed ? expectedNumber(source, state.pos) : openArray(state);
   const bracket = toBracket(ch);
   if (bracket !== undefined) return openBracket(state, bracket, sign);
   if (ch === "&") return operandRef(state, signed);

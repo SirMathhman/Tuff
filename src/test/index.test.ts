@@ -401,3 +401,9 @@ test('interpretTuff("let x = match (true) { case _ => 1; }; x") => 1', () => {
     value: 1,
   });
 });
+
+test('interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 6', () => {
+  expect(
+    interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+  ).toEqual({ ok: true, value: 6 });
+});

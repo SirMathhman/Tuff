@@ -41,6 +41,7 @@ import {
   borrowedBy,
 } from "./helpers";
 import { closeLoopBody, closeLoopCondition } from "./loops";
+import { closeSquare, nextElement, unclosedSquare } from "./arrays";
 import { closeMatchBody, closeMatchScrutinee, finishArm } from "./matches";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
@@ -110,6 +111,8 @@ function endOfInput(state: ParserState): Failure<TuffError> | Step {
   }
   const missing = missingSemicolon(state);
   if (missing !== undefined) return missing;
+  const unclosed = unclosedSquare(state);
+  if (unclosed !== undefined) return unclosed;
   return Step.End;
 }
 
@@ -156,14 +159,16 @@ function closeBinding(
     if (cell !== undefined && !lenient) cell.value = next;
   } else {
     const cell =
-      binding.target === undefined
-        ? { value, mutable: binding.mutable }
-        : {
-            value,
-            mutable: false,
-            target: binding.target,
-            exclusive: binding.exclusive,
-          };
+      binding.items !== undefined
+        ? { value: 0, mutable: binding.mutable, items: binding.items }
+        : binding.target === undefined
+          ? { value, mutable: binding.mutable }
+          : {
+              value,
+              mutable: false,
+              target: binding.target,
+              exclusive: binding.exclusive,
+            };
     const scope = scopes[scopes.length - 1];
     scope?.set(binding.name, cell);
   }
@@ -197,6 +202,8 @@ function closeBracket(
   const { source, ops, values, scopes, flags } = state;
   const missing = missingSemicolon(state);
   if (missing !== undefined) return missing;
+  const unclosed = unclosedSquare(state);
+  if (unclosed !== undefined) return unclosed;
   const group = innermostGroup(ops);
   if (group === undefined) return expectedOperator(source, state.pos, true);
   if (ch !== closerFor(group.bracket)) {
@@ -270,6 +277,8 @@ export function stepOperator(state: ParserState): Failure<TuffError> | Step {
   if (pending?.kind === EntryKind.If) return awaitElse(state, pending);
   if (state.pos === source.length) return endOfInput(state);
   const ch = source.charAt(state.pos);
+  if (ch === ",") return nextElement(state);
+  if (ch === "]") return closeSquare(state);
   if (ch === ";") {
     if (
       pending?.kind === EntryKind.Group &&

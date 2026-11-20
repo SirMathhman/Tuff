@@ -19,6 +19,10 @@ export enum EntryKind {
   Loop = "loop",
   /** A match expression in progress. */
   Match = "match",
+  /** An array literal in progress. */
+  Array = "array",
+  /** An index into an array in progress. */
+  Index = "index",
 }
 
 /**
@@ -104,6 +108,8 @@ export interface GroupEntry {
 export interface BindingEntry {
   /** Discriminates this entry as a binding. */
   kind: EntryKind.Binding;
+  /** The array a let binds, or moves from another name. */
+  items?: Value[];
   /** The variable name. */
   name: string;
   /** Whether the variable was declared with let mut. */
@@ -156,7 +162,9 @@ export type StackEntry =
   | IfEntry
   | CallEntry
   | LoopEntry
-  | MatchEntry;
+  | MatchEntry
+  | ArrayEntry
+  | IndexEntry;
 
 /**
  * A variable: its value, and whether it was declared with `let mut`.
@@ -172,6 +180,10 @@ export interface Cell {
   exclusive?: boolean;
   /** For a function, its body and the variables visible where it was declared. */
   func?: FuncDef;
+  /** For an array, its elements. */
+  items?: Value[];
+  /** Whether an array was moved away by a let, so this name may not be used. */
+  moved?: boolean;
 }
 
 /**
@@ -269,6 +281,32 @@ export enum MatchChoice {
   Literal = "literal",
   /** The wildcard `_` case was chosen. */
   Wildcard = "wildcard",
+}
+
+/**
+ * An array literal in progress: the elements read so far.
+ */
+export interface ArrayEntry {
+  /** Discriminates this entry as an array literal. */
+  kind: EntryKind.Array;
+  /** Offset of the opening bracket. */
+  where: number;
+  /** The elements read so far. */
+  items: Value[];
+}
+
+/**
+ * An index into an array in progress, waiting for its closing bracket.
+ */
+export interface IndexEntry {
+  /** Discriminates this entry as an index. */
+  kind: EntryKind.Index;
+  /** Offset of the opening bracket. */
+  where: number;
+  /** The sign written before the indexed name. */
+  sign: number;
+  /** The elements of the array being indexed. */
+  items: Value[];
 }
 
 /**
