@@ -14,21 +14,9 @@ import {
 } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
-import type { NameRefs } from "./scope.ts";
+import type { Frame, NameRefs } from "./scope.ts";
 import type { Span } from "./span.ts";
-
-/** A pointer to one binding's slot in a block's frame. It stays live while that block is open. */
-interface Reference {
-  /** The frame of the block that declares the binding. */
-  target: Value[];
-  /** The binding's position within that frame. */
-  index: number;
-  /** Whether the reference may be written through (`&mut`). */
-  mutable: boolean;
-}
-
-/** A runtime value: a number, a boolean, or a reference. */
-type Value = number | boolean | Reference;
+import { isReference, type Value } from "./value.ts";
 
 type OperatorError =
   | TuffErrorKind.DivisionByZero
@@ -42,7 +30,7 @@ interface Env {
   /** The binding of every name use, from the resolver. */
   refs: NameRefs;
   /** Values of the open blocks, outermost first; each block's values are in binding order. */
-  frames: Value[][];
+  frames: Frame[];
 }
 
 function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
@@ -55,10 +43,6 @@ const OPERATORS: Record<Operator, BinaryOp> = {
   [Operator.Multiply]: (a, b) => finite(a * b),
   [Operator.Divide]: (a, b) => (b === 0 ? err(TuffErrorKind.DivisionByZero) : ok(Math.trunc(a / b))),
 };
-
-function isReference(value: Value): value is Reference {
-  return typeof value === "object";
-}
 
 /**
  * Applies an arithmetic operator. Both operands must be numbers.
@@ -220,7 +204,7 @@ function evaluateBranch(branch: Expr, env: Env, chosen: boolean): Result<Value, 
  * @param frames - The open blocks' values, outermost first.
  * @param snapshot - Copies of the same blocks' values, taken earlier.
  */
-function restoreFrames(frames: Value[][], snapshot: Value[][]): void {
+function restoreFrames(frames: Frame[], snapshot: Frame[]): void {
   for (const [index, frame] of frames.entries()) {
     const saved = snapshot[index];
     if (saved === undefined) continue;
@@ -244,7 +228,7 @@ function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
 }
 
 function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
-  const frame: Value[] = [];
+  const frame: Frame = [];
   env.frames.push(frame);
   const result = evaluateBlockBody(block, env, frame);
   env.frames.pop();
@@ -255,7 +239,7 @@ function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
   return err({ kind: TuffErrorKind.ReferenceEscapes, span: spanOf(block) });
 }
 
-function evaluateBlockBody(block: BlockNode, env: Env, frame: Value[]): Result<Value, TuffError> {
+function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame): Result<Value, TuffError> {
   for (const statement of block.statements) {
     if (statement.kind === StatementKind.Let) {
       const value = evaluateIn(statement.value, env);

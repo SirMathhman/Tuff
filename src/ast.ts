@@ -163,8 +163,7 @@ export interface BlockNode {
   result: Expr | undefined;
 }
 
-/** Any expression node. */
-/** A conditional expression. Only the branch the condition selects is evaluated. */
+/** A conditional expression. Both branches are evaluated; the condition selects the value. */
 export interface IfNode {
   /** Always `NodeKind.If`. */
   kind: NodeKind.If;
