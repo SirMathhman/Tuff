@@ -13,11 +13,13 @@ src/
   lexer.ts          source -> token stream
   parser.ts         token stream -> AST
   ast.ts            AST node types (no logic): every expression and statement
-  scope.ts          Scope type, creation, and name lookup; Frame (the runtime slots of one open block); NameRef and NameRefs (the resolver's output); Env (the state of one evaluation). No evaluation
+  scope.ts          Frame<T> (the slots of one open block); NameRef and NameRefs (the resolver's output); name lookup. No evaluation
   value.ts          Value (number, boolean, or Reference) and Reference (a live pointer to one frame slot). Types and guards only
   resolver.ts       AST -> Result<void, TuffError>: checks every name is bound. Computes no values
   evaluator.ts      the recursion root of evaluation: evaluateIn walks the AST, blocks create scopes, operators are applied
-  branch.ts         conditionals and matches: evaluates the chosen and unchosen branches and undoes the unchosen one's writes. Receives the expression evaluator as a parameter (type Evaluate); never imports evaluator.ts
+  eval/env.ts       Env (the state of one evaluation: name bindings and open frames)
+  eval/span-of.ts   spanOf: the source span of an expression
+  eval/branch.ts    conditionals and matches: evaluates the chosen and unchosen branches and undoes the unchosen one's writes. Receives the expression evaluator as a parameter (type Evaluate); never imports evaluator.ts
   limits.ts         configurable limits (max depth, max steps, max source length)
 ```
 
@@ -27,13 +29,15 @@ Arrows mean "may import".
 
 ```
 index.ts       -> lexer.ts, parser.ts, resolver.ts, evaluator.ts, errors.ts, result.ts (evaluateTuff composes the stages; re-exports the public types)
-evaluator.ts   -> ast.ts, scope.ts, value.ts, branch.ts, errors.ts, result.ts (limits.ts once it exists)
-branch.ts      -> ast.ts, scope.ts, value.ts, errors.ts, result.ts (the Evaluate type only; never evaluator.ts)
+evaluator.ts   -> ast.ts, scope.ts, value.ts, eval/branch.ts, eval/env.ts, eval/span-of.ts, errors.ts, result.ts (limits.ts once it exists)
+eval/branch.ts -> ast.ts, scope.ts, value.ts, errors.ts, result.ts, eval/env.ts, eval/span-of.ts (never evaluator.ts)
+eval/env.ts   -> scope.ts, value.ts
+eval/span-of.ts -> ast.ts, span.ts
 value.ts       -> scope.ts (for the Frame type)
 resolver.ts    -> ast.ts, scope.ts, errors.ts, result.ts
 parser.ts      -> lexer.ts, ast.ts, errors.ts, result.ts, span.ts
 lexer.ts       -> errors.ts, result.ts, span.ts
-scope.ts       -> ast.ts (type only, for the NameRefs key); never value.ts, since value.ts imports Frame from here
+scope.ts       -> ast.ts (type only, for the NameRefs key); never value.ts, since value.ts imports Frame from here. Env lives in eval/env.ts for the same reason
 errors.ts      -> span.ts
 ast.ts         -> span.ts
 limits.ts      -> nothing (not yet created)
