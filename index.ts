@@ -125,6 +125,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   program    := statement* expression
  *   block      := "{" statement* expression "}"
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" factor "=" expression ";"
+ *               | "{" statement* "}"   (a block with no final expression)
  *   expression := sum ("==" sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
@@ -595,6 +596,22 @@ function kindOf(value: Value): string {
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
 function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
+  const problem = parseStatements(text, cursor);
+  if (problem !== undefined) {
+    return err(problem);
+  }
+  return parseExpression(text, cursor);
+}
+
+/**
+ * Parses the statements at the current position: declarations, assignments, and blocks
+ * that have no final expression.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the statements.
+ * @returns The first problem found, or undefined if all statements parsed.
+ */
+function parseStatements(text: string, cursor: Cursor): Problem | undefined {
   while (true) {
     const name = peekName(text, cursor);
     let problem: Problem | undefined;
@@ -604,14 +621,66 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
       problem = parseAssignment(text, cursor);
     } else if (name === "" && isDereferenceAssignment(text, peekStart(text, cursor))) {
       problem = parseDereferenceAssignment(text, cursor);
+    } else if (name === "" && isStatementBlock(text, cursor)) {
+      problem = parseStatementBlock(text, cursor);
     } else {
-      break;
+      return undefined;
     }
     if (problem !== undefined) {
-      return err(problem);
+      return problem;
     }
   }
-  return parseExpression(text, cursor);
+}
+
+/**
+ * Decides whether the block at the cursor is a statement: it must parse as statements
+ * with no final expression. The check is a dry run with assignments suppressed, and the
+ * cursor and scope are restored afterwards, so nothing takes effect.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, which is left unchanged.
+ * @returns True if the next significant character opens a block with no final expression.
+ */
+function isStatementBlock(text: string, cursor: Cursor): boolean {
+  if (peek(text, cursor) !== "{") {
+    return false;
+  }
+  const start = cursor.pos;
+  const savedDead = cursor.dead;
+  const savedScope = cursor.scope;
+  cursor.dead = true;
+  cursor.pos++;
+  cursor.scope = { vars: new Map(), parent: savedScope, depth: savedScope.depth + 1 };
+  const problem = parseStatements(text, cursor);
+  const isStatement = problem === undefined && peek(text, cursor) === "}";
+  cursor.pos = start;
+  cursor.dead = savedDead;
+  cursor.scope = savedScope;
+  return isStatement;
+}
+
+/**
+ * Parses a block used as a statement, running its statements in a new scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the block.
+ * @returns The first problem found, or undefined if the block parsed.
+ */
+function parseStatementBlock(text: string, cursor: Cursor): Problem | undefined {
+  peek(text, cursor);
+  cursor.pos++;
+  const outer = cursor.scope;
+  cursor.scope = { vars: new Map(), parent: outer, depth: outer.depth + 1 };
+  const problem = parseStatements(text, cursor);
+  cursor.scope = outer;
+  if (problem !== undefined) {
+    return problem;
+  }
+  if (peek(text, cursor) !== "}") {
+    return { offset: cursor.pos, expected: `"}"` };
+  }
+  cursor.pos++;
+  return undefined;
 }
 
 /**

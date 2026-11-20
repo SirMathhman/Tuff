@@ -149,6 +149,23 @@ test("interpretTuff rejects an if without else", () => {
   expect(interpretTuff("if (true) 2").ok).toBe(false);
 });
 
+test("interpretTuff('let mut x = 0; { x = 1; } x') => 1", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: consecutive and nested statement blocks", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } { x = x + 1; } x")).toEqual({ ok: true, value: 2 });
+  expect(interpretTuff("let mut x = 0; { { x = 1; } } x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: a statement block's assignments run once", () => {
+  expect(interpretTuff("let mut x = 0; { x = x + 1; x } * 2")).toEqual({ ok: true, value: 2 });
+});
+
+test("interpretTuff rejects a program that ends with a statement block", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; }").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });
