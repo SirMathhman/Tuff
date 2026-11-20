@@ -144,12 +144,7 @@ export function completeBranch(
     }
     ops.pop();
     attachRef(ops, entry.ref);
-    const result = applySign(
-      entry.value ?? 0,
-      entry.sign,
-      entry.where,
-      isLenient(state),
-    );
+    const result = applySign(entry.value ?? 0, entry.sign, entry.where);
     if (typeof result === "object") return result;
     values.push(result);
   }

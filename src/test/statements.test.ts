@@ -369,6 +369,30 @@ test('interpretTuff("if (true) 1 else { true + true }") => error', () => {
   });
 });
 
+test('interpretTuff("if (true) 1 else { - true }") => error', () => {
+  expect(interpretTuff("if (true) 1 else { - true }")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected a number, a variable, '(', or '{' but found whitespace",
+      where: 20,
+      why: "Every '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
+      fix: "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.",
+    },
+  });
+});
+
+test('interpretTuff("if (true) 1 else { -true }") => error', () => {
+  expect(interpretTuff("if (true) 1 else { -true }")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot apply a sign to a boolean",
+      where: 20,
+      why: "A sign can only change the value of a number.",
+      fix: "Remove the sign, or use a number.",
+    },
+  });
+});
+
 test('interpretTuff("if (true) 2 else (true + 1)") => error', () => {
   expect(interpretTuff("if (true) 2 else (true + 1)")).toEqual({
     ok: false,

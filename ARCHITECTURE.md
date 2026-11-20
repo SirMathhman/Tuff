@@ -18,7 +18,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Value errors there (signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero, boolean operands) are reported.
+The unchosen branch of an `if` is parsed for syntax only. Value errors there (non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero, boolean operands, signs on booleans) are reported.
 
 ### Results and errors
 
@@ -33,13 +33,13 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Source files
 
-Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at the root.
+Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`.
 
 - `src/scanner.ts`: character classes, token readers, and `Operator`.
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/helpers.ts`: shared lookups. `src/operands.ts`, `src/operators.ts`: parse steps. `src/references.ts`: `&` and `*` steps. `src/index.ts`: `interpretTuff`.
+- `src/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/operands.ts`, `src/operators.ts`: parse steps, with `*` in `operands.ts`. `src/references.ts`: `&` steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/*.test.ts`: `bun:test` suites.
 
@@ -53,7 +53,7 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at t
 
 #### Stacks
 
-The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps from name to cell, searched innermost first. A reference cell has a target cell and no value of its own. A skip counter counts unchosen branches; lenient behavior applies while it is above zero.
+The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps from name to cell, searched innermost first. A reference cell has a target cell and no value of its own. A skip counter counts unchosen branches.
 
 #### Precedence
 
@@ -61,11 +61,11 @@ A pending operator is applied first when it binds at least as tightly, so operat
 
 ### Quality gates
 
-Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` reports copy-paste duplicates (PMD on the PATH).
+Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` finds copy-paste duplicates.
 
 #### Lint rules
 
-ESLint adds local rules and restricted syntax on top of its recommended set (see `eslint.config.ts`). `local/no-recursion` counts direct and aliased calls within one file, allows a cycle through a parameter, and can false-positive on method names.
+ESLint adds local rules and restricted syntax to its recommended set (`eslint.config.ts`). `local/no-recursion` checks calls within one file and can false-positive on method names.
 
 #### Size and naming
 
@@ -119,7 +119,7 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Module names
 
-`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, and move `closeBinding` and `endStatement` from `operators.ts` into `statements.ts`. Then `src/` holds 10 files, the limit, so the next module needs a subdirectory.
+`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, move `closeBinding` and `endStatement` into `statements.ts`, and move the parse steps into `src/parse/`, since `src/` would otherwise hold 11 files.
 
 ### Parse tree
 
@@ -135,4 +135,4 @@ Replace `number` with `bigint` or a decimal type. Report line and column in `whe
 
 ## Performance
 
-Each token scans the operator stack and the scope chain, so cost grows with nesting depth as well as length. Profile before optimizing.
+Each token scans the operator stack. Each variable access scans the scope chain and every visible cell (`borrowedBy`). Profile before optimizing.

@@ -28,7 +28,7 @@ import {
 } from "./scanner";
 import type { Cell, ParserState } from "./types";
 import { EntryKind, IfPhase, Step } from "./types";
-import { borrowedBy, isLenient, lookupCell, pushOperand } from "./helpers";
+import { borrowedBy, lookupCell, pushOperand } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.
 const RESERVED_NAMES = new Set(["let", "mut", "true", "false", "if", "else"]);
@@ -142,12 +142,7 @@ function operandName(
   if (name === "if") return startIf(state, sign, end);
   if (name === "else") return elseNotAllowed(state.pos);
   if (name === "true" || name === "false") {
-    const literal = applySign(
-      name === "true",
-      sign,
-      state.pos,
-      isLenient(state),
-    );
+    const literal = applySign(name === "true", sign, state.pos);
     if (typeof literal === "object") return literal;
     return pushOperand(state, literal, end);
   }
@@ -163,7 +158,7 @@ function operandName(
   if (borrowedBy(scopes, cell, true)) {
     return ownerBorrowed(state.pos, name, false);
   }
-  const value = applySign(cell.value, sign, state.pos, isLenient(state));
+  const value = applySign(cell.value, sign, state.pos);
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
 }
@@ -213,7 +208,7 @@ function operandDeref(
   if (flags.atStatementStart && !signed && source.charAt(equals) === "=") {
     return startDerefAssign(state, name, nameStart, equals, cell, target);
   }
-  const value = applySign(target.value, sign, state.pos, isLenient(state));
+  const value = applySign(target.value, sign, state.pos);
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
 }

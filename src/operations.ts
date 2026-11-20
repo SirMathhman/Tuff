@@ -62,25 +62,21 @@ export function valueError<T extends Value | undefined>(
 }
 
 /**
- * Applies a sign to a value. Only numbers take a sign. In lenient mode, a value
- * in an unchosen branch is not an error, so a boolean becomes 0.
+ * Applies a sign to a value. Only numbers take a sign, so a negative sign on a boolean
+ * is an error, even in an unchosen branch.
  *
  * @param value - the value to sign.
  * @param sign - 1 or -1.
  * @param where - the offset of the value.
- * @param lenient - whether errors in an unchosen branch are suppressed.
  * @returns the signed value, or a failure for a negative sign on a boolean.
  */
 export function applySign(
   value: Value,
   sign: number,
   where: number,
-  lenient: boolean,
 ): Failure<TuffError> | Value {
   if (sign === 1) return value;
-  if (typeof value === "boolean") {
-    return valueError(lenient, booleanSign(where), 0);
-  }
+  if (typeof value === "boolean") return booleanSign(where);
   return sign * value;
 }
 
@@ -138,19 +134,17 @@ export function reduceOperators(
  *
  * @param values - the value stack.
  * @param ops - the operator stack.
- * @param lenient - whether errors in an unchosen branch are suppressed.
  * @returns a failure for a negative sign on a boolean, or undefined.
  */
 export function closeGroup(
   values: Value[],
   ops: StackEntry[],
-  lenient: boolean,
 ): Failure<TuffError> | undefined {
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   const group = ops.pop();
   if (group?.kind !== EntryKind.Group) return undefined;
-  const signed = applySign(values.pop() ?? 0, group.sign, group.where, lenient);
+  const signed = applySign(values.pop() ?? 0, group.sign, group.where);
   if (typeof signed === "object") return signed;
   values.push(signed);
   return undefined;

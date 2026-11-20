@@ -191,7 +191,7 @@ function closeBracket(
     return expectedMismatch(source, state.pos, group.bracket);
   }
   const closePos = state.pos;
-  const failure = closeGroup(values, ops, isLenient(state));
+  const failure = closeGroup(values, ops);
   if (failure !== undefined) return failure;
   if (group.bracket === Bracket.Brace) scopes.pop();
   attachRef(ops, group.ref);
