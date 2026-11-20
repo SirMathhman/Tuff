@@ -22,7 +22,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Invariant 2**: evaluation always terminates or returns a `TuffError` for resource exhaustion. It never hangs the caller.
 - **Invariant 3**: a module under `src/` never imports from `index.ts`.
 - **Invariant 4**: a name is bound at most once per block (`DuplicateName`). A nested block may shadow an outer name. Every name used must resolve to a binding in scope (`UnknownName`). Both are static errors: decided from the source before any value is computed.
-- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `TypeMismatch`, `NotAReference`, `ReferenceAsValue`, `ReferenceEscapes`, and `ImmutableAssignment` for a write through a shared reference), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
+- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (every kind decided while computing a value, such as `DivisionByZero`, `NotABoolean`, and `ImmutableAssignment` for a write through a shared reference), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
 - **Invariant 6**: name lookup uses `Map`-based scopes only, never plain objects, so a name such as `constructor` cannot reach host prototype properties.
 - **Invariant 7**: nesting is bounded. Block braces, group parentheses, and prefix `*` share one nesting limit. Exceeding it is `NestingTooDeep`, never a host stack overflow.
 
@@ -38,7 +38,7 @@ src/
   span.ts           source positions shared by all stages
   lexer.ts          source -> token stream
   parser.ts         token stream -> AST
-  ast.ts            AST node types (no logic): literals, names, chains, blocks, let and assign statements
+  ast.ts            AST node types (no logic): every expression and statement
   scope.ts          Scope type, creation, and name lookup; Frame (the runtime slots of one open block); NameRef and NameRefs (the resolver's output). No evaluation
   value.ts          Value (number, boolean, or Reference) and Reference (a live pointer to one frame slot). Types and guards only
   resolver.ts       AST -> Result<void, TuffError>: checks every name is bound. Computes no values
