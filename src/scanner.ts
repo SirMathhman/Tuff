@@ -127,3 +127,27 @@ export function readName(source: string, start: number): number {
   while (isLetter(source.charAt(idx))) idx++;
   return idx;
 }
+
+/**
+ * Finds the bracket closing the one at `open`.
+ *
+ * @param source - the program being parsed.
+ * @param open - the offset of the opening bracket.
+ * @returns the offset of the closing bracket, or undefined at the end of input.
+ */
+export function matchingClose(
+  source: string,
+  open: number,
+): number | undefined {
+  let depth = 0;
+  for (let index = open; index < source.length; index++) {
+    const ch = source.charAt(index);
+    if (ch === "(" || ch === "{") {
+      depth++;
+    } else if (ch === ")" || ch === "}") {
+      depth--;
+      if (depth === 0) return index;
+    }
+  }
+  return undefined;
+}

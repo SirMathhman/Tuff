@@ -5,34 +5,10 @@ import {
   expectedText,
   nonBooleanCondition,
 } from "../errors";
-import { skipSpaces } from "../scanner";
+import { matchingClose, skipSpaces } from "../scanner";
 import type { LoopEntry, ParserState } from "../types";
 import { EntryKind, GroupPart, Step } from "../types";
 import { innermostNonOperator, isLenient } from "./helpers";
-
-/**
- * Finds the bracket closing the one at `open`.
- *
- * @param source - the program being parsed.
- * @param open - the offset of the opening bracket.
- * @returns the offset of the closing bracket, or undefined at the end of input.
- */
-export function matchingClose(
-  source: string,
-  open: number,
-): number | undefined {
-  let depth = 0;
-  for (let index = open; index < source.length; index++) {
-    const ch = source.charAt(index);
-    if (ch === "(" || ch === "{") {
-      depth++;
-    } else if (ch === ")" || ch === "}") {
-      depth--;
-      if (depth === 0) return index;
-    }
-  }
-  return undefined;
-}
 
 /**
  * Tells which part of a loop a bracket at `pos` opens, if any.

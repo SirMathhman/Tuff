@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case; `case _` must be last. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. A statement call may end with `;`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case (`case _` must be last), or is an error at `match` if none matches. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes; each body is checked leniently when its block ends, then parsed per call. A braced body needs no `;`; ending in an assignment makes the call 0. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest.
 
 ### Statements and scope
 
@@ -18,7 +18,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if`, and each unchosen `case` of a `match`, is parsed for syntax only: its errors are reported, but its assignments have no effect. An unmatched `match` is not reported there.
+The unchosen branch of an `if`, and each unchosen `case` of a `match`, is parsed for syntax only: its errors are reported, but its assignments have no effect.
 
 ### Results and errors
 
@@ -32,21 +32,21 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/parse/`: `helpers.ts` (shared lookups and transitions), `operands.ts` (with `*`), `operators.ts`, `references.ts` (`&`), `calls.ts` (`fn`), `loops.ts` (`while`), and `matches.ts` (`match`, `case`).
+- `src/parse/`: `helpers.ts`, `operands.ts` (with `*`), `operators.ts`, `references.ts` (`&`), `calls.ts` (`fn`), `loops.ts` (`while`), and `matches.ts` (`match`, `case`).
 - `src/index.ts`: `interpretTuff`. `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/`: `bun:test` suites and shared messages.
 
 ### Dependency direction
 
-`errors.ts` depends on nothing and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on both. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `calls.ts` and `loops.ts` depend on `helpers.ts` and `operations.ts`, `operands.ts` depends on `calls.ts` and `loops.ts`, and `operators.ts` depends on `loops.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
+`errors.ts` depends on nothing and owns `Bracket`. `scanner.ts` depends on `errors.ts` and owns bracket matching. `types.ts` depends on both. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, and `matches.ts` depend on `helpers.ts` and `operations.ts`, never on each other. `operands.ts` depends on those four, and `operators.ts` depends on `loops.ts` and `matches.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
-`interpretTuff` is a single loop with explicit stacks and no recursion. Each step runs `finishCalls`, then `startDeferredCheck`.
+`interpretTuff` is a single loop with explicit stacks and no recursion.
 
 #### Stacks
 
-Value, operator, and scope stacks, plus a skip counter for unchosen branches. A `while` pushes a Loop entry on the operator stack. A call pushes a `Call` entry that saves the caller's state. The callee sees its declaration's snapshot plus later functions in open scopes.
+Value, operator, and scope stacks, plus a skip counter for unchosen branches. A `while` and a `match` push their own entries on the operator stack. A call pushes a `Call` entry that saves the caller's state. The callee sees its declaration's snapshot plus later functions in open scopes.
 
 #### Precedence
 

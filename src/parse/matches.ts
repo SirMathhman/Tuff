@@ -10,11 +10,10 @@ import {
   unexpectedSemicolon,
 } from "../errors";
 import { applySign, reduceOperators } from "../operations";
-import { readDigits, readName, skipSpaces } from "../scanner";
+import { matchingClose, readDigits, readName, skipSpaces } from "../scanner";
 import type { MatchEntry, ParserState, StackEntry, Value } from "../types";
 import { EntryKind, GroupPart, MatchChoice, Step } from "../types";
 import { completeBranch, innermostNonOperator, isLenient } from "./helpers";
-import { matchingClose } from "./loops";
 
 /**
  * Tells which part of a match a bracket at `pos` opens, if any.
