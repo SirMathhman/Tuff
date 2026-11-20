@@ -143,6 +143,7 @@ function closeBinding(
     scope?.set(binding.name, cell);
   }
   flags.lastStatementEnded = true;
+  flags.lastAssign = binding.assign;
   if (state.depth === 0) flags.afterLet = true;
   return undefined;
 }
@@ -185,6 +186,12 @@ function closeBracket(
   state.depth--;
   state.pos++;
   flags.atStatementStart = false;
+  if (group.discardValue === true) {
+    values.pop();
+    flags.atStatementStart = true;
+    state.expectOperand = true;
+    if (state.depth === 0) flags.afterLet = true;
+  }
   if (group.ifCondition) return startBranch(state, closePos);
   return completeBranch(state) ?? Step.Continue;
 }

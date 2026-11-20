@@ -32,6 +32,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       atStatementStart: true,
       afterLet: false,
       lastStatementEnded: false,
+      lastAssign: false,
     },
   };
   for (;;) {

@@ -82,6 +82,10 @@ export interface GroupEntry {
   ifCondition: boolean;
   /** A reference that is the block's final value, if any. */
   ref?: BindingRef;
+  /** A top-level block opened at a statement start, whose value is discarded if it ends in a statement. */
+  statementStart?: boolean;
+  /** Whether the block's value is discarded because it ends in an assignment. */
+  discardValue?: boolean;
 }
 
 /**
@@ -163,6 +167,8 @@ export interface StatementFlags {
   afterLet: boolean; // the last top-level statement was a `let` or an assignment
   /** Whether the most recent item was a statement. */
   lastStatementEnded: boolean; // the most recent item was a statement, not an expression
+  /** Whether the most recent statement was an assignment rather than a let. */
+  lastAssign: boolean;
 }
 
 /**

@@ -28,7 +28,7 @@ import {
 } from "../scanner";
 import type { Cell, ParserState } from "../types";
 import { EntryKind, IfPhase, Step } from "../types";
-import { borrowedBy, lookupCell, pushOperand } from "./helpers";
+import { borrowedBy, innermostGroup, lookupCell, pushOperand } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.
 const RESERVED_NAMES = new Set(["let", "mut", "true", "false", "if", "else"]);
@@ -44,6 +44,11 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
     sign,
     where: state.pos,
     ifCondition,
+    statementStart:
+      bracket === Bracket.Brace &&
+      sign === 1 &&
+      state.depth === 0 &&
+      flags.atStatementStart,
   });
   if (bracket === Bracket.Brace) scopes.push(new Map());
   state.depth++;
@@ -234,7 +239,7 @@ function operandNumber(
  * @returns the next step, or a failure.
  */
 export function stepOperand(state: ParserState): Failure<TuffError> | Step {
-  const { source, ops, flags } = state;
+  const { source, ops, values, flags } = state;
   state.pos = skipSpaces(source, state.pos);
   if (
     flags.atStatementStart &&
@@ -250,7 +255,14 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
     flags.lastStatementEnded &&
     source.charAt(state.pos) === "}"
   ) {
-    return blockEndsWithStatement(state.pos);
+    const group = innermostGroup(ops);
+    if (group?.statementStart !== true || !flags.lastAssign) {
+      return blockEndsWithStatement(state.pos);
+    }
+    group.discardValue = true;
+    values.push(0);
+    state.expectOperand = false;
+    return Step.Continue;
   }
   if (flags.atStatementStart && source.charAt(state.pos) === ";") {
     return unexpectedSemicolon(state.pos);

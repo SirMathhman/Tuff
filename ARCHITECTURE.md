@@ -10,7 +10,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, so it cannot end with a statement. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings.
+`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings.
 
 ### References
 
@@ -139,4 +139,4 @@ Replace `number` with `bigint` or a decimal type. Report line and column in `whe
 
 ## Performance
 
-Each token scans the operator stack, and each variable access scans the scope chain and `borrowedBy`. Profile first.
+Each token and variable access scans stacks and scopes. Profile first.

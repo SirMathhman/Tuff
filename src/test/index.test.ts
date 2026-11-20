@@ -298,3 +298,10 @@ test('interpretTuff("1 / 0") => error', () => {
 test('interpretTuff("7 / 2") => 3', () => {
   expect(interpretTuff("7 / 2")).toEqual({ ok: true, value: 3 });
 });
+
+test('interpretTuff("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
