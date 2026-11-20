@@ -1,19 +1,18 @@
-// Reports any function that can reach itself through the calls in its file.
+// Reports functions that call themselves through a chain of direct calls
+// within one file. Recursion that closes only through a parameter (passing a
+// function as an argument and calling the parameter) is allowed.
 //
-// Call graph edges, F -> G, mean F may invoke G:
-// - a reference inside F resolves to G (a direct call, or passing G as a value);
-// - G is lexically nested inside F (a closure may be invoked by F);
-// - F calls one of its parameters, and G is a function that may be passed into
-//   that parameter by some call site. This is found by a fixpoint over call
-//   arguments, so passing functions through parameters does not hide cycles;
-// - F calls a method as `x.name(...)` (or `this.name(...)`), and G is a method
-//   whose key is `name`. Methods are matched by name only, so two unrelated
-//   objects with a method of the same name can produce a false positive;
-// - a variable initialised from another variable (`const g = f`) denotes the
-//   same function as that variable.
-// Scope analysis resolves names, so shadowing is handled. Only one file is
-// examined; recursion that crosses files is not detected. Methods with computed
-// keys (`o["m"]()`) are not matched.
+// Call graph edges, F -> G, mean F directly calls G:
+// - F calls a function by name, `G(...)`, where G is a function declaration,
+//   or a variable initialised with a function (aliases such as `const g = f`
+//   are followed);
+// - F calls a method as `x.name(...)` or `this.name(...)`, and G is a method
+//   named `name`. Methods are matched by name only, so two unrelated objects
+//   with a method of the same name can produce a false positive;
+// - G is lexically nested inside F (a closure defined in F may be called by F).
+// Passing a function as a value is not an edge, and calling a parameter is not
+// an edge. Scope analysis resolves names, so shadowing is handled. Only one file
+// is examined. Methods with computed keys (`o["m"]()`) are not matched.
 
 const FUNCTION_TYPES = new Set([
   "FunctionDeclaration",
@@ -65,17 +64,6 @@ function resolveAlias(variable, variableOf) {
     current = next;
   }
   return current;
-}
-
-// For a parameter variable: the function that declares it and its position.
-function parameterSlot(variable) {
-  for (const def of variable.defs) {
-    if (def.type === "Parameter") {
-      const index = def.node.params.indexOf(def.name);
-      if (index >= 0) return { fn: def.node, index };
-    }
-  }
-  return null;
 }
 
 // The name a function is stored under as an object property or class method.
@@ -131,66 +119,13 @@ function collectResolvedRefs(scopeManager) {
   return refs;
 }
 
-// Works out which functions each variable may denote, by propagating the
-// functions passed as arguments into parameter slots until nothing changes.
-function argumentFlow(refs, variableOf) {
-  const slots = new Map();
-  function slotsOf(fn) {
-    if (!slots.has(fn))
-      slots.set(
-        fn,
-        fn.params.map(() => new Set()),
-      );
-    return slots.get(fn);
-  }
-
-  function targetsOf(variable) {
-    const resolved = resolveAlias(variable, variableOf);
-    const fn = functionForVariable(resolved);
-    if (fn) return [fn];
-    const slot = parameterSlot(resolved);
-    if (slot) return [...slotsOf(slot.fn)[slot.index]];
-    return [];
-  }
-
-  function valuesOfArgument(arg) {
-    if (isFunction(arg)) return [arg];
-    if (arg.type === "Identifier" && variableOf.has(arg)) {
-      return targetsOf(variableOf.get(arg));
-    }
-    return [];
-  }
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const ref of refs) {
-      const call = ref.identifier.parent;
-      if (
-        !call ||
-        call.type !== "CallExpression" ||
-        call.callee !== ref.identifier
-      ) {
-        continue;
-      }
-      for (const target of targetsOf(ref.resolved)) {
-        call.arguments.forEach((arg, i) => {
-          if (i >= target.params.length) return;
-          for (const value of valuesOfArgument(arg)) {
-            const slot = slotsOf(target)[i];
-            if (!slot.has(value)) {
-              slot.add(value);
-              changed = true;
-            }
-          }
-        });
-      }
-    }
-  }
-  return targetsOf;
+// The functions a call by name may invoke, or [] for anything else.
+function directTargets(variable, variableOf) {
+  const fn = functionForVariable(resolveAlias(variable, variableOf));
+  return fn ? [fn] : [];
 }
 
-function callGraph({ functions, refs, targetsOf, methods, memberCalls }) {
+function callGraph({ functions, refs, variableOf, methods, memberCalls }) {
   const edges = new Map();
   function addEdge(from, to) {
     if (!edges.has(from)) edges.set(from, new Set());
@@ -202,9 +137,19 @@ function callGraph({ functions, refs, targetsOf, methods, memberCalls }) {
     if (outer) addEdge(outer, fn);
   }
   for (const ref of refs) {
+    const call = ref.identifier.parent;
+    if (
+      !call ||
+      call.type !== "CallExpression" ||
+      call.callee !== ref.identifier
+    ) {
+      continue;
+    }
     const from = enclosingFunction(ref.identifier);
     if (!from) continue;
-    for (const target of targetsOf(ref.resolved)) addEdge(from, target);
+    for (const target of directTargets(ref.resolved, variableOf)) {
+      addEdge(from, target);
+    }
   }
   for (const call of memberCalls) {
     const from = enclosingFunction(call);
@@ -221,12 +166,12 @@ const noRecursion = {
     type: "problem",
     docs: {
       description:
-        "Disallow functions that call themselves, directly or indirectly, within a file.",
+        "Disallow functions that call themselves through direct calls within a file.",
     },
     schema: [],
     messages: {
       recursive:
-        'Recursion is not allowed: "{{name}}" can reach itself through a call cycle.',
+        'Recursion is not allowed: "{{name}}" can reach itself through a chain of direct calls.',
     },
   },
   create(context) {
@@ -258,11 +203,10 @@ const noRecursion = {
         const variableOf = new Map(
           refs.map((ref) => [ref.identifier, ref.resolved]),
         );
-        const targetsOf = argumentFlow(refs, variableOf);
         const edges = callGraph({
           functions,
           refs,
-          targetsOf,
+          variableOf,
           methods,
           memberCalls,
         });
