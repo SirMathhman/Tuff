@@ -42,6 +42,10 @@ export default tseslint.config(
           message: "Declare the member optional (name?: Type) instead of using | undefined.",
         },
         {
+          selector: "MemberExpression[object.type='MemberExpression']",
+          message: "Do not chain property accesses (a.b.c); talk only to direct collaborators (Law of Demeter).",
+        },
+        {
           selector: "TSTypeLiteral",
           message: "Do not use inline object types; declare a named interface instead.",
         },

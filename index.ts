@@ -254,7 +254,18 @@ function parseExpression(text: string, cursor: Cursor): Result<Value, Problem> {
       if (typeof value !== typeof right.value) {
         return err({ offset: opOffset, expected: `a value of the same type as the left side of "=="` });
       }
-      value = value === right.value;
+      if (typeof value === "object" && typeof right.value === "object") {
+        const { target: leftTarget } = value;
+        const { target: rightTarget } = right.value;
+        const leftPointee = leftTarget.value;
+        const rightPointee = rightTarget.value;
+        if (typeof leftPointee !== typeof rightPointee) {
+          return err({ offset: opOffset, expected: `references to values of the same type on each side of "=="` });
+        }
+        value = leftPointee === rightPointee;
+      } else {
+        value = value === right.value;
+      }
     } else {
       if (typeof value !== "number" || typeof right.value !== "number") {
         return err({ offset: opOffset, expected: `a number on each side of "<"` });
@@ -543,8 +554,9 @@ function parseDereferenceAssignment(text: string, cursor: Cursor): Problem | und
   if (!init.ok) {
     return init.error;
   }
+  const { target: referenced } = ref;
   if (!cursor.dead) {
-    ref.target.value = init.value;
+    referenced.value = init.value;
   }
   return undefined;
 }
@@ -566,7 +578,8 @@ function parseDereference(text: string, cursor: Cursor): Result<Value, Problem> 
   if (typeof inner.value !== "object") {
     return err({ offset: starOffset, expected: `a reference after "*"` });
   }
-  return ok(inner.value.target.value);
+  const { target: referencedVariable } = inner.value;
+  return ok(referencedVariable.value);
 }
 
 /**
@@ -578,7 +591,11 @@ function parseDereference(text: string, cursor: Cursor): Result<Value, Problem> 
  * @returns True if the value is a reference that would outlive its target.
  */
 function escapes(value: Value, depth: number): boolean {
-  return typeof value === "object" && value.target.depth > depth;
+  if (typeof value !== "object") {
+    return false;
+  }
+  const { target } = value;
+  return target.depth > depth;
 }
 
 /**
@@ -945,14 +962,15 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     return { offset: cursor.pos, expected: "a variable name" };
   }
   cursor.pos += name.length;
-  const depth = cursor.scope.depth;
+  const { depth } = cursor.scope;
   const init = parseInitializer(text, cursor, (value, offset) =>
     escapes(value, depth) ? { offset, expected: OUTLIVES_MESSAGE } : undefined,
   );
   if (!init.ok) {
     return init.error;
   }
-  cursor.scope.vars.set(name, { value: init.value, mutable, depth });
+  const { vars } = cursor.scope;
+  vars.set(name, { value: init.value, mutable, depth });
   return undefined;
 }
 
@@ -1009,8 +1027,9 @@ function findMutableTarget(text: string, cursor: Cursor): Result<NamedVariable, 
   if (!found.ok) {
     return found;
   }
-  if (!found.value.binding.mutable) {
-    return err({ offset: found.value.start, expected: `a mutable variable (declare "${found.value.name}" with "let mut")` });
+  const { name, start, binding } = found.value;
+  if (!binding.mutable) {
+    return err({ offset: start, expected: `a mutable variable (declare "${name}" with "let mut")` });
   }
   return found;
 }
@@ -1185,7 +1204,8 @@ function peekName(text: string, cursor: Cursor): string {
  */
 function lookup(scope: Scope, name: string): Binding | undefined {
   for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
-    const binding = current.vars.get(name);
+    const { vars } = current;
+    const binding = vars.get(name);
     if (binding !== undefined) {
       return binding;
     }

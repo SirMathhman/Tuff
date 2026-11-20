@@ -225,6 +225,19 @@ test("interpretTuff rejects a while loop that does not end", () => {
   expect(interpretTuff("let mut x = 0; while (true) x += 1; x").ok).toBe(false);
 });
 
+test("interpretTuff rejects == between references to values of different types", () => {
+  expect(interpretTuff("let x = true; let y = 1; &x == &y").ok).toBe(false);
+});
+
+test("interpretTuff compares references by the values they point to", () => {
+  expect(interpretTuff("let x = 1; let y = 1; &x == &y")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("let x = 1; let y = 2; &x == &y")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff rejects == between a reference and a plain value", () => {
+  expect(interpretTuff("let x = 1; &x == 1").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });
