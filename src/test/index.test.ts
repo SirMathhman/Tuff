@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { interpretTuff } from "./index";
+import { interpretTuff } from "../index";
 import {
   NUMBER_WHY,
   NUMBER_FIX,

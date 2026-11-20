@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { interpretTuff } from "./index";
+import { interpretTuff } from "../index";
 import {
   OPERATOR_WHY,
   OPERATOR_FIX,

@@ -53,23 +53,23 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Source files
 
-Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, custom Markdown rules in `markdown-rules/`, and docs at the root.
+Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, custom Markdown rules in `markdown-rules/`, and docs at the root.
 
-- `src/scanner.ts`: character classes, token readers, `Operator` and `Bracket`.
-- `src/errors.ts`: `TuffError`, `Result`, and error constructors.
+- `src/scanner.ts`: character classes, token readers, and `Operator`.
+- `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state and stack entry types.
 - `src/operations.ts`: operator meaning and reduction.
-- `src/index.ts`: `interpretTuff`, the parse loop.
+- `src/helpers.ts`, `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL. Run with `bun run repl`.
-- `src/*.test.ts`: `bun:test` suites. Shared messages live in `src/test-messages.ts`.
+- `src/test/*.test.ts`: `bun:test` suites. Shared messages live in `src/test/test-messages.ts`.
 
 ### Dependency direction
 
-Edges point one way, and there are no cycles. `scanner.ts` depends on no project file and owns `Bracket`. `errors.ts` depends on `scanner.ts`. `types.ts` and `operations.ts` depend on `scanner.ts` and `errors.ts`, and `operations.ts` also depends on `types.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+Edges point one way. `errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
-`interpretTuff` is a single loop with explicit stacks and no recursion. Each step reads an operand or an operator, depending on the expected kind.
+`interpretTuff` is a single loop with explicit stacks and no recursion.
 
 #### Stacks
 
