@@ -17,7 +17,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 
 ## Structure
 
-Target layout (none of the `src/` modules exist yet):
+Target layout:
 
 ```
 index.ts            public API only: re-exports evaluateTuff and the public types
@@ -35,9 +35,14 @@ src/
 Dependency direction (arrows mean "may import"):
 
 ```
-index.ts -> evaluator.ts -> parser.ts -> lexer.ts -> span.ts
-                          \-> ast.ts      \-> errors.ts -> span.ts
-result.ts is imported by every stage; it imports nothing.
+index.ts       -> evaluator.ts, result.ts, errors.ts (public types only)
+evaluator.ts   -> parser.ts, ast.ts, limits.ts, errors.ts
+parser.ts      -> lexer.ts, ast.ts, errors.ts
+lexer.ts       -> errors.ts, span.ts
+errors.ts      -> span.ts
+ast.ts         -> span.ts
+limits.ts      -> nothing
+result.ts      -> nothing; imported by every stage
 ```
 
 Rules:
@@ -49,11 +54,10 @@ Rules:
 
 ## Potential Problems
 
-- **Non-finite numbers.** IEEE arithmetic does not fail on its own. Digit literals with more than about 308 digits parse to `Infinity`, and `Infinity - Infinity` or an overflowing product yields `Infinity` or `NaN` as a plain value. Without a finite-result check, these escape the `Result` channel.
 - **Public API surface growing before the contract is fixed.** Any export becomes a compatibility commitment. Return types should change only while the project has no external callers.
 - **Stringly-typed errors.** Plain string messages cannot be matched on, tested precisely, or localized. Use `TuffError` variants.
 - **Single-file growth.** `index.ts` is the natural place for "just one more function". Without the layout above it will exceed the file limit quickly.
-- **Unbounded recursion.** Deeply nested input can overflow the JavaScript call stack, which surfaces as a thrown `RangeError`. The depth limit in `limits.ts` must produce a `TuffError`, not a crash.
+- **Unbounded recursion in the evaluator.** The parser caps group nesting at 256 and reports `NestingTooDeep`. Any later recursive stage must enforce the same limit (or a shared one in `limits.ts`) and produce a `TuffError`, not a `RangeError` crash.
 - **Silent number parsing rules.** Whatever numeric literal grammar Tuff adopts must be defined explicitly in the lexer, not inherited from a host function.
 
 ## Security Concerns
@@ -71,7 +75,7 @@ What untrusted input can reach:
 Controls the architecture should have:
 
 1. Maximum source length, checked before lexing. **Missing.**
-2. Maximum nesting depth, checked during parsing and evaluation, producing a `TuffError`. **Missing.**
+2. Maximum nesting depth, checked during parsing and evaluation, producing a `TuffError`. **Satisfied in the parser** (256 groups, `NestingTooDeep`); **missing in the evaluator**, which does not exist yet.
 3. Step budget in the evaluator, producing a `TuffError` when exhausted. **Missing.**
 4. No dynamic code execution anywhere in the pipeline. **Satisfied today** (no `eval` or `Function` in the code), but must be enforced by a lint rule banning `eval` and `Function` constructors. **Lint rule missing.**
 5. No ambient authority: the evaluator takes all capabilities as parameters. **Not yet applicable** (no capabilities exist), but the rule is recorded here so it is kept when they are added.
@@ -84,9 +88,8 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 1. Split `index.ts` into the `src/` layout above, keeping `index.ts` as a thin re-export, and add the evaluator stage.
 2. Add lint enforcement of the modularity limits and the no-`eval` rule.
 3. Define the Tuff numeric and expression grammar explicitly in the lexer.
-4. Add the finite-result check (a `NumericOverflow` variant for overflow and `NaN`) to every operator path.
-5. Add the resource limits (source length, nesting depth, step budget) and tests that each one produces the right `TuffError`.
-6. Define a host-capability interface before any feature needs I/O.
+4. Add the remaining resource limits (source length, step budget) and tests that each one produces the right `TuffError`.
+5. Define a host-capability interface before any feature needs I/O.
 
 ## Performance
 
