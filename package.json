@@ -23,6 +23,7 @@
     "repl": "bun run src/repl.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint:md": "markdownlint-cli2 \"**/*.md\""
+    "lint:md": "markdownlint-cli2 \"**/*.md\"",
+    "cpd": "pmd cpd --language typescript --minimum-tokens 100 --ignore-identifiers --ignore-literals --dir src --dir eslint-rules --dir scripts --dir eslint.config.ts"
   }
 }

@@ -81,11 +81,11 @@ A pending operator is applied first when it binds at least as tightly, so operat
 
 ### Quality gates
 
-Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`.
+Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` reports copy-paste duplicates (PMD on the PATH).
 
 #### ESLint rules
 
-ESLint runs its recommended rules plus the rules below. Restricted syntax bans member chains such as `a.b.c`, regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, string literal types, and the null type.
+ESLint runs its recommended rules plus these. Restricted syntax bans member chains such as `a.b.c`, regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, string literal types, and the null type.
 
 #### Recursion
 
@@ -97,7 +97,7 @@ Method names match loosely, so unrelated objects can produce false positives. Co
 
 #### Size and naming
 
-`max-lines-per-function` caps functions at 100 lines, `max-lines` caps files at 500, and `id-length` requires names of at least two characters.
+Functions are capped at 100 lines, files at 500, and names need two characters (`max-lines-per-function`, `max-lines`, `id-length`).
 
 ##### Directories
 
@@ -109,7 +109,7 @@ Exported top-level functions, classes, interfaces, type aliases, and enums need 
 
 #### Exports and Markdown
 
-The unused-export check fails on unused exports. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
+Unused exports fail lint. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
 
 ## Potential Problems
 
