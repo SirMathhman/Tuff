@@ -1,5 +1,5 @@
 import { type Problem } from "./lexing";
-import { type Cursor } from "./types";
+import { type Cursor } from "../types";
 
 /**
  * Declares the functions directly inside the block that starts at the cursor, before any of its

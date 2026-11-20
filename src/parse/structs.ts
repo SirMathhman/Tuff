@@ -1,8 +1,8 @@
 import { peek, peekName, peekStart, type Problem } from "./lexing";
 import { parseTypeAnnotation } from "./annotations";
-import { checkTypedValue, isDeclarableType, lookupStruct } from "./scope";
-import { type Cursor, type Value } from "./types";
-import { err, ok, type Result } from "./result";
+import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
+import { type Cursor, type Value } from "../types";
+import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as a field's value. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;

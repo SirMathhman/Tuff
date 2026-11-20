@@ -1,7 +1,7 @@
 /**
  * Types shared by the Tuff parser: values, bindings, scopes, and parse state.
  */
-import type { Problem } from "./lexing";
+import type { Problem } from "./parse/lexing";
 
 /**
  * A value of a Tuff expression: a number, a boolean from "true" or "false", a reference, or an array.
@@ -95,6 +95,8 @@ export interface Scope {
   /** Structs declared directly in this scope. */
   readonly structs: Map<string, StructDef>;
 }
+/** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
+export type HostValue = number | boolean | HostFunction;
 /**
  * A function the host supplies to a Tuff program: it takes numbers and booleans and returns one of them.
  */
@@ -148,7 +150,7 @@ export interface Cursor {
   /** Number of function calls currently being evaluated. */
   callDepth: number;
   /** The functions the host supplies, keyed by name. */
-  readonly hostFunctions: ReadonlyMap<string, HostFunction>;
+  readonly hostValues: ReadonlyMap<string, HostValue>;
 }
 /**
  * The value a "break" produced, which ends the enclosing loop.

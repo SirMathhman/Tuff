@@ -1,4 +1,4 @@
-import { type Problem } from "./lexing";
+import { type Problem } from "./parse/lexing";
 import { checkTypedValue } from "./scope";
 import { type FunctionDef, type HostFunction, type Value } from "./types";
 import { err, ok, type Result } from "./result";

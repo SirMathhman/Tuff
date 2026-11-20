@@ -1,7 +1,7 @@
 import { peek, peekName, peekStart, type Problem } from "./lexing";
-import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "./scope";
-import { type Cursor, type Scope } from "./types";
-import { err, ok, type Result } from "./result";
+import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "../scope";
+import { type Cursor, type Scope } from "../types";
+import { err, ok, type Result } from "../result";
 
 /**
  * Finds what a type name stands for. A type alias in scope shadows a built-in type of the same name.
@@ -58,6 +58,25 @@ export function parseTypeAnnotation(text: string, cursor: Cursor): Result<string
 }
 
 /**
+ * Parses a type annotation followed by ";", and consumes the ";".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the type, advanced past the ";".
+ * @returns An Ok result with the normalized type, or an Err result with the problem found.
+ */
+export function parseTypeAndSemicolon(text: string, cursor: Cursor): Result<string, Problem> {
+  const annotation = parseTypeAnnotation(text, cursor);
+  if (!annotation.ok) {
+    return annotation;
+  }
+  if (peek(text, cursor) !== ";") {
+    return err({ offset: cursor.pos, expected: `";"` });
+  }
+  cursor.pos++;
+  return annotation;
+}
+
+/**
  * Parses "[Type; N]", an array type of N elements of Type.
  *
  * @param text - The source being parsed.
@@ -108,14 +127,10 @@ export function parseTypeAlias(text: string, cursor: Cursor, reserved: ReadonlyS
     return { offset: cursor.pos, expected: `"="` };
   }
   cursor.pos++;
-  const annotation = parseTypeAnnotation(text, cursor);
+  const annotation = parseTypeAndSemicolon(text, cursor);
   if (!annotation.ok) {
     return annotation.error;
   }
-  if (peek(text, cursor) !== ";") {
-    return { offset: cursor.pos, expected: `";"` };
-  }
-  cursor.pos++;
   const { scope } = cursor;
   const { types } = scope;
   types.set(name, annotation.value);

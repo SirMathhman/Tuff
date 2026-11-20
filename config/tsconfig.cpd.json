@@ -1,10 +1,11 @@
 {
   // Emits plain JavaScript for PMD CPD (see the "cpd" script in package.json).
-  "extends": "./tsconfig.json",
+  "extends": "../tsconfig.json",
+  "include": ["../*.ts", "../src/**/*.ts", "../tests/**/*.ts"],
   "compilerOptions": {
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "allowJs": false,
-    "outDir": "node_modules/.cpd"
+    "outDir": "../node_modules/.cpd"
   }
 }

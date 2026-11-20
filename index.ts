@@ -10,11 +10,11 @@ import {
   skipSpaces,
   type Problem,
   findTopLevel,
-} from "./src/lexing";
+} from "./src/parse/lexing";
 import {
   type Value,
   type FunctionDef,
-  type HostFunction,
+  type HostValue,
   type Cursor,
   type NamedVariable,
   type StatementStep,
@@ -36,27 +36,27 @@ import {
   lookupStruct,
   OUTLIVES_MESSAGE,
 } from "./src/scope";
-import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
-import { hoistFunctions } from "./src/hoisting";
+import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
+import { hoistFunctions } from "./src/parse/hoisting";
 import { callHostFunction } from "./src/host";
-import { parseFunctionDeclaration } from "./src/functions";
+import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
-import { parseArrayLiteral } from "./src/arrays";
-import { parsePostfix } from "./src/postfix";
-import { parseStructDeclaration, parseStructLiteral } from "./src/structs";
+import { parseArrayLiteral } from "./src/parse/arrays";
+import { parsePostfix } from "./src/parse/postfix";
+import { parseStructDeclaration, parseStructLiteral } from "./src/parse/structs";
 
 /**
  * Interprets a Tuff program and returns its result.
  *
  * @param tuffSource - The Tuff source text to interpret.
- * @param hostFunctions - Functions the host supplies, by name, for "in fn" declarations.
+ * @param hostValues - Values and functions the host supplies, by name, for "in let" and "in fn" declarations.
  * @returns An Ok result with the numeric result of the program, or an Err result describing what is wrong, where, why, and how to fix it.
  */
 export function interpretTuff(
   tuffSource: string,
-  hostFunctions: ReadonlyMap<string, HostFunction> = new Map(),
+  hostValues: ReadonlyMap<string, HostValue> = new Map(),
 ): Result<number, string> {
-  const result = parseProgram(tuffSource, hostFunctions);
+  const result = parseProgram(tuffSource, hostValues);
   if (result.ok) {
     const value = result.value;
     if (typeof value === "boolean") {
@@ -95,20 +95,17 @@ export function interpretTuff(
  * variable it points to. Whitespace between tokens is ignored.
  *
  * @param text - The source to parse.
- * @param hostFunctions - Functions the host supplies, by name.
+ * @param hostValues - Values and functions the host supplies, by name.
  * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
-function parseProgram(
-  text: string,
-  hostFunctions: ReadonlyMap<string, HostFunction>,
-): Result<number | boolean, Problem> {
+function parseProgram(text: string, hostValues: ReadonlyMap<string, HostValue>): Result<number | boolean, Problem> {
   const cursor: Cursor = {
     pos: 0,
     scope: newScope(undefined),
     dead: false,
     breakable: false,
     callDepth: 0,
-    hostFunctions,
+    hostValues,
   };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
@@ -561,8 +558,12 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name === "in" && allowDeclaration) {
     cursor.pos += "in".length;
-    if (peekName(text, cursor) !== "fn") {
-      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" after "in"` } };
+    const keyword = peekName(text, cursor);
+    if (keyword === "let") {
+      return { matched: true, problem: parseHostVariable(text, cursor) };
+    }
+    if (keyword !== "fn") {
+      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" or "let" after "in"` } };
     }
     return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
   }
@@ -1306,9 +1307,9 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err(argumentProblem);
   }
   if (fn.external) {
-    const { hostFunctions } = cursor;
-    const host = hostFunctions.get(name);
-    if (host === undefined) {
+    const { hostValues } = cursor;
+    const host = hostValues.get(name);
+    if (typeof host !== "function") {
       return err({ offset: start, expected: `a host function named "${name}" to be provided` });
     }
     return callHostFunction(host, args, start, fn);

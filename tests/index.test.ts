@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { interpretTuff } from "./index";
-import { type HostFunction } from "./src/types";
+import { interpretTuff } from "../index";
+import { type HostFunction, type HostValue } from "../src/types";
 
 test("interpretTuff('1') => 1", () => {
   expect(interpretTuff("1")).toEqual({ ok: true, value: 1 });
@@ -90,6 +90,25 @@ test("interpretTuff('type Bool = I32; let temp : Bool = 1; temp + 1') => 2", () 
 
 test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get returns a number, not a Bool", () => {
   expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
+});
+
+test("interpretTuff('in let foo : I32; foo') with host foo => 1", () => {
+  expect(interpretTuff("in let foo : I32; foo", new Map<string, HostValue>([["foo", 1]]))).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test("interpretTuff host value missing is an error", () => {
+  expect(interpretTuff("in let foo : I32; foo").ok).toBe(false);
+});
+
+test("interpretTuff host value of the wrong type is an error", () => {
+  expect(interpretTuff("in let foo : I32; foo", new Map<string, HostValue>([["foo", true]])).ok).toBe(false);
+});
+
+test("interpretTuff host value cannot be reassigned", () => {
+  expect(interpretTuff("in let foo : I32; foo = 2; foo", new Map<string, HostValue>([["foo", 1]])).ok).toBe(false);
 });
 
 test("interpretTuff('in fn get() : I32; get()') with host get => 1", () => {

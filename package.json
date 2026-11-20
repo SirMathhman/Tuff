@@ -4,11 +4,12 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "lint": "eslint . && npm run cpd && npm run circular",
-    "cpd": "tsc -p tsconfig.cpd.json && pmd cpd --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals --dir node_modules/.cpd",
+    "lint": "eslint . && npm run cpd && npm run circular && npm run files",
+    "cpd": "tsc -p config/tsconfig.cpd.json && pmd cpd --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals --dir node_modules/.cpd",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "circular": "madge --circular --extensions ts --ts-config tsconfig.json index.ts src"
+    "circular": "madge --circular --extensions ts --ts-config tsconfig.json index.ts src",
+    "files": "node scripts/check-file-count.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -21,5 +22,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "prettier": {
+    "printWidth": 120
   }
 }

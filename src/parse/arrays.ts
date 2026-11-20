@@ -1,7 +1,7 @@
 import { peek, type Problem } from "./lexing";
-import { kindOf } from "./scope";
-import { type Cursor, type Value } from "./types";
-import { err, ok, type Result } from "./result";
+import { kindOf } from "../scope";
+import { type Cursor, type Value } from "../types";
+import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as an element. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;

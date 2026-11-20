@@ -1,7 +1,7 @@
 import { peek, peekName, peekStart, type Problem } from "./lexing";
-import { isArray, isStruct } from "./scope";
-import { type Cursor, type Value } from "./types";
-import { err, ok, type Result } from "./result";
+import { isArray, isStruct } from "../scope";
+import { type Cursor, type Value } from "../types";
+import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as an index expression. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
