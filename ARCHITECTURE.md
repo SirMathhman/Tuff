@@ -6,19 +6,19 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `let y = &x;` makes a read-only alias of `x`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start.
+`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, so it cannot end with a statement. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings.
 
-### Blocks
+### References
 
-A block's value is its final expression, so it cannot end with a statement. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
+`let y = &x;` binds `y` to the cell of `x`, so `*y` reads the current value of `x`. `let y = &mut x;` (`x` must be `let mut`) also allows `*y = v;`, and a `&mut` cannot overlap another reference to `x`. A reference cannot be `let mut`, reassigned, read without `*`, or pointed at another reference. `&` is valid only as the whole value of a `let`.
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, division by zero) are reported.
+The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero) are reported.
 
 ### Results and errors
 
@@ -26,37 +26,22 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Examples
 
-#### Arithmetic and grouping
-
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
-- `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
-
-#### Conditionals
-
-- `interpretTuff("if (1 < 2) 7 else x")` returns `{ ok: true, value: 7 }`.
-
-#### Errors
-
-- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
 - `interpretTuff("7 / 0")` returns an error at offset 2: `what` is `Division by zero`.
-
-#### Statements
-
-- `interpretTuff("let mut x = 0; x = 1; x")` returns `{ ok: true, value: 1 }`.
-- `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression.
+- `interpretTuff("let x = 1; let y = &x; *y")` returns `{ ok: true, value: 1 }`.
 
 ## Structure
 
 ### Source files
 
-Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, custom Markdown rules in `markdown-rules/`, and docs at the root.
+Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`. Docs are at the root.
 
 - `src/scanner.ts`: character classes, token readers, and `Operator`.
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
-- `src/types.ts`: parser state and stack entry types.
-- `src/operations.ts`: operator meaning and reduction.
-- `src/helpers.ts`, `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
+- `src/types.ts`: parser state, stack entry types, and `Cell`.
+- `src/operations.ts`: operator meaning, sign application, and reduction.
+- `src/helpers.ts`: shared lookups. `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL. Run with `bun run repl`.
 - `src/test/*.test.ts`: `bun:test` suites.
 
@@ -70,7 +55,7 @@ Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, cu
 
 #### Stacks
 
-The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps, searched innermost first. A skip counter counts unchosen branches; lenient behavior applies while it is above zero.
+The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps from name to cell, searched innermost first. A reference cell has a target cell and no value of its own. A skip counter counts unchosen branches; lenient behavior applies while it is above zero.
 
 #### Precedence
 
@@ -80,33 +65,13 @@ A pending operator is applied first when it binds at least as tightly, so operat
 
 Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` reports copy-paste duplicates (PMD on the PATH).
 
-#### ESLint rules
+#### Lint rules
 
-ESLint runs its recommended rules plus these. Restricted syntax bans member chains such as `a.b.c`, regex literals, `RegExp`, `match`/`matchAll`/`search`, object types, string literal types, and null types.
-
-#### Recursion
-
-The `local/no-recursion` rule counts direct calls by name, through aliases, as methods, and into nested closures. A cycle through a parameter is allowed. The rule sees one file only.
-
-##### Limits
-
-Method names match loosely, so unrelated objects can produce false positives. Computed keys are not matched.
+ESLint adds local rules and restricted syntax on top of its recommended set (see `eslint.config.ts`). The `local/no-recursion` rule counts direct calls by name, through aliases, as methods, and into nested closures. A cycle through a parameter is allowed. It sees one file only, and method names match loosely, so it can give false positives.
 
 #### Size and naming
 
-Functions are capped at 100 lines, files at 500, and names need two characters (`max-lines-per-function`, `max-lines`, `id-length`).
-
-##### Directories
-
-A directory may hold at most 10 files of any type, subdirectories excluded. `scripts/max-files-per-dir.ts` checks this.
-
-#### Documentation
-
-Exported top-level functions, classes, interfaces, type aliases, and enums need JSDoc. Exported functions need `@param` names and a `@returns` entry.
-
-#### Exports and Markdown
-
-Types used by exports must be exported. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
+Functions are capped at 100 lines, files at 500, and names need two characters. A directory may hold at most 10 files, subdirectories excluded (`scripts/max-files-per-dir.ts`). Exported top-level declarations need JSDoc, and exported types used by exports must be exported. Markdown lint caps bullet lists at 10 items and each file at 7500 characters.
 
 ## Potential Problems
 
@@ -116,7 +81,15 @@ Every parse step mutates one `ParserState`, so any step can touch any field, and
 
 ### Lenient flag threading
 
-A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors are never passed through it. The assignment type check in `closeBinding` goes through `valueError` too.
+A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors never do.
+
+### Cell kinds
+
+A `Cell` is a value or a reference in one shape. A reference keeps an unused `value`, and `let y = &x;` pushes a placeholder 0 onto the value stack.
+
+### Failure detection
+
+Failures and values share a return type, told apart by `typeof === "object"`. This holds only while values are numbers and booleans.
 
 ### Numeric precision
 
@@ -142,13 +115,17 @@ The REPL reads each stdin line with no length limit. No maximum source length or
 
 Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
 
+### Module names
+
+`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, and move `closeBinding` and `endStatement` from `operators.ts` into `statements.ts`. Then `src/` holds 10 files, the limit, so the next module needs a subdirectory.
+
 ### Parse tree
 
 Build an AST in a parse module, then evaluate it separately. Lenient branches become an evaluator concern.
 
 ### Error classes
 
-Value errors go through `valueError`; static errors do not. Not yet done: tag each `TuffError` as static or value at construction, so the error itself drives the gate.
+Value errors go through `valueError`; static errors do not. Target: tag each `TuffError` as static or value at construction, so the error itself drives the gate.
 
 ### Numbers and output
 
@@ -156,4 +133,4 @@ Replace `number` with `bigint` or a decimal type. Report line and column in `whe
 
 ## Performance
 
-The scan is linear in source length. Profile before optimizing.
+Each token scans the operator stack and the scope chain, so cost grows with nesting depth as well as length. Profile before optimizing.

@@ -117,7 +117,7 @@ function closeBinding(
   ops.pop();
   const value = values.pop() ?? 0;
   if (binding.assign) {
-    const cell = lookupCell(scopes, binding.name);
+    const cell = binding.target ?? lookupCell(scopes, binding.name);
     if (cell !== undefined && typeof cell.value !== typeof value) {
       const failure = valueError(
         lenient,
@@ -136,7 +136,12 @@ function closeBinding(
     const cell =
       binding.target === undefined
         ? { value, mutable: binding.mutable }
-        : { value, mutable: false, target: binding.target };
+        : {
+            value,
+            mutable: false,
+            target: binding.target,
+            exclusive: binding.exclusive,
+          };
     const scope = scopes[scopes.length - 1];
     scope?.set(binding.name, cell);
   }

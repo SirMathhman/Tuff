@@ -407,6 +407,13 @@ test('interpretTuff("let x = 1; let y = &x; *y") => 1', () => {
   });
 });
 
+test('interpretTuff("let mut x = 0; let y = &mut x; *y = 1; x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; let y = &mut x; *y = 1; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,

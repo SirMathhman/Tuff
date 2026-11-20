@@ -9,10 +9,13 @@ import {
   expectedSemicolon,
   expectedVariableName,
   letNotAllowed,
+  mutableBorrow,
   mutableReference,
   notMutable,
   notReference,
+  readOnlyReference,
   referenceNotLet,
+  referenceOverlap,
   referenceUse,
   reservedName,
   undefinedName,
@@ -26,7 +29,7 @@ import {
   skipSpaces,
   toBracket,
 } from "./scanner";
-import type { ParserState, Value } from "./types";
+import type { Cell, ParserState, Scope, Value } from "./types";
 import { EntryKind, IfPhase, Step } from "./types";
 import { completeBranch, isLenient, lookupCell } from "./helpers";
 
@@ -179,8 +182,25 @@ function operandName(
   return pushOperand(state, value, end);
 }
 
-// Reads `&NAME`, which must be the whole value of a `let`. The reference is recorded
-// on the binding, and a placeholder goes on the value stack for the statement end.
+// Whether a new reference to `cell` conflicts with one already in scope: a `&mut`
+// conflicts with any reference, and a `&` conflicts with a `&mut`.
+function conflictsWithReference(
+  scopes: Scope[],
+  cell: Cell,
+  exclusive: boolean,
+): boolean {
+  for (const scope of scopes) {
+    for (const other of scope.values()) {
+      if (other.target === cell && (exclusive || other.exclusive === true)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Reads `&NAME` or `&mut NAME`, which must be the whole value of a `let`. The reference
+// is recorded on the binding, and a placeholder goes on the value stack for the statement end.
 function operandRef(
   state: ParserState,
   signed: boolean,
@@ -191,27 +211,64 @@ function operandRef(
     return referenceNotLet(state.pos);
   }
   if (top.mutable) return mutableReference(top.where, top.name);
-  const nameStart = skipSpaces(source, state.pos + 1);
-  const end = readName(source, nameStart);
+  let nameStart = skipSpaces(source, state.pos + 1);
+  let end = readName(source, nameStart);
+  const exclusive = source.slice(nameStart, end) === "mut";
+  if (exclusive) {
+    nameStart = skipSpaces(source, end);
+    end = readName(source, nameStart);
+  }
   if (end === nameStart) return expectedVariableName(source, nameStart);
   const name = source.slice(nameStart, end);
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);
   if (cell.target !== undefined) return referenceUse(nameStart, name);
+  if (exclusive && !cell.mutable) return mutableBorrow(nameStart, name);
+  if (conflictsWithReference(scopes, cell, exclusive)) {
+    return referenceOverlap(nameStart, name);
+  }
   const semicolon = skipSpaces(source, end);
   if (source.charAt(semicolon) !== ";") {
     return expectedSemicolon(source, semicolon);
   }
   top.target = cell;
+  top.exclusive = exclusive;
   return pushOperand(state, 0, end);
+}
+
+// Reads `*NAME =` at a statement start. The assignment writes the variable the
+// reference points to, and only a `&mut` reference may do so.
+function startDerefAssign(
+  state: ParserState,
+  name: string,
+  nameStart: number,
+  equals: number,
+  reference: Cell,
+  target: Cell,
+): Failure<TuffError> | Step {
+  const { source, ops, flags } = state;
+  if (reference.exclusive !== true) return readOnlyReference(nameStart, name);
+  ops.push({
+    kind: EntryKind.Binding,
+    name,
+    mutable: false,
+    assign: true,
+    where: nameStart,
+    target,
+  });
+  state.pos = skipSpaces(source, equals + 1);
+  state.expectOperand = true;
+  flags.atStatementStart = false;
+  return Step.Continue;
 }
 
 // Reads `*NAME`, which yields the value of the variable the reference points to.
 function operandDeref(
   state: ParserState,
   sign: number,
+  signed: boolean,
 ): Failure<TuffError> | Step {
-  const { source, scopes } = state;
+  const { source, scopes, flags } = state;
   const nameStart = skipSpaces(source, state.pos + 1);
   const end = readName(source, nameStart);
   if (end === nameStart) return expectedVariableName(source, nameStart);
@@ -220,6 +277,10 @@ function operandDeref(
   if (cell === undefined) return undefinedName(nameStart, name);
   const target = cell.target;
   if (target === undefined) return notReference(nameStart, name);
+  const equals = skipSpaces(source, end);
+  if (flags.atStatementStart && !signed && source.charAt(equals) === "=") {
+    return startDerefAssign(state, name, nameStart, equals, cell, target);
+  }
   const value = applySign(target.value, sign, state.pos, isLenient(state));
   if (typeof value === "object") return value;
   return pushOperand(state, value, end);
@@ -286,7 +347,7 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
   const bracket = toBracket(ch);
   if (bracket !== undefined) return openBracket(state, bracket, sign);
   if (ch === "&") return operandRef(state, signed);
-  if (ch === "*") return operandDeref(state, sign);
+  if (ch === "*") return operandDeref(state, sign, signed);
   if (isLetter(ch)) return operandName(state, sign, signed);
   return operandNumber(state, sign);
 }

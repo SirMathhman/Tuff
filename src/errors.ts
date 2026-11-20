@@ -473,6 +473,60 @@ export function notReference(where: number, name: string): Failure<TuffError> {
 }
 
 /**
+ * Reports a `&mut` borrow of a variable not declared with `let mut`.
+ *
+ * @param where - the offset of the variable.
+ * @param name - the variable being borrowed.
+ * @returns a failure describing the immutable borrow.
+ */
+export function mutableBorrow(where: number, name: string): Failure<TuffError> {
+  return fail(
+    `Cannot borrow '${name}' mutably because it was not declared with 'let mut'`,
+    where,
+    "Only variables declared with 'let mut' can be borrowed with '&mut'.",
+    `Declare '${name}' with 'let mut ${name} = ...;' to allow '&mut'.`,
+  );
+}
+
+/**
+ * Reports a reference that conflicts with another reference to the same variable.
+ *
+ * @param where - the offset of the variable.
+ * @param name - the variable being referenced.
+ * @returns a failure describing the conflict.
+ */
+export function referenceOverlap(
+  where: number,
+  name: string,
+): Failure<TuffError> {
+  return fail(
+    `'${name}' is already referenced in a way that conflicts with this reference`,
+    where,
+    "A '&mut' reference cannot coexist with any other reference to the same variable.",
+    "End the other reference's block, or use '&' for both references.",
+  );
+}
+
+/**
+ * Reports an assignment through a read-only reference.
+ *
+ * @param where - the offset of the reference's name.
+ * @param name - the read-only reference.
+ * @returns a failure describing the read-only reference.
+ */
+export function readOnlyReference(
+  where: number,
+  name: string,
+): Failure<TuffError> {
+  return fail(
+    `Cannot assign through '${name}' because it is a read-only reference`,
+    where,
+    "Only a reference made with '&mut' can change its variable.",
+    `Declare '${name}' with 'let ${name} = &mut variable;'.`,
+  );
+}
+
+/**
  * Reports a division whose divisor is zero.
  *
  * @param where - the offset of the division operator.
