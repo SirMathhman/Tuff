@@ -12,6 +12,8 @@ import {
   type DerefNode,
   type Expr,
   type IfNode,
+  type MatchArm,
+  type MatchNode,
   type LetStatement,
   type LiteralNode,
   type NameNode,
@@ -36,7 +38,7 @@ type Step<T> = Result<Parsed<T>, TuffError>;
 type Parser = (input: Input, pos: number, depth: number) => Step<Expr>;
 
 const MAX_NESTING_DEPTH = 256;
-const RESERVED = new Set<string>(["let", "mut", "true", "false", "if", "else"]);
+const RESERVED = new Set<string>(["let", "mut", "true", "false", "if", "else", "match", "case"]);
 const ADDITIVE = new Map<string, Operator>([
   ["+", Operator.Add],
   ["-", Operator.Subtract],
@@ -213,6 +215,89 @@ function parseIf(input: Input, pos: number, depth: number, parseExpr: Parser): S
   return ok({ value: node, next: elseBranch.value.next });
 }
 
+/**
+ * Parses one arm, `case pattern => expr;`, where the pattern is a number, `true`, `false`, or `_`.
+ *
+ * @param input - The tokens being parsed.
+ * @param pos - The position of the `case` token.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the arm's body.
+ * @returns The arm, or the first syntax error found.
+ */
+function parseArm(input: Input, pos: number, depth: number, parseExpr: Parser): Step<MatchArm> {
+  const caseToken = input.tokens[pos];
+  if (caseToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (caseToken.text !== "case") return err({ kind: TuffErrorKind.UnexpectedToken, span: caseToken.span });
+  const patternToken = input.tokens[pos + 1];
+  if (patternToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  let pattern: LiteralNode | BooleanNode | undefined;
+  if (patternToken.text === "_") {
+    pattern = undefined;
+  } else if (/^\d+$/.test(patternToken.text)) {
+    const value = Number(patternToken.text);
+    if (!Number.isFinite(value)) return err({ kind: TuffErrorKind.NumericOverflow, span: patternToken.span });
+    pattern = { kind: NodeKind.Literal, value, span: patternToken.span };
+  } else if (patternToken.text === "true" || patternToken.text === "false") {
+    pattern = { kind: NodeKind.Boolean, value: patternToken.text === "true", span: patternToken.span };
+  } else {
+    return err({ kind: TuffErrorKind.UnexpectedToken, span: patternToken.span });
+  }
+  const arrow = input.tokens[pos + 2];
+  if (arrow === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (arrow.text !== "=>") return err({ kind: TuffErrorKind.UnexpectedToken, span: arrow.span });
+  const body = parseExpr(input, pos + 3, depth + 1);
+  if (!body.ok) return body;
+  const semicolon = input.tokens[body.value.next];
+  if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
+  const arm: MatchArm = { pattern, patternSpan: patternToken.span, body: body.value.value };
+  return ok({ value: arm, next: body.value.next + 1 });
+}
+
+/**
+ * Parses `match (scrutinee) { case ...; ... }`. A match needs at least one arm.
+ *
+ * @param input - The tokens being parsed.
+ * @param pos - The position of the `match` token.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the scrutinee and arms.
+ * @returns The match, or the first syntax error found.
+ */
+function parseMatch(input: Input, pos: number, depth: number, parseExpr: Parser): Step<Expr> {
+  const matchToken = input.tokens[pos];
+  if (matchToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: matchToken.span });
+  const open = input.tokens[pos + 1];
+  if (open === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (open.text !== "(") return err({ kind: TuffErrorKind.UnexpectedToken, span: open.span });
+  const scrutinee = parseExpr(input, pos + 2, depth + 1);
+  if (!scrutinee.ok) return scrutinee;
+  const close = input.tokens[scrutinee.value.next];
+  if (close === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (close.text !== ")") return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });
+  const brace = input.tokens[scrutinee.value.next + 1];
+  if (brace === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (brace.text !== "{") return err({ kind: TuffErrorKind.UnexpectedToken, span: brace.span });
+
+  const arms: MatchArm[] = [];
+  let cursor = scrutinee.value.next + 2;
+  for (;;) {
+    const token = input.tokens[cursor];
+    if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (token.text === "}") break;
+    const arm = parseArm(input, cursor, depth, parseExpr);
+    if (!arm.ok) return arm;
+    arms.push(arm.value.value);
+    cursor = arm.value.next;
+  }
+  const closeBrace = input.tokens[cursor];
+  if (arms.length === 0 || closeBrace === undefined) {
+    return err({ kind: TuffErrorKind.UnexpectedToken, span: closeBrace?.span ?? input.end });
+  }
+  const node: MatchNode = { kind: NodeKind.Match, scrutinee: scrutinee.value.value, arms, span: matchToken.span };
+  return ok({ value: node, next: cursor + 1 });
+}
+
 function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser): Step<Expr> {
   const token = input.tokens[pos];
   if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
@@ -232,6 +317,7 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
   if (token.text === "if") return parseIf(input, pos, depth, parseExpr);
+  if (token.text === "match") return parseMatch(input, pos, depth, parseExpr);
   if (token.text === "&") {
     const mutable = input.tokens[pos + 1]?.text === "mut";
     const nameToken = input.tokens[pos + (mutable ? 2 : 1)];

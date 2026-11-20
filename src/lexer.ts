@@ -18,7 +18,7 @@ export interface Token {
  */
 export function tokenize(source: string): Result<Token[], TuffError> {
   const tokens: Token[] = [];
-  const pattern = /\s*(\d+|[A-Za-z]+|[-+*/&(){}=;])/y;
+  const pattern = /\s*(\d+|[A-Za-z]+|=>|[-+*/&(){}=;_])/y;
   let index = 0;
   while (index < source.length) {
     pattern.lastIndex = index;

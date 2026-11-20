@@ -1,0 +1,7 @@
+# Tuff Language Constructs
+
+Part of the canonical architecture; see [ARCHITECTURE.md](../ARCHITECTURE.md). These definitions are the language semantics that the parser, resolver, and evaluator implement.
+
+- **Reference**: `&x` (shared) or `&mut x` (mutable) produces a live pointer to the slot of a binding. `*e` reads the value that the reference `e` points to, where `e` is any factor (a name, a parenthesized expression, or another `*`). `*e = value;` writes through the reference that `e` yields. The reference being written through must be `&mut` on a `let mut` binding; a shared reference earlier on the path, such as the `z` in `*(*z) = 1`, does not block the write. A reference may not leave the block that declares its binding (`ReferenceEscapes`), and it is not a number, so using one as an arithmetic operand is `ReferenceAsValue`.
+- **Conditional**: `if (condition) then else otherwise`. The condition must be a boolean (`NotABoolean` otherwise). Both branches are resolved and evaluated, so an error in either is reported; the unchosen branch's writes are undone. Branches are full expressions, and `else` is required.
+- **Match**: `match (value) { case pattern => expr; ... }`, where each arm ends with `;`. A pattern is a number, `true`, `false`, or the wildcard `_`. Every arm is evaluated, and the value comes from the first arm whose pattern equals the value. A pattern of a different kind than the value is a `TypeMismatch` at the pattern. If no pattern matches, the result is `NoMatchingArm` at the `match` keyword.

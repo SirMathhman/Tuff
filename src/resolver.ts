@@ -5,6 +5,7 @@ import {
   type ChainNode,
   type Expr,
   type IfNode,
+  type MatchNode,
   type NameNode,
 } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
@@ -65,6 +66,8 @@ function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<un
       return resolveChain(expr, blocks, refs);
     case NodeKind.If:
       return resolveIf(expr, blocks, refs);
+    case NodeKind.Match:
+      return resolveMatch(expr, blocks, refs);
     case NodeKind.Block:
       return resolveBlock(expr, blocks, refs);
   }
@@ -92,6 +95,24 @@ function resolveIf(node: IfNode, blocks: NameTable[], refs: NameRefs): Result<un
   for (const part of [node.condition, node.thenBranch, node.elseBranch]) {
     const checked = resolveExpr(part, blocks, refs);
     if (!checked.ok) return checked;
+  }
+  return ok(undefined);
+}
+
+/**
+ * Resolves the scrutinee and every arm's body, including the arms that will not be selected.
+ *
+ * @param node - The match.
+ * @param blocks - The open blocks' name tables, outermost first.
+ * @param refs - The table of name bindings being built.
+ * @returns `ok(undefined)` if every name resolves, otherwise the first error found.
+ */
+function resolveMatch(node: MatchNode, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
+  const scrutinee = resolveExpr(node.scrutinee, blocks, refs);
+  if (!scrutinee.ok) return scrutinee;
+  for (const arm of node.arms) {
+    const body = resolveExpr(arm.body, blocks, refs);
+    if (!body.ok) return body;
   }
   return ok(undefined);
 }

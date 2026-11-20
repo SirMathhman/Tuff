@@ -443,3 +443,25 @@ test('evaluateTuff("if (true) 2 else { true + true }") is a BooleanOperand error
     error: { kind: TuffErrorKind.BooleanOperand, span: { start: 24, end: 25 } },
   });
 });
+
+test('evaluateTuff("match (true) { case true => 1; case false => 2; }") => 1', () => {
+  expect(evaluateTuff("match (true) { case true => 1; case false => 2; }")).toEqual({ ok: true, value: 1 });
+});
+
+test("the wildcard matches any number that no earlier arm matches", () => {
+  expect(evaluateTuff("match (1) { case 1 => 5; case _ => 6; }")).toEqual({ ok: true, value: 5 });
+});
+
+test("a match with no matching arm is a NoMatchingArm error at the match", () => {
+  expect(evaluateTuff("match (2) { case 1 => 1; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NoMatchingArm, span: { start: 0, end: 5 } },
+  });
+});
+
+test("an error in an unselected arm is still reported", () => {
+  expect(evaluateTuff("match (true) { case true => 1; case false => 1 / 0; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 47, end: 48 } },
+  });
+});

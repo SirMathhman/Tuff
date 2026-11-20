@@ -9,6 +9,7 @@ import {
   type ChainNode,
   type DerefNode,
   type IfNode,
+  type MatchNode,
   type Expr,
   type NameNode,
 } from "./ast.ts";
@@ -72,6 +73,7 @@ function spanOf(expr: Expr): Span {
     case NodeKind.Borrow:
     case NodeKind.Deref:
     case NodeKind.If:
+    case NodeKind.Match:
       return expr.span;
     case NodeKind.Chain:
       return spanOf(expr.first);
@@ -128,6 +130,8 @@ function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
       return evaluateChain(expr, env);
     case NodeKind.If:
       return evaluateIf(expr, env);
+    case NodeKind.Match:
+      return evaluateMatch(expr, env);
     case NodeKind.Block:
       return evaluateBlock(expr, env);
   }
@@ -211,6 +215,34 @@ function restoreFrames(frames: Frame<Value>[], snapshot: Frame<Value>[]): void {
     frame.length = 0;
     frame.push(...saved);
   }
+}
+
+/**
+ * Evaluates every arm, then returns the value of the first arm whose pattern equals the scrutinee.
+ * The arms that are not selected have their writes undone.
+ *
+ * @param node - The match.
+ * @param env - The current evaluation state.
+ * @returns The selected arm's value, or an error: a pattern of the wrong kind, a failing arm, or no matching arm.
+ */
+function evaluateMatch(node: MatchNode, env: Env): Result<Value, TuffError> {
+  const scrutinee = evaluateIn(node.scrutinee, env);
+  if (!scrutinee.ok) return scrutinee;
+  for (const arm of node.arms) {
+    if (arm.pattern !== undefined && typeof arm.pattern.value !== typeof scrutinee.value) {
+      return err({ kind: TuffErrorKind.TypeMismatch, span: arm.patternSpan });
+    }
+  }
+  const matched = node.arms.findIndex((arm) => arm.pattern === undefined || arm.pattern.value === scrutinee.value);
+  const results = node.arms.map((arm, index) => evaluateBranch(arm.body, env, index === matched));
+  for (const result of results) {
+    if (!result.ok) return result;
+  }
+  if (matched === -1) return err({ kind: TuffErrorKind.NoMatchingArm, span: node.span });
+  const chosen = results[matched];
+  // Unreachable: matched indexes an arm, and every arm produced a result.
+  if (chosen === undefined) return err({ kind: TuffErrorKind.InternalError, span: node.span });
+  return chosen;
 }
 
 function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {

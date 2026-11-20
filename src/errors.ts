@@ -36,6 +36,8 @@ export enum TuffErrorKind {
   ReferenceEscapes = "ReferenceEscapes",
   /** The condition of an `if` is not a boolean. */
   NotABoolean = "NotABoolean",
+  /** No arm of a match has a pattern equal to the scrutinee. */
+  NoMatchingArm = "NoMatchingArm",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -64,7 +66,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.NotAReference>
   | TuffErrorOf<TuffErrorKind.ReferenceAsValue>
   | TuffErrorOf<TuffErrorKind.ReferenceEscapes>
-  | TuffErrorOf<TuffErrorKind.NotABoolean>;
+  | TuffErrorOf<TuffErrorKind.NotABoolean>
+  | TuffErrorOf<TuffErrorKind.NoMatchingArm>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -173,6 +176,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Condition is not a boolean",
     why: "An if condition selects a branch only when it is true or false. A number or a reference cannot select one.",
     fix: "Make the condition evaluate to true or false.",
+  },
+  [TuffErrorKind.NoMatchingArm]: {
+    what: "No matching arm",
+    why: "No case pattern equals the value being matched, so the match has no result.",
+    fix: "Add a case for this value, or add a wildcard case `case _ => ...;` as the last arm.",
   },
 };
 

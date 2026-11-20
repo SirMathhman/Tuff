@@ -18,6 +18,8 @@ export enum NodeKind {
   Deref = "Deref",
   /** A conditional expression, `if (condition) then else otherwise`. */
   If = "If",
+  /** A pattern match, `match (value) { case pattern => expr; ... }`. */
+  Match = "Match",
 }
 
 /** The kinds of statement that may appear in a block. */
@@ -177,5 +179,28 @@ export interface IfNode {
   span: Span;
 }
 
+/** One arm of a match: a pattern and the expression it selects. */
+export interface MatchArm {
+  /** The number or boolean the scrutinee must equal, or `undefined` for the wildcard `_`. */
+  pattern: LiteralNode | BooleanNode | undefined;
+  /** Where the pattern sits in the source; `_` gets the span of its underscore. */
+  patternSpan: Span;
+  /** The value of the arm when its pattern matches. */
+  body: Expr;
+}
+
+/** A match: the first arm whose pattern equals the scrutinee gives the value. */
+export interface MatchNode {
+  /** Always `NodeKind.Match`. */
+  kind: NodeKind.Match;
+  /** The value being matched. */
+  scrutinee: Expr;
+  /** The arms, in source order. */
+  arms: MatchArm[];
+  /** Where the `match` sits in the source. */
+  span: Span;
+}
+
 /** Any expression node. */
-export type Expr = LiteralNode | BooleanNode | NameNode | BorrowNode | DerefNode | IfNode | ChainNode | BlockNode;
+export type Expr =
+  LiteralNode | BooleanNode | NameNode | BorrowNode | DerefNode | IfNode | MatchNode | ChainNode | BlockNode;
