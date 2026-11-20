@@ -8,18 +8,40 @@ const local = {
     "require-doc-on-exports": {
       meta: {
         type: "suggestion",
-        messages: { missing: "Exported {{kind}} must have a JSDoc comment (/** ... */) directly above it." },
+        messages: {
+          missing: "Exported {{kind}} must have a JSDoc comment (/** ... */) directly above it.",
+          missingMember: "Member of an exported declaration ({{kind}}) must have a JSDoc comment directly above it.",
+        },
       },
       create(context) {
         const sourceCode = context.sourceCode;
+        const hasJsdoc = (node) => {
+          const last = sourceCode.getCommentsBefore(node).at(-1);
+          return last !== undefined && last.type === "Block" && last.value.startsWith("*");
+        };
+        // Walks up from a member (enum member, interface property) to see whether its declaration is exported.
+        const exportedContainer = (member) => {
+          let current = member.parent;
+          for (let depth = 0; depth < 3 && current; depth++) {
+            if (current.parent?.type === "ExportNamedDeclaration") return current.type;
+            current = current.parent;
+          }
+          return undefined;
+        };
         return {
           ExportNamedDeclaration(node) {
             const declaration = node.declaration;
             if (declaration === null || !DOC_REQUIRED_DECLARATIONS.includes(declaration.type)) return;
-            const comments = sourceCode.getCommentsBefore(node);
-            const last = comments.at(-1);
-            if (last !== undefined && last.type === "Block" && last.value.startsWith("*")) return;
+            if (hasJsdoc(node)) return;
             context.report({ node, messageId: "missing", data: { kind: declaration.type } });
+          },
+          TSEnumMember(node) {
+            if (exportedContainer(node) === undefined || hasJsdoc(node)) return;
+            context.report({ node, messageId: "missingMember", data: { kind: "enum member" } });
+          },
+          TSPropertySignature(node) {
+            if (exportedContainer(node) === undefined || hasJsdoc(node)) return;
+            context.report({ node, messageId: "missingMember", data: { kind: "interface property" } });
           },
         };
       },

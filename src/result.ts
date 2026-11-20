@@ -1,12 +1,16 @@
 /** A successful result carrying a value. */
 export interface Ok<T> {
+  /** Always `true` for a success. */
   ok: true;
+  /** The computed value. */
   value: T;
 }
 
 /** A failed result carrying an error. */
 export interface Err<E> {
+  /** Always `false` for a failure. */
   ok: false;
+  /** The error describing the failure. */
   error: E;
 }
 

@@ -1,6 +1,8 @@
 /** The bindings of one block, linked to the enclosing block's scope. */
 export interface Scope<V> {
+  /** The names bound directly in this block. */
   locals: Map<string, V>;
+  /** The enclosing scope, or `undefined` at the top level. */
   outer: Scope<V> | undefined;
 }
 

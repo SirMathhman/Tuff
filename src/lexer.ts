@@ -4,7 +4,9 @@ import { err, ok, type Result } from "./result.ts";
 
 /** A lexeme and where it sits in the source. */
 export interface Token {
+  /** The lexeme's text. */
   text: string;
+  /** Where the lexeme sits in the source. */
   span: Span;
 }
 
