@@ -10,6 +10,10 @@ export default tseslint.config({
         selector: "TSTypeLiteral",
         message: "Use an interface instead of an object type literal.",
       },
+      {
+        selector: "TSLiteralType > Literal[raw=/^[\"'`]/]",
+        message: "Use an enum member instead of a string literal type.",
+      },
     ],
   },
 });

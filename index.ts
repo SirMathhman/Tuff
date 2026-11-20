@@ -3,19 +3,29 @@ export interface Span {
   end: number;
 }
 
-export interface TuffErrorOf<K extends string> {
+export enum TuffErrorKind {
+  UnexpectedCharacter = "UnexpectedCharacter",
+  UnexpectedEnd = "UnexpectedEnd",
+  UnexpectedToken = "UnexpectedToken",
+  ExpectedClosingParen = "ExpectedClosingParen",
+  DivisionByZero = "DivisionByZero",
+  NumericOverflow = "NumericOverflow",
+  NestingTooDeep = "NestingTooDeep",
+}
+
+export interface TuffErrorOf<K extends TuffErrorKind> {
   kind: K;
   span: Span;
 }
 
 export type TuffError =
-  | TuffErrorOf<"UnexpectedCharacter">
-  | TuffErrorOf<"UnexpectedEnd">
-  | TuffErrorOf<"UnexpectedToken">
-  | TuffErrorOf<"ExpectedClosingParen">
-  | TuffErrorOf<"DivisionByZero">
-  | TuffErrorOf<"NumericOverflow">
-  | TuffErrorOf<"NestingTooDeep">;
+  | TuffErrorOf<TuffErrorKind.UnexpectedCharacter>
+  | TuffErrorOf<TuffErrorKind.UnexpectedEnd>
+  | TuffErrorOf<TuffErrorKind.UnexpectedToken>
+  | TuffErrorOf<TuffErrorKind.ExpectedClosingParen>
+  | TuffErrorOf<TuffErrorKind.DivisionByZero>
+  | TuffErrorOf<TuffErrorKind.NumericOverflow>
+  | TuffErrorOf<TuffErrorKind.NestingTooDeep>;
 
 export interface Ok<T> {
   ok: true;
@@ -46,15 +56,15 @@ interface Parsed<T> {
 
 type Step<T> = Result<Parsed<T>, TuffError>;
 type Parser = (input: Input, pos: number, depth: number) => Step<number>;
-type OperatorError = "DivisionByZero" | "NumericOverflow";
+type OperatorError = TuffErrorKind.DivisionByZero | TuffErrorKind.NumericOverflow;
 type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
 
 const MAX_NESTING_DEPTH = 256;
 
 const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
 const err = <E>(error: E): Err<E> => ({ ok: false, error });
-const finite = (n: number): Result<number, "NumericOverflow"> =>
-  Number.isFinite(n) ? ok(n) : err("NumericOverflow");
+const finite = (n: number): Result<number, TuffErrorKind.NumericOverflow> =>
+  Number.isFinite(n) ? ok(n) : err(TuffErrorKind.NumericOverflow);
 
 const ADDITIVE = new Map<string, BinaryOp>([
   ["+", (a, b) => finite(a + b)],
@@ -62,7 +72,7 @@ const ADDITIVE = new Map<string, BinaryOp>([
 ]);
 const MULTIPLICATIVE = new Map<string, BinaryOp>([
   ["*", (a, b) => finite(a * b)],
-  ["/", (a, b) => (b === 0 ? err("DivisionByZero") : ok(Math.trunc(a / b)))],
+  ["/", (a, b) => (b === 0 ? err(TuffErrorKind.DivisionByZero) : ok(Math.trunc(a / b)))],
 ]);
 
 function tokenize(source: string): Result<Token[], TuffError> {
@@ -76,7 +86,7 @@ function tokenize(source: string): Result<Token[], TuffError> {
       const rest = source.slice(index);
       const start = index + (rest.length - rest.trimStart().length);
       if (start >= source.length) break;
-      return err({ kind: "UnexpectedCharacter", span: { start, end: start + 1 } });
+      return err({ kind: TuffErrorKind.UnexpectedCharacter, span: { start, end: start + 1 } });
     }
     const text = match[1] ?? "";
     const end = pattern.lastIndex;
@@ -88,23 +98,25 @@ function tokenize(source: string): Result<Token[], TuffError> {
 
 function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser): Step<number> {
   const token = input.tokens[pos];
-  if (token === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
+  if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
   if (token.text === "(" || token.text === "{") {
-    if (depth >= MAX_NESTING_DEPTH) return err({ kind: "NestingTooDeep", span: token.span });
+    if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: token.span });
     const closer = token.text === "(" ? ")" : "}";
     const inner = parseExpr(input, pos + 1, depth + 1);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
-    if (close === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
-    if (close.text !== closer) return err({ kind: "ExpectedClosingParen", span: close.span });
+    if (close === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (close.text !== closer) {
+      return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });
+    }
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
   if (/^\d+$/.test(token.text)) {
     const value = Number(token.text);
-    if (!Number.isFinite(value)) return err({ kind: "NumericOverflow", span: token.span });
+    if (!Number.isFinite(value)) return err({ kind: TuffErrorKind.NumericOverflow, span: token.span });
     return ok({ value, next: pos + 1 });
   }
-  return err({ kind: "UnexpectedToken", span: token.span });
+  return err({ kind: TuffErrorKind.UnexpectedToken, span: token.span });
 }
 
 function parseBinary(
@@ -146,6 +158,6 @@ export function evaluateTuff(source: string): Result<number, TuffError> {
   const parsed = parseExpression(input, 0, 0);
   if (!parsed.ok) return parsed;
   const extra = input.tokens[parsed.value.next];
-  if (extra !== undefined) return err({ kind: "UnexpectedToken", span: extra.span });
+  if (extra !== undefined) return err({ kind: TuffErrorKind.UnexpectedToken, span: extra.span });
   return ok(parsed.value.value);
 }
