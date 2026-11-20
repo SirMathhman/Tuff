@@ -1,13 +1,16 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
+
+const { configs: jsConfigs } = eslint;
+const { configs: tsConfigs } = tseslint;
 import jsdoc from "eslint-plugin-jsdoc";
 import maxInterfaceMembers from "./eslint-rules/max-interface-members.js";
 import noRecursion from "./eslint-rules/no-recursion.js";
 
 export default tseslint.config(
   { ignores: ["node_modules/**"] },
-  eslint.configs.recommended,
-  tseslint.configs.recommended,
+  jsConfigs.recommended,
+  tsConfigs.recommended,
   {
     plugins: {
       local: {
@@ -65,6 +68,11 @@ export default tseslint.config(
         {
           selector: "TSTypeLiteral",
           message: "Use a named interface instead of an object type literal.",
+        },
+        {
+          selector: "MemberExpression[object.type='MemberExpression']",
+          message:
+            "Member chains such as a.b.c are not allowed; access one level at a time.",
         },
         {
           selector: "TSNullKeyword",

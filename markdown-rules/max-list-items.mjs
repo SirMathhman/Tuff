@@ -11,9 +11,12 @@ export default {
   parser: "markdownit",
   function: (params, onError) => {
     const openLists = [];
-    for (const token of params.parsers.markdownit.tokens) {
+    const { parsers } = params;
+    const { markdownit } = parsers;
+    for (const token of markdownit.tokens) {
       if (token.type === "bullet_list_open") {
-        openLists.push({ start: token.map[0], items: 0 });
+        const { map } = token;
+        openLists.push({ start: map[0], items: 0 });
       } else if (token.type === "list_item_open") {
         const list = openLists[openLists.length - 1];
         if (list) list.items++;

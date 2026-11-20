@@ -20,11 +20,12 @@ rl.on("line", (line) => {
   }
   if (source !== "") {
     const result = interpretTuff(source);
-    console.log(
-      result.ok
-        ? result.value
-        : `error: ${result.error.what} (at offset ${result.error.where})`,
-    );
+    if (result.ok) {
+      console.log(result.value);
+    } else {
+      const { error } = result;
+      console.log(`error: ${error.what} (at offset ${error.where})`);
+    }
   }
   rl.prompt();
 });

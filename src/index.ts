@@ -80,7 +80,8 @@ function innermostNonOperator(ops: StackEntry[]): StackEntry | undefined {
 // The innermost scope's cell for `name`, or undefined.
 function lookupCell(scopes: Scope[], name: string): Cell | undefined {
   for (let idx = scopes.length - 1; idx >= 0; idx--) {
-    const cell = scopes[idx]?.get(name);
+    const scope = scopes[idx];
+    const cell = scope?.get(name);
     if (cell !== undefined) return cell;
   }
   return undefined;
@@ -90,13 +91,14 @@ function lookupCell(scopes: Scope[], name: string): Cell | undefined {
 // `else`. A completed else-branch finishes the whole `if`, and its value takes
 // the place of the `if` on the value stack, which may complete an enclosing branch.
 function completeBranch(state: ParserState): Failure<TuffError> | undefined {
+  const { ops, values } = state;
   for (;;) {
-    const entry = state.ops[state.ops.length - 1];
+    const entry = ops[ops.length - 1];
     if (entry?.kind !== EntryKind.If) return undefined;
     if (entry.phase !== IfPhase.Then && entry.phase !== IfPhase.Else) {
       return undefined;
     }
-    const value = state.values.pop() ?? 0;
+    const value = values.pop() ?? 0;
     if (entry.skipping) {
       state.skipDepth--;
       entry.skipping = false;
@@ -107,7 +109,7 @@ function completeBranch(state: ParserState): Failure<TuffError> | undefined {
       entry.phase = IfPhase.AwaitElse;
       return undefined;
     }
-    state.ops.pop();
+    ops.pop();
     const result = applySign(
       entry.value ?? 0,
       entry.sign,
@@ -115,7 +117,7 @@ function completeBranch(state: ParserState): Failure<TuffError> | undefined {
       isLenient(state),
     );
     if (typeof result === "object") return result;
-    state.values.push(result);
+    values.push(result);
   }
 }
 
@@ -124,35 +126,38 @@ function pushOperand(
   value: Value,
   end: number,
 ): Failure<TuffError> | Step {
-  state.flags.lastStatementEnded = false;
-  state.values.push(value);
+  const { values, flags } = state;
+  flags.lastStatementEnded = false;
+  values.push(value);
   state.pos = end;
   state.expectOperand = false;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return completeBranch(state) ?? Step.Continue;
 }
 
 function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
-  const top = state.ops[state.ops.length - 1];
+  const { ops, scopes, flags } = state;
+  const top = ops[ops.length - 1];
   const ifCondition =
     top?.kind === EntryKind.If && top.phase === IfPhase.Condition;
-  state.ops.push({
+  ops.push({
     kind: EntryKind.Group,
     bracket,
     sign,
     where: state.pos,
     ifCondition,
   });
-  if (bracket === Bracket.Brace) state.scopes.push(new Map());
+  if (bracket === Bracket.Brace) scopes.push(new Map());
   state.depth++;
   state.pos++;
-  state.flags.atStatementStart = bracket === Bracket.Brace;
+  flags.atStatementStart = bracket === Bracket.Brace;
   return Step.Continue;
 }
 
 // Reads `if` and waits for its parenthesized condition.
 function startIf(state: ParserState, sign: number, end: number): Step {
-  state.ops.push({
+  const { ops, flags } = state;
+  ops.push({
     kind: EntryKind.If,
     phase: IfPhase.Condition,
     sign,
@@ -162,7 +167,7 @@ function startIf(state: ParserState, sign: number, end: number): Step {
     value: undefined,
   });
   state.pos = end;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -172,9 +177,10 @@ function startBranch(
   state: ParserState,
   closePos: number,
 ): Failure<TuffError> | Step {
-  const entry = state.ops[state.ops.length - 1];
+  const { ops, values } = state;
+  const entry = ops[ops.length - 1];
   if (entry?.kind !== EntryKind.If) return Step.Continue;
-  const value = state.values.pop() ?? false;
+  const value = values.pop() ?? false;
   if (typeof value !== "boolean" && !isLenient(state)) {
     return nonBooleanCondition(closePos);
   }
@@ -191,32 +197,32 @@ function startLet(
   state: ParserState,
   letEnd: number,
 ): Failure<TuffError> | Step {
-  let nameStart = skipSpaces(state.source, letEnd);
-  let nameEnd = readName(state.source, nameStart);
+  const { source, ops, flags } = state;
+  let nameStart = skipSpaces(source, letEnd);
+  let nameEnd = readName(source, nameStart);
   let mutable = false;
-  if (state.source.slice(nameStart, nameEnd) === "mut") {
+  if (source.slice(nameStart, nameEnd) === "mut") {
     mutable = true;
-    nameStart = skipSpaces(state.source, nameEnd);
-    nameEnd = readName(state.source, nameStart);
+    nameStart = skipSpaces(source, nameEnd);
+    nameEnd = readName(source, nameStart);
   }
-  if (nameEnd === nameStart)
-    return expectedVariableName(state.source, nameStart);
-  const name = state.source.slice(nameStart, nameEnd);
+  if (nameEnd === nameStart) return expectedVariableName(source, nameStart);
+  const name = source.slice(nameStart, nameEnd);
   if (RESERVED_NAMES.has(name)) return reservedName(nameStart, name);
-  const equals = skipSpaces(state.source, nameEnd);
-  if (state.source.charAt(equals) !== "=") {
-    return expectedEquals(state.source, equals, name);
+  const equals = skipSpaces(source, nameEnd);
+  if (source.charAt(equals) !== "=") {
+    return expectedEquals(source, equals, name);
   }
-  state.ops.push({
+  ops.push({
     kind: EntryKind.Binding,
     name,
     mutable,
     assign: false,
     where: nameStart,
   });
-  state.pos = skipSpaces(state.source, equals + 1);
+  state.pos = skipSpaces(source, equals + 1);
   state.expectOperand = true;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -227,21 +233,22 @@ function startAssign(
   nameStart: number,
   equals: number,
 ): Failure<TuffError> | Step {
+  const { source, ops, scopes, flags } = state;
   if (!isLenient(state)) {
-    const cell = lookupCell(state.scopes, name);
+    const cell = lookupCell(scopes, name);
     if (cell === undefined) return undefinedName(nameStart, name);
     if (!cell.mutable) return notMutable(nameStart, name);
   }
-  state.ops.push({
+  ops.push({
     kind: EntryKind.Binding,
     name,
     mutable: false,
     assign: true,
     where: nameStart,
   });
-  state.pos = skipSpaces(state.source, equals + 1);
+  state.pos = skipSpaces(source, equals + 1);
   state.expectOperand = true;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return Step.Continue;
 }
 
@@ -250,10 +257,11 @@ function operandName(
   sign: number,
   signed: boolean,
 ): Failure<TuffError> | Step {
-  const end = readName(state.source, state.pos);
-  const name = state.source.slice(state.pos, end);
+  const { source, scopes, flags } = state;
+  const end = readName(source, state.pos);
+  const name = source.slice(state.pos, end);
   if (name === "let") {
-    if (state.flags.atStatementStart && !signed) return startLet(state, end);
+    if (flags.atStatementStart && !signed) return startLet(state, end);
     return letNotAllowed(state.pos);
   }
   if (name === "if") return startIf(state, sign, end);
@@ -268,15 +276,11 @@ function operandName(
     if (typeof literal === "object") return literal;
     return pushOperand(state, literal, end);
   }
-  const equals = skipSpaces(state.source, end);
-  if (
-    state.flags.atStatementStart &&
-    !signed &&
-    state.source.charAt(equals) === "="
-  ) {
+  const equals = skipSpaces(source, end);
+  if (flags.atStatementStart && !signed && source.charAt(equals) === "=") {
     return startAssign(state, name, state.pos, equals);
   }
-  const cell = lookupCell(state.scopes, name);
+  const cell = lookupCell(scopes, name);
   if (cell === undefined) {
     if (isLenient(state)) return pushOperand(state, 0, end);
     return undefinedName(state.pos, name);
@@ -290,52 +294,54 @@ function operandNumber(
   state: ParserState,
   sign: number,
 ): Failure<TuffError> | Step {
-  const end = readDigits(state.source, state.pos);
-  if (end === state.pos) return expectedNumber(state.source, state.pos);
+  const { source } = state;
+  const end = readDigits(source, state.pos);
+  if (end === state.pos) return expectedNumber(source, state.pos);
   return pushOperand(
     state,
-    sign * parseInt(state.source.slice(state.pos, end), 10),
+    sign * parseInt(source.slice(state.pos, end), 10),
     end,
   );
 }
 
 // Reads an operand: a sign, then a number, a variable, a boolean, an `if`, or an opening bracket.
 function stepOperand(state: ParserState): Failure<TuffError> | Step {
-  state.pos = skipSpaces(state.source, state.pos);
+  const { source, ops, flags } = state;
+  state.pos = skipSpaces(source, state.pos);
   if (
-    state.flags.atStatementStart &&
+    flags.atStatementStart &&
     state.depth === 0 &&
-    state.flags.afterLet &&
-    state.pos === state.source.length
+    flags.afterLet &&
+    state.pos === source.length
   ) {
     return Step.End;
   }
   if (
-    state.flags.atStatementStart &&
+    flags.atStatementStart &&
     state.depth > 0 &&
-    state.flags.lastStatementEnded &&
-    state.source.charAt(state.pos) === "}"
+    flags.lastStatementEnded &&
+    source.charAt(state.pos) === "}"
   ) {
     return blockEndsWithStatement(state.pos);
   }
-  if (state.flags.atStatementStart && state.source.charAt(state.pos) === ";") {
+  if (flags.atStatementStart && source.charAt(state.pos) === ";") {
     return unexpectedSemicolon(state.pos);
   }
-  const top = state.ops[state.ops.length - 1];
+  const top = ops[ops.length - 1];
   if (
     top?.kind === EntryKind.If &&
     top.phase === IfPhase.Condition &&
-    state.source.charAt(state.pos) !== "("
+    source.charAt(state.pos) !== "("
   ) {
-    return expectedIfParen(state.source, state.pos);
+    return expectedIfParen(source, state.pos);
   }
   let sign = 1;
-  let ch = state.source.charAt(state.pos);
+  let ch = source.charAt(state.pos);
   const signed = ch === "+" || ch === "-";
   if (signed) {
     if (ch === "-") sign = -1;
     state.pos++;
-    ch = state.source.charAt(state.pos);
+    ch = source.charAt(state.pos);
   }
   const bracket = toBracket(ch);
   if (bracket !== undefined) return openBracket(state, bracket, sign);
@@ -347,12 +353,13 @@ function pushOperator(
   state: ParserState,
   op: Operator,
 ): Failure<TuffError> | undefined {
+  const { ops, values, flags } = state;
   // Left-associative: apply pending operators that bind at least as tightly.
   for (
-    let top = state.ops[state.ops.length - 1];
+    let top = ops[ops.length - 1];
     top?.kind === EntryKind.Operator &&
     precedence(top.operator) >= precedence(op);
-    top = state.ops[state.ops.length - 1]
+    top = ops[ops.length - 1]
   ) {
     if (
       top?.kind === EntryKind.Operator &&
@@ -361,23 +368,24 @@ function pushOperator(
     ) {
       return chainedComparison(state.pos);
     }
-    const failure = applyTop(state.values, state.ops, isLenient(state));
+    const failure = applyTop(values, ops, isLenient(state));
     if (failure !== undefined) return failure;
   }
-  state.ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
+  ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
   state.pos += op.length;
   state.expectOperand = true;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return undefined;
 }
 
 function endOfInput(state: ParserState): Failure<TuffError> | Step {
-  const group = innermostGroup(state.ops);
+  const { source, ops } = state;
+  const group = innermostGroup(ops);
   if (state.depth > 0 && group !== undefined) {
-    return expectedClose(state.source, state.pos, group.bracket);
+    return expectedClose(source, state.pos, group.bracket);
   }
-  if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
-    return expectedSemicolon(state.source, state.pos);
+  if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
+    return expectedSemicolon(source, state.pos);
   }
   return Step.End;
 }
@@ -388,13 +396,14 @@ function closeBinding(
   state: ParserState,
   binding: BindingEntry,
 ): Failure<TuffError> | undefined {
+  const { ops, values, scopes, flags } = state;
   const lenient = isLenient(state);
-  const reduced = reduceOperators(state.values, state.ops, lenient);
+  const reduced = reduceOperators(values, ops, lenient);
   if (reduced !== undefined) return reduced;
-  state.ops.pop();
-  const value = state.values.pop() ?? 0;
+  ops.pop();
+  const value = values.pop() ?? 0;
   if (binding.assign) {
-    const cell = lookupCell(state.scopes, binding.name);
+    const cell = lookupCell(scopes, binding.name);
     if (cell !== undefined && !lenient) {
       if (typeof cell.value !== typeof value) {
         return typeMismatch(
@@ -408,25 +417,27 @@ function closeBinding(
     }
   } else {
     const cell = { value, mutable: binding.mutable };
-    state.scopes[state.scopes.length - 1]?.set(binding.name, cell);
+    const scope = scopes[scopes.length - 1];
+    scope?.set(binding.name, cell);
   }
-  state.flags.lastStatementEnded = true;
-  if (state.depth === 0) state.flags.afterLet = true;
+  flags.lastStatementEnded = true;
+  if (state.depth === 0) flags.afterLet = true;
   return undefined;
 }
 
 function endStatement(state: ParserState): Failure<TuffError> | Step {
-  const open = innermostNonOperator(state.ops);
+  const { source, ops, flags } = state;
+  const open = innermostNonOperator(ops);
   if (open?.kind === EntryKind.Binding) {
     const failure = closeBinding(state, open);
     if (failure !== undefined) return failure;
     state.pos++;
     state.expectOperand = true;
-    state.flags.atStatementStart = true;
+    flags.atStatementStart = true;
     return Step.Continue;
   }
   if (open?.kind === EntryKind.Group) {
-    return expectedClose(state.source, state.pos, open.bracket);
+    return expectedClose(source, state.pos, open.bracket);
   }
   return unexpectedSemicolon(state.pos);
 }
@@ -435,22 +446,22 @@ function closeBracket(
   state: ParserState,
   ch: string,
 ): Failure<TuffError> | Step {
-  if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
-    return expectedSemicolon(state.source, state.pos);
+  const { source, ops, values, scopes, flags } = state;
+  if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
+    return expectedSemicolon(source, state.pos);
   }
-  const group = innermostGroup(state.ops);
-  if (group === undefined)
-    return expectedOperator(state.source, state.pos, true);
+  const group = innermostGroup(ops);
+  if (group === undefined) return expectedOperator(source, state.pos, true);
   if (ch !== closerFor(group.bracket)) {
-    return expectedMismatch(state.source, state.pos, group.bracket);
+    return expectedMismatch(source, state.pos, group.bracket);
   }
   const closePos = state.pos;
-  const failure = closeGroup(state.values, state.ops, isLenient(state));
+  const failure = closeGroup(values, ops, isLenient(state));
   if (failure !== undefined) return failure;
-  if (group.bracket === Bracket.Brace) state.scopes.pop();
+  if (group.bracket === Bracket.Brace) scopes.pop();
   state.depth--;
   state.pos++;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   if (group.ifCondition) return startBranch(state, closePos);
   return completeBranch(state) ?? Step.Continue;
 }
@@ -460,34 +471,36 @@ function awaitElse(
   state: ParserState,
   entry: IfEntry,
 ): Failure<TuffError> | Step {
-  const end = readName(state.source, state.pos);
-  if (state.source.slice(state.pos, end) !== "else") {
-    return expectedElse(state.source, state.pos);
+  const { source, flags } = state;
+  const end = readName(source, state.pos);
+  if (source.slice(state.pos, end) !== "else") {
+    return expectedElse(source, state.pos);
   }
   entry.phase = IfPhase.Else;
   entry.skipping = entry.condition;
   if (entry.skipping) state.skipDepth++;
-  state.pos = skipSpaces(state.source, end);
+  state.pos = skipSpaces(source, end);
   state.expectOperand = true;
-  state.flags.atStatementStart = false;
+  flags.atStatementStart = false;
   return Step.Continue;
 }
 
 // Reads an operator, a closing bracket, `else`, or the end of the input.
 function stepOperator(state: ParserState): Failure<TuffError> | Step {
-  state.pos = skipSpaces(state.source, state.pos);
-  const pending = innermostNonOperator(state.ops);
+  const { source, ops } = state;
+  state.pos = skipSpaces(source, state.pos);
+  const pending = innermostNonOperator(ops);
   if (pending?.kind === EntryKind.If) return awaitElse(state, pending);
-  if (state.pos === state.source.length) return endOfInput(state);
-  const ch = state.source.charAt(state.pos);
+  if (state.pos === source.length) return endOfInput(state);
+  const ch = source.charAt(state.pos);
   if (ch === ";") return endStatement(state);
   if (state.depth > 0 && isCloser(ch)) return closeBracket(state, ch);
-  const op = toOperator(state.source, state.pos);
+  const op = toOperator(source, state.pos);
   if (op === undefined) {
-    if (innermostNonOperator(state.ops)?.kind === EntryKind.Binding) {
-      return expectedSemicolon(state.source, state.pos);
+    if (innermostNonOperator(ops)?.kind === EntryKind.Binding) {
+      return expectedSemicolon(source, state.pos);
     }
-    return expectedOperator(state.source, state.pos, state.depth > 0);
+    return expectedOperator(source, state.pos, state.depth > 0);
   }
   return pushOperator(state, op) ?? Step.Continue;
 }
@@ -530,7 +543,8 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   }
   const failure = reduceOperators(state.values, state.ops, isLenient(state));
   if (failure !== undefined) return failure;
-  const result = state.values.pop() ?? 0;
+  const { values } = state;
+  const result = values.pop() ?? 0;
   return {
     ok: true,
     value: typeof result === "boolean" ? Number(result) : result,

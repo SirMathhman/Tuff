@@ -25,10 +25,12 @@ const rootNames = [
   ...listSources(join(projectRoot, "scripts")),
 ];
 
+const { ScriptTarget, ModuleKind, ModuleResolutionKind } = ts;
+
 const options: ts.CompilerOptions = {
-  target: ts.ScriptTarget.ESNext,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  target: ScriptTarget.ESNext,
+  module: ModuleKind.ESNext,
+  moduleResolution: ModuleResolutionKind.Bundler,
   noEmit: true,
 };
 
@@ -40,6 +42,12 @@ const projectFiles = new Set(
     .filter((sf) => rootNames.includes(sf.fileName))
     .map((sf) => sf.fileName),
 );
+
+// The names listed in a named export clause, such as `export { a, b as c }`.
+function exportedNames(clause: ts.NamedExports): string[] {
+  const { elements } = clause;
+  return elements.map((el) => (el.propertyName ?? el.name).text);
+}
 
 // "file::name" pairs that another file imports or re-exports; "file::*" marks a namespace import.
 const usedElsewhere = new Set<string>();
@@ -68,27 +76,27 @@ for (const sf of program.getSourceFiles()) {
       ts.isImportDeclaration(statement) &&
       ts.isStringLiteral(statement.moduleSpecifier)
     ) {
-      const bindings = statement.importClause?.namedBindings;
+      const { moduleSpecifier, importClause } = statement;
+      const bindings = importClause?.namedBindings;
       if (!bindings) continue;
       if (ts.isNamespaceImport(bindings)) {
-        markUse(sf.fileName, statement.moduleSpecifier.text, ["*"]);
+        markUse(sf.fileName, moduleSpecifier.text, ["*"]);
       } else {
-        const names = bindings.elements.map(
-          (el) => (el.propertyName ?? el.name).text,
-        );
-        markUse(sf.fileName, statement.moduleSpecifier.text, names);
+        const { elements } = bindings;
+        const names = elements.map((el) => (el.propertyName ?? el.name).text);
+        markUse(sf.fileName, moduleSpecifier.text, names);
       }
     } else if (
       ts.isExportDeclaration(statement) &&
       statement.moduleSpecifier &&
       ts.isStringLiteral(statement.moduleSpecifier)
     ) {
-      const clause = statement.exportClause;
+      const { moduleSpecifier, exportClause } = statement;
       const names =
-        clause && ts.isNamedExports(clause)
-          ? clause.elements.map((el) => (el.propertyName ?? el.name).text)
+        exportClause && ts.isNamedExports(exportClause)
+          ? exportedNames(exportClause)
           : ["*"];
-      markUse(sf.fileName, statement.moduleSpecifier.text, names);
+      markUse(sf.fileName, moduleSpecifier.text, names);
     }
   }
 }

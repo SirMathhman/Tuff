@@ -85,7 +85,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### ESLint rules
 
-ESLint runs its recommended rules plus the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, string literal types, and the null type.
+ESLint runs its recommended rules plus the rules below. Restricted syntax bans member chains such as `a.b.c`, regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, string literal types, and the null type.
 
 #### Recursion
 

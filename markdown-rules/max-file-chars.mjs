@@ -8,7 +8,8 @@ export default {
   tags: ["length"],
   parser: "none",
   function: (params, onError) => {
-    const characters = params.lines.join("\n").length;
+    const { lines } = params;
+    const characters = lines.join("\n").length;
     if (characters > MAX_CHARACTERS) {
       onError({
         lineNumber: 1,

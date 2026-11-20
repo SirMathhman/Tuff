@@ -15,12 +15,14 @@ const maxInterfaceMembers = {
   create(context) {
     return {
       TSInterfaceDeclaration(node) {
-        const count = node.body.body.length;
+        const { id } = node;
+        const { body: members } = node.body;
+        const count = members.length;
         if (count > MAX_MEMBERS) {
           context.report({
             node,
             messageId: "tooMany",
-            data: { name: node.id.name, count },
+            data: { name: id.name, count },
           });
         }
       },

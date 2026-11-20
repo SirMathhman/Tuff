@@ -31,13 +31,19 @@ function enclosingFunction(node) {
   return null;
 }
 
+// The initialiser of a variable declaration, or null.
+function initOf(def) {
+  if (def.type !== "Variable") return null;
+  const { node } = def;
+  return node.init ?? null;
+}
+
 // The function node a variable denotes, or null.
 function functionForVariable(variable) {
   for (const def of variable.defs) {
     if (def.type === "FunctionName") return def.node;
-    if (def.type === "Variable" && def.node.init && isFunction(def.node.init)) {
-      return def.node.init;
-    }
+    const init = initOf(def);
+    if (init && isFunction(init)) return init;
   }
   return null;
 }
@@ -45,7 +51,7 @@ function functionForVariable(variable) {
 // The variable that `variable` is initialised from (`const g = f`), or null.
 function aliasSource(variable, variableOf) {
   for (const def of variable.defs) {
-    const init = def.type === "Variable" ? def.node.init : null;
+    const init = initOf(def);
     if (init && init.type === "Identifier" && variableOf.has(init)) {
       return variableOf.get(init);
     }
@@ -68,27 +74,26 @@ function resolveAlias(variable, variableOf) {
 
 // The name a function is stored under as an object property or class method.
 function methodName(fn) {
-  const parent = fn.parent;
+  const { parent } = fn;
+  if (!parent) return null;
   if (
-    parent &&
     (parent.type === "Property" || parent.type === "MethodDefinition") &&
     parent.value === fn &&
-    !parent.computed &&
-    parent.key.type === "Identifier"
+    !parent.computed
   ) {
-    return parent.key.name;
+    const { key } = parent;
+    if (key.type === "Identifier") return key.name;
   }
   return null;
 }
 
 function functionName(fn) {
-  if (fn.id) return fn.id.name;
-  if (
-    fn.parent &&
-    fn.parent.type === "VariableDeclarator" &&
-    fn.parent.id.type === "Identifier"
-  ) {
-    return fn.parent.id.name;
+  const { id } = fn;
+  if (id) return id.name;
+  const { parent } = fn;
+  if (parent && parent.type === "VariableDeclarator") {
+    const { id } = parent;
+    if (id.type === "Identifier") return id.name;
   }
   const method = methodName(fn);
   if (method) return method;
@@ -125,6 +130,13 @@ function directTargets(variable, variableOf) {
   return fn ? [fn] : [];
 }
 
+// The name called by a method-call expression `x.name(...)`, or null.
+function calledMethodName(call) {
+  const { callee } = call;
+  const { property } = callee;
+  return property.name;
+}
+
 function callGraph({ functions, refs, variableOf, methods, memberCalls }) {
   const edges = new Map();
   function addEdge(from, to) {
@@ -137,15 +149,12 @@ function callGraph({ functions, refs, variableOf, methods, memberCalls }) {
     if (outer) addEdge(outer, fn);
   }
   for (const ref of refs) {
-    const call = ref.identifier.parent;
-    if (
-      !call ||
-      call.type !== "CallExpression" ||
-      call.callee !== ref.identifier
-    ) {
+    const { identifier } = ref;
+    const call = identifier.parent;
+    if (!call || call.type !== "CallExpression" || call.callee !== identifier) {
       continue;
     }
-    const from = enclosingFunction(ref.identifier);
+    const from = enclosingFunction(identifier);
     if (!from) continue;
     for (const target of directTargets(ref.resolved, variableOf)) {
       addEdge(from, target);
@@ -154,7 +163,7 @@ function callGraph({ functions, refs, variableOf, methods, memberCalls }) {
   for (const call of memberCalls) {
     const from = enclosingFunction(call);
     if (!from) continue;
-    for (const target of methods.get(call.callee.property.name) || []) {
+    for (const target of methods.get(calledMethodName(call)) || []) {
       addEdge(from, target);
     }
   }
@@ -189,17 +198,15 @@ const noRecursion = {
         }
       },
       CallExpression(node) {
-        const callee = node.callee;
-        if (
-          callee.type === "MemberExpression" &&
-          !callee.computed &&
-          callee.property.type === "Identifier"
-        ) {
-          memberCalls.push(node);
+        const { callee } = node;
+        if (callee.type === "MemberExpression" && !callee.computed) {
+          const { property } = callee;
+          if (property.type === "Identifier") memberCalls.push(node);
         }
       },
       "Program:exit"() {
-        const refs = collectResolvedRefs(context.sourceCode.scopeManager);
+        const { sourceCode } = context;
+        const refs = collectResolvedRefs(sourceCode.scopeManager);
         const variableOf = new Map(
           refs.map((ref) => [ref.identifier, ref.resolved]),
         );
