@@ -1,7 +1,7 @@
 /**
  * Types shared by the Tuff parser: values, bindings, scopes, and parse state.
  */
-import type { Problem } from "./tuff-lexing";
+import type { Problem } from "./lexing";
 
 /**
  * A value of a Tuff expression: a number, a boolean from "true" or "false", or a reference.

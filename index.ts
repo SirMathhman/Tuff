@@ -10,7 +10,7 @@ import {
   skipSpaces,
   type Problem,
   findTopLevel,
-} from "./src/tuff-lexing";
+} from "./src/lexing";
 import {
   type Value,
   type FunctionDef,
@@ -18,7 +18,7 @@ import {
   type NamedVariable,
   type Param,
   type StatementStep,
-} from "./src/tuff-types";
+} from "./src/types";
 import {
   lookup,
   lookupFunction,
@@ -34,8 +34,8 @@ import {
   applyCompound,
   valuesEqual,
   OUTLIVES_MESSAGE,
-} from "./src/tuff-scope";
-import { parseNumberSuffix, parseTypeAnnotation } from "./src/tuff-annotations";
+} from "./src/scope";
+import { parseNumberSuffix, parseTypeAnnotation } from "./src/annotations";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.

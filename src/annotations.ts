@@ -1,6 +1,6 @@
-import { peek, peekName, peekStart, type Problem } from "./tuff-lexing";
-import { isDeclarableType, fitsIntegerType } from "./tuff-scope";
-import { type Cursor } from "./tuff-types";
+import { peek, peekName, peekStart, type Problem } from "./lexing";
+import { isDeclarableType, fitsIntegerType } from "./scope";
+import { type Cursor } from "./types";
 import { err, ok, type Result } from "./result";
 
 /**

@@ -10,8 +10,8 @@ import {
   type LoopExit,
   type Reference,
   type Param,
-} from "./tuff-types";
-import { findTopLevel, type Problem } from "./tuff-lexing";
+} from "./types";
+import { findTopLevel, type Problem } from "./lexing";
 import { ok, err, type Result } from "./result";
 
 /**
