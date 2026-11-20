@@ -49,6 +49,7 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "while",
   "match",
   "case",
+  "_",
 ]);
 
 /**
@@ -201,7 +202,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *               | "while" "(" expression ")" statement   (re-run until the condition is false, up to a limit)
- *   match      := "match" "(" expression ")" "{" ("case" expression "=>" expression ";")* "}"
+ *   match      := "match" "(" expression ")" "{" ("case" (expression | "_") "=>" expression ";")* "}"
  *   expression := sum (("==" | "<") sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
@@ -1158,6 +1159,32 @@ function valuesEqual(left: Value, right: Value, offset: number): Result<boolean,
 }
 
 /**
+ * Parses a case pattern, which is either "_" (matches anything) or an expression compared with the scrutinee.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the pattern.
+ * @param scrutinee - The value being matched.
+ * @param dead - True if the pattern's effects must not run.
+ * @returns An Ok result with whether the pattern matches, or an Err result with the first problem found.
+ */
+function parsePattern(text: string, cursor: Cursor, scrutinee: Value, dead: boolean): Result<boolean, Problem> {
+  if (peekName(text, cursor) === "_") {
+    cursor.pos += "_".length;
+    return ok(true);
+  }
+  peek(text, cursor);
+  const patternStart = cursor.pos;
+  const outerDead = cursor.dead;
+  cursor.dead = dead;
+  const pattern = parseExpression(text, cursor);
+  cursor.dead = outerDead;
+  if (!pattern.ok) {
+    return pattern;
+  }
+  return valuesEqual(scrutinee, pattern.value, patternStart);
+}
+
+/**
  * Parses "match (scrutinee) { case pattern => value; ... }". Arms are tried in order and the
  * first whose pattern equals the scrutinee gives the value. Only the chosen arm's effects run.
  *
@@ -1180,23 +1207,15 @@ function parseMatch(text: string, cursor: Cursor, start: number): Result<Value, 
   while (peekName(text, cursor) === "case") {
     cursor.pos += "case".length;
     const chosen = result !== undefined;
-    peek(text, cursor);
-    const patternStart = cursor.pos;
-    cursor.dead = outerDead || chosen;
-    const pattern = parseExpression(text, cursor);
-    cursor.dead = outerDead;
-    if (!pattern.ok) {
-      return pattern;
-    }
-    const equal = valuesEqual(scrutinee.value, pattern.value, patternStart);
-    if (!equal.ok) {
-      return equal;
+    const patternMatch = parsePattern(text, cursor, scrutinee.value, outerDead || chosen);
+    if (!patternMatch.ok) {
+      return patternMatch;
     }
     if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
       return err({ offset: cursor.pos, expected: `"=>"` });
     }
     cursor.pos += 2;
-    const matches = equal.value && !chosen;
+    const matches = patternMatch.value && !chosen;
     cursor.dead = outerDead || !matches;
     const body = parseExpression(text, cursor);
     cursor.dead = outerDead;

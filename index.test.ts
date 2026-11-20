@@ -253,6 +253,18 @@ test("interpretTuff: match runs only the chosen arm's effects", () => {
   });
 });
 
+test("interpretTuff('match (true) { case _ => 1; }') => 1", () => {
+  expect(interpretTuff("match (true) { case _ => 1; }")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff: wildcard arm after a non-matching case", () => {
+  expect(interpretTuff("match (1) { case 2 => 10; case _ => 20; }")).toEqual({ ok: true, value: 20 });
+});
+
+test("interpretTuff rejects '_' as a variable name", () => {
+  expect(interpretTuff("let _ = 1; 1").ok).toBe(false);
+});
+
 test("interpretTuff rejects a match with no equal case", () => {
   expect(interpretTuff("match (3) { case 1 => 1; }").ok).toBe(false);
 });
