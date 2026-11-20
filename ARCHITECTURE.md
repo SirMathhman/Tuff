@@ -1,6 +1,6 @@
 # Architecture
 
-Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum or difference of integers.
+Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum, difference, or product of integers, with `*` binding tighter than `+` and `-`.
 
 ## Layout
 
@@ -15,7 +15,7 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ## Definitions
 
-- **Expression:** an optional leading sign, then integers joined by `+` or `-`. A sign may follow a binary operator, so `1 - -2` is valid.
+- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an integer with an optional sign directly before its digits. A sign may follow a binary operator, so `1 - -2` and `2 * -3` are valid.
 - **Result:** `{ ok: true, value }` (a `Success`) on success or `{ ok: false, error }` (a `Failure`) on failure.
 - **TuffError:** a four-part description of a syntax error:
   - `what`: the error, for example `Expected '+' or '-' but found 'x'`.
@@ -27,9 +27,9 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ### `interpretTuff(tuffSource: string): Result<number, TuffError>`
 
-1. Scans the original source left to right with character checks (no regular expressions), skipping whitespace. A sign must touch its digits. Whitespace is allowed around binary operators.
-2. When the scan finds a term without digits, it returns an "expected a number" error at that offset. When it finds a character that is neither whitespace nor an operator after a number, it returns an "expected '+' or '-'" error at that offset.
-3. Each number takes its sign from the binary operator before it and any unary sign directly before its digits. The sum starts at `0`.
+1. Scans the original source left to right with character checks (no regular expressions), skipping whitespace. A sign must touch its digits. Whitespace is allowed around operators.
+2. `parseFactor` reads an optional sign and digits. When it finds no digits, it returns an "expected a number" error at that offset.
+3. The term loop multiplies factors joined by `*`. The expression loop adds or subtracts terms joined by `+` or `-`, starting from `0`. When a character after a term is neither `+`, `-`, nor `*`, it returns an "expected '+', '-', or '*'" error at that offset.
 
 Behavior:
 
@@ -37,7 +37,9 @@ Behavior:
 - `interpretTuff("1 + 2")` returns `{ ok: true, value: 3 }`.
 - `interpretTuff("2 + 3 - 4")` returns `{ ok: true, value: 1 }`.
 - `interpretTuff("1 - -2")` returns `{ ok: true, value: 3 }`.
-- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+' or '-' but found 'x'`.
+- `interpretTuff("2 * 3 + 4")` returns `{ ok: true, value: 10 }`.
+- `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
+- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number but found 'x'`.
 - `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number but found the end of the input`.
 
@@ -47,7 +49,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 ## Known gaps and open decisions
 
-- **Operators:** only `+` and `-` are supported, and only between integers. Multiplication and grouping are not implemented.
+- **Operators:** `+`, `-`, and `*` are supported, and only between integers. Grouping with parentheses is not implemented.
 - **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The project size limits are not enforced by lint.
 
 ## Potential Problems
@@ -71,7 +73,7 @@ The ideal architecture keeps these rules as the project grows:
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report line and column in addition to the offset in `where`.
 - Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.
-- Add multiplication and grouping.
+- Add grouping with parentheses.
 
 ## Performance
 
