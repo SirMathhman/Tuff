@@ -3,7 +3,13 @@
     "default": true,
     "MD013": false,
     "max-list-items": true,
+    "max-subsections": true,
+    "max-section-chars": true,
   },
-  "customRules": ["./markdown-rules/max-list-items.mjs"],
+  "customRules": [
+    "./markdown-rules/max-list-items.mjs",
+    "./markdown-rules/max-subsections.mjs",
+    "./markdown-rules/max-section-chars.mjs",
+  ],
   "ignores": ["node_modules/**"],
 }

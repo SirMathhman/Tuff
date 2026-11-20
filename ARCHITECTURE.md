@@ -1,127 +1,181 @@
 # Architecture
 
-Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: a program is zero or more `let NAME = value;` statements followed by an expression. Supported: integers, variables (letters only), `+`, `-`, `*`, signs, parenthesized and braced groups, with `*` binding tighter than `+` and `-`. A brace pair opens a block scope.
+Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evaluates `let` statements followed by one expression. It is at an early stage, and the sections below give the details.
 
-## Layout
+## Source files
 
-| File                                  | Role                                                                                                                                                                                                                                                               |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`                            | Entry module. Exports `interpretTuff` only; the result and error types are internal.                                                                                                                                                                               |
-| `scripts/unused-exports.ts`           | Checks that no export goes unused by other project files, using the TypeScript compiler API. Run as part of `bun run lint`.                                                                                                                                        |
-| `eslint-rules/no-recursion.js`        | Custom ESLint rule. Reports functions that can reach themselves through direct calls in their file. Recursion that closes only through a parameter is allowed.                                                                                                     |
-| `repl.ts`                             | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`.                                                                                                     |
-| `index.test.ts`                       | Tests using Bun's built-in `bun:test` runner.                                                                                                                                                                                                                      |
-| `eslint.config.js`                    | ESLint configuration: recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, JSDoc requirements, `id-length` (names of at least two characters), `max-lines-per-function`, and restricted syntax.                                             |
-| `package.json`                        | Project metadata and the `lint`, `repl`, `format`, and `format:check` scripts. Declares `@types/bun`, `@eslint/js`, `eslint`, `eslint-plugin-jsdoc`, `prettier`, `typescript-eslint`, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
-| `tsconfig.json`                       | TypeScript configuration.                                                                                                                                                                                                                                          |
-| `.gitignore`, `README.md`, `bun.lock` | Repository support files.                                                                                                                                                                                                                                          |
+Repository layout and dependency rules.
 
-Dependency direction: `repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on no project file and performs no I/O. `scripts/` and `eslint-rules/` depend on no runtime file. No project file may import `repl.ts`, and no import cycle may exist between project files.
+### Interpreter (index.ts)
 
-## Definitions
+Exports `interpretTuff` only. The result and error types stay internal.
 
-- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an optional sign followed by an integer, a variable, or a parenthesized or braced expression. A sign may follow a binary operator, so `1 - -2`, `2 * -3`, and `-(2 + 3)` are valid.
-- **Statement:** `let NAME = expression;`. A name is one or more ASCII letters, and `let` itself cannot be a name. A `let` is visible in the block where it appears, including blocks nested in it. A `let` of a name already declared in the same block replaces that value silently.
-- **Block:** a `{ ... }` pair. Its value is its final expression, so a block cannot end with a `let`.
-- **Result:** `{ ok: true, value }` (a `Success`) on success or `{ ok: false, error }` (a `Failure`) on failure.
-- **TuffError:** a four-part description of a syntax error:
-  - `what`: the error, for example `Expected '+', '-', or '*' but found 'x'`.
-  - `where`: the zero-based offset into the original source string.
-  - `why`: the rule that was broken.
-  - `fix`: how to correct the source.
+### REPL (repl.ts)
 
-## Components
+Reads stdin lines, evaluates each with `interpretTuff`, and prints the value or the error. Run with `bun run repl`.
 
-### `interpretTuff(tuffSource: string): Result<number, TuffError>`
+### Tests (index.test.ts)
 
-A shunting-yard evaluator with explicit stacks, written as one loop with no recursion. It reads the original source with character checks (no regular expressions) and skips whitespace. A sign must touch its digits or its opening bracket. Whitespace is allowed around operators.
+Uses Bun's built-in `bun:test` runner. Each feature has a test named after its expression. Error tests check all four `TuffError` fields.
 
-- A value stack holds numbers. An operator stack holds pending `+`, `-`, `*` operators and open-group entries. Each group entry remembers the sign written before its opening bracket and which kind of bracket it is.
-- Operands are read directly. A pending operator is applied first when it binds at least as tightly (`*` above `+` and `-`), which makes operators left-associative.
-- `)` applies pending operators back to the group entry, then scales the group's value by its sign.
-- A `let` pushes a binding entry until its `;`, then stores the value in the current scope. A `{` pushes a scope that is popped at its `}`. A name is looked up from the innermost scope outwards.
-- Nesting depth is limited only by memory, not by the call stack.
+### Dependency direction
 
-Errors:
+`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on no project file and performs no I/O.
 
-- No digits, no name, and no opening bracket where a factor is expected: `Expected a number, a variable, '(', or '{'`.
-- A character after a term that is not an operator (or a closing bracket inside brackets): `Expected '+', '-', or '*'` at top level, or `Expected '+', '-', '*', ')', or '}'` inside brackets.
-- Input ends inside brackets: `Expected ')'` or `Expected '}'`, matching the innermost opening bracket.
-- A name that is not declared in any enclosing scope: `Name 'x' is not defined`.
-- A `let` with no name, a keyword as its name, no `=` after the name, or no `;` after its value has its own message. A `let` that is not at the start of a statement, such as inside parentheses or after an operator, reports that `let` is only allowed at the start of a statement. A `;` outside a `let` is `Unexpected ';' outside a let statement`.
+### Configuration
 
-Behavior:
+`package.json` holds the `lint`, `repl`, `format`, and `format:check` scripts and the dev dependencies. `tsconfig.json` configures TypeScript, and `bun.lock` pins versions.
 
-Arithmetic and grouping:
+## Language
+
+A program is zero or more `let` statements followed by one expression.
+
+### Grammar
+
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, a variable, or a parenthesized or braced expression.
+
+### Statements and scope
+
+`let NAME = expression;` binds a name of ASCII letters. `let` cannot be a name. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
+
+### Blocks
+
+A block's value is its final expression, so it cannot end with a `let`. A program that ends with a `let` evaluates to 0.
+
+### Results and errors
+
+Results are `{ ok: true, value }` or `{ ok: false, error }`. `TuffError` has four parts: `what`, `where` (a zero-based offset), `why`, and `fix`.
+
+### Examples
+
+Each example below shows the result of `interpretTuff` on the given input.
+
+#### Sums and differences
 
 - `interpretTuff("5")` returns `{ ok: true, value: 5 }`.
 - `interpretTuff("1 + 2")` returns `{ ok: true, value: 3 }`.
 - `interpretTuff("2 + 3 - 4")` returns `{ ok: true, value: 1 }`.
 - `interpretTuff("1 - -2")` returns `{ ok: true, value: 3 }`.
-- `interpretTuff("2 * 3 + 4")` returns `{ ok: true, value: 10 }`.
+
+#### Products and grouping
+
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
 - `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("-(2 + 3) * 4")` returns `{ ok: true, value: -20 }`.
 
-Errors in expressions:
-
-- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
-- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
-- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
-- `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
-
-Brackets:
+#### Brackets
 
 - `interpretTuff("{ 2 + 3 } * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
 
-Statements, blocks, and scope:
+#### Errors
 
-- `interpretTuff("{ let x = 2 + 3; x } * 4")` returns `{ ok: true, value: 20 }`.
+Each example below gives an error at the stated offset.
+
+##### Operand examples
+
+- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
+- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
+
+##### Operator examples
+
+- `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
+- `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
+
+#### Statement examples
+
+##### Values
+
 - `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
+- `interpretTuff("{ let x = 2 + 3; x } * 4")` returns `{ ok: true, value: 20 }`.
+
+##### Scope
+
 - `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block cannot end with a `let`.
-- `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `what` is `Name 'x' is not defined`, because `x` is out of scope.
+- `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `x` is out of scope.
 
-### REPL (`repl.ts`)
+## Implementation
 
-Reads one expression per line. Blank lines are skipped, and `exit` quits. A value prints as the number; an error prints as `error: <what> (at offset <where>)`. The REPL does not print `why` or `fix`.
+`interpretTuff` is a single loop with explicit stacks and no recursion.
 
-## Testing
+### Stacks
 
-Run `bun test`. Each feature has a test named after the expression and its expected result, for example `interpretTuff("1 + 2") => 3`. Error tests check all four fields.
+A value stack holds numbers. An operator stack holds pending operators, open brackets, and `let` bindings. Scopes form a stack of maps, and a name is looked up from the innermost scope outwards.
 
-## Known gaps and open decisions
+### Precedence
 
-- **Operators:** `+`, `-`, and `*` are supported, and only between integers, variables, and parenthesized or braced groups. Division, assignment outside `let`, functions, and names with digits or underscores are not implemented.
-- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax) and then `scripts/unused-exports.ts`. The recursion rule counts direct calls (by name, through aliases, and as methods `x.name(...)`) and closures nested in a function. Recursion that closes only through a parameter is allowed, and passing a function as an argument is not an edge. The rule works within one file, so recursion that crosses files is not detected. Calls through object properties and `this` (`o.m()`, `this.m()`) are matched to methods by name only, so two unrelated objects with a method of the same name can produce a false positive. Aliases (`const g = f`) are followed. Known gaps: methods with computed keys (`o["m"]()`) are not matched. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead), and string literal types (use enums instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. Functions longer than 100 lines (blank lines and comments excluded) are reported by `max-lines-per-function`. Exported top-level functions, classes, interfaces, type aliases, and enums must have JSDoc; exported functions must document every `@param` name and have a `@returns` entry (`jsdoc/require-jsdoc`, `jsdoc/require-param`, `jsdoc/require-returns`). Files longer than 500 lines (blank lines and comments excluded) are reported by `max-lines`. The files-per-directory limit is not enforced by lint. Identifiers must be at least two characters long (`id-length`).
+A pending operator is applied first when it binds at least as tightly, so operators are left-associative. `)` and `}` apply pending operators back to their bracket, then scale the value by the sign before it.
 
-## Potential Problems
+### Operand errors
 
-- **Integer precision:** numbers are parsed with `parseInt` into JavaScript doubles. Values above `Number.MAX_SAFE_INTEGER` are silently rounded, so `9007199254740993 + 0` returns `9007199254740992` with `ok: true`. The result is wrong without any error.
-- **Overflow is unreported:** the sum can exceed the double range or lose precision without any `TuffError`. A literal of 400 digits parses to `Infinity` with `ok: true`.
-- **Negative zero:** `interpretTuff("-0")` returns `-0` with `ok: true`, and the REPL prints `-0`. `Object.is` distinguishes it from `0`, so equality checks on results can disagree with arithmetic expectations.
+No digits, name, or opening bracket where an operand belongs gives `Expected a number, a variable, '(', or '{'`. A name that is not declared gives `Name 'x' is not defined`.
 
-## Security Concerns
+### Operator and bracket errors
 
-`interpretTuff` takes input only from its caller as a string. It performs no I/O, no network access, and no evaluation of host code, so it has no prompt-injection, data-exposure, or unauthenticated state-change surface today. The REPL, which reads stdin, is covered below.
+A character that is not an operator gives `Expected '+', '-', or '*'`. Inside brackets, `')'` and `'}'` are also listed. Input ending inside a bracket gives `Expected ')'` or `Expected '}'`.
 
-The ideal architecture keeps these rules as the project grows:
+### Statement errors
 
-- Source text is untrusted. It must never be passed to `eval`, `Function`, or a shell.
-- Input length must be bounded before it is scanned. The current scanner has no length limit. Control: a maximum source length, returned as a `TuffError`.
-- Nesting depth must not exhaust the call stack. Control in place: the parser uses explicit stacks, so nesting costs memory, not call frames. Gap: deeply nested input can still use a lot of memory; no maximum depth is enforced.
-- The REPL is the only path where untrusted text reaches the interpreter: each stdin line is read without a length limit and passed straight to `interpretTuff`. Control: the same maximum source length applies, enforced in `interpretTuff`. Gap: not yet implemented.
-- Any future I/O (file reads, module imports, network) sits behind an explicit capability parameter, so `interpretTuff` stays pure. Gap: none of these exist yet.
+A `let` with no name, a keyword as its name, no `=`, or no `;` has its own message. A `let` that is not at a statement start and a stray `;` each have a message too.
 
-## Future Work
+## Quality gates
 
-- Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The combined shunting-yard evaluator is a stopgap until that split exists.
-- Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
-- Report line and column in addition to the offset in `where`.
+Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`.
+
+### ESLint rules
+
+ESLint runs the recommended JavaScript and TypeScript rules and the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, and string literal types.
+
+### Recursion
+
+The `local/no-recursion` rule counts direct calls by name, through aliases, as methods, and into nested closures. A cycle through a parameter is allowed. The rule sees one file only.
+
+#### Limits
+
+Method names match loosely, so unrelated objects can produce false positives. Computed keys are not matched.
+
+### Size and naming
+
+`max-lines-per-function` caps functions at 100 lines, `max-lines` caps files at 500, and `id-length` requires names of at least two characters. Blank lines and comments are skipped.
+
+### Documentation
+
+Exported top-level functions, classes, interfaces, type aliases, and enums need JSDoc. Exported functions need `@param` names and a `@returns` entry.
+
+### Exports and Markdown
+
+The unused-export check fails on any export that no other file uses. Markdown lint caps bullet lists at 10 items, subsections at 5, and section text at 250 characters.
+
+## Risks and future work
+
+Known gaps, numeric risks, security, and planned work.
+
+### Known gaps
+
+Operators are `+`, `-`, and `*`, applied to integers, variables, and groups. Not implemented: division, assignment outside `let`, functions, and names with digits or underscores.
+
+### Numeric risks
+
+Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently. `9007199254740993 + 0` gives `9007199254740992` with `ok: true`. A 400-digit literal gives `Infinity`.
+
+### Security
+
+`interpretTuff` performs no I/O. The REPL reads untrusted stdin with no length limit, which is not yet implemented. Nesting costs memory, not call frames. Future I/O must go behind an explicit capability parameter.
+
+### Future work
+
+Planned changes, in rough order.
+
+#### Structure
+
+- Split into `lexer`, `parser` (producing an AST), and `evaluator`, with `interpretTuff` as the composition point. The combined evaluator is a stopgap until then.
 - Check the 10-files-per-directory limit by hand, since ESLint has no rule for it.
 
-## Performance
+#### Numbers and output
 
-- The single-pass scan is linear in source length, so performance is acceptable for expressions of typical size.
-- A very long digit run is parsed with one `parseInt`. This is fine for the current input size but gives no meaningful result past the safe-integer limit.
-- No profiling has been done. Measure with a profiler before optimizing.
+- Replace `number` with `bigint` or a decimal type, so arithmetic is exact.
+- Report line and column in `where`, not just the offset.
+
+### Performance
+
+The scan is linear in source length. A long digit run is one `parseInt` call, which gives no meaningful value past the safe-integer limit. Profile before optimizing.
