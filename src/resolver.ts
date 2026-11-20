@@ -1,4 +1,12 @@
-import { NodeKind, StatementKind, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
+import {
+  NodeKind,
+  StatementKind,
+  type BlockNode,
+  type ChainNode,
+  type Expr,
+  type IfNode,
+  type NameNode,
+} from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import { findName, type Found, type NameRefs, type NameTable } from "./scope.ts";
@@ -55,6 +63,8 @@ function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<un
       return resolveExpr(expr.operand, blocks, refs);
     case NodeKind.Chain:
       return resolveChain(expr, blocks, refs);
+    case NodeKind.If:
+      return resolveIf(expr, blocks, refs);
     case NodeKind.Block:
       return resolveBlock(expr, blocks, refs);
   }
@@ -66,6 +76,22 @@ function resolveChain(chain: ChainNode, blocks: NameTable[], refs: NameRefs): Re
   for (const step of chain.steps) {
     const operand = resolveExpr(step.operand, blocks, refs);
     if (!operand.ok) return operand;
+  }
+  return ok(undefined);
+}
+
+/**
+ * Resolves every part of a conditional, including the branch the condition will not select.
+ *
+ * @param node - The conditional.
+ * @param blocks - The open blocks' name tables, outermost first.
+ * @param refs - The table of name bindings being built.
+ * @returns `ok(undefined)` if every name resolves, otherwise the first error found.
+ */
+function resolveIf(node: IfNode, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
+  for (const part of [node.condition, node.thenBranch, node.elseBranch]) {
+    const checked = resolveExpr(part, blocks, refs);
+    if (!checked.ok) return checked;
   }
   return ok(undefined);
 }

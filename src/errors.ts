@@ -34,6 +34,8 @@ export enum TuffErrorKind {
   ReferenceAsValue = "ReferenceAsValue",
   /** A reference would outlive the block that declares the binding it points to. */
   ReferenceEscapes = "ReferenceEscapes",
+  /** The condition of an `if` is not a boolean. */
+  NotABoolean = "NotABoolean",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -61,7 +63,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.TypeMismatch>
   | TuffErrorOf<TuffErrorKind.NotAReference>
   | TuffErrorOf<TuffErrorKind.ReferenceAsValue>
-  | TuffErrorOf<TuffErrorKind.ReferenceEscapes>;
+  | TuffErrorOf<TuffErrorKind.ReferenceEscapes>
+  | TuffErrorOf<TuffErrorKind.NotABoolean>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -165,6 +168,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Reference outlives its binding",
     why: "A reference may not leave the block that declares the binding it points to, because that binding ends with its block.",
     fix: "Use the value inside the block, or bind the value with let instead of keeping a reference to it.",
+  },
+  [TuffErrorKind.NotABoolean]: {
+    what: "Condition is not a boolean",
+    why: "An if condition selects a branch only when it is true or false. A number or a reference cannot select one.",
+    fix: "Make the condition evaluate to true or false.",
   },
 };
 

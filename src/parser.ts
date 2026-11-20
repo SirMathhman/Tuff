@@ -11,6 +11,7 @@ import {
   type ChainStep,
   type DerefNode,
   type Expr,
+  type IfNode,
   type LetStatement,
   type LiteralNode,
   type NameNode,
@@ -35,7 +36,7 @@ type Step<T> = Result<Parsed<T>, TuffError>;
 type Parser = (input: Input, pos: number, depth: number) => Step<Expr>;
 
 const MAX_NESTING_DEPTH = 256;
-const RESERVED = new Set<string>(["let", "mut", "true", "false"]);
+const RESERVED = new Set<string>(["let", "mut", "true", "false", "if", "else"]);
 const ADDITIVE = new Map<string, Operator>([
   ["+", Operator.Add],
   ["-", Operator.Subtract],
@@ -174,6 +175,44 @@ function parseBlock(
   }
 }
 
+/**
+ * Parses `if (condition) then else otherwise`. The branches are full expressions.
+ *
+ * @param input - The tokens being parsed.
+ * @param pos - The position of the `if` token.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the condition and branches.
+ * @returns The conditional, or the first syntax error found.
+ */
+function parseIf(input: Input, pos: number, depth: number, parseExpr: Parser): Step<Expr> {
+  const ifToken = input.tokens[pos];
+  if (ifToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: ifToken.span });
+  const open = input.tokens[pos + 1];
+  if (open === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (open.text !== "(") return err({ kind: TuffErrorKind.UnexpectedToken, span: open.span });
+  const condition = parseExpr(input, pos + 2, depth + 1);
+  if (!condition.ok) return condition;
+  const close = input.tokens[condition.value.next];
+  if (close === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (close.text !== ")") return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });
+  const thenBranch = parseExpr(input, condition.value.next + 1, depth + 1);
+  if (!thenBranch.ok) return thenBranch;
+  const elseToken = input.tokens[thenBranch.value.next];
+  if (elseToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (elseToken.text !== "else") return err({ kind: TuffErrorKind.UnexpectedToken, span: elseToken.span });
+  const elseBranch = parseExpr(input, thenBranch.value.next + 1, depth + 1);
+  if (!elseBranch.ok) return elseBranch;
+  const node: IfNode = {
+    kind: NodeKind.If,
+    condition: condition.value.value,
+    thenBranch: thenBranch.value.value,
+    elseBranch: elseBranch.value.value,
+    span: ifToken.span,
+  };
+  return ok({ value: node, next: elseBranch.value.next });
+}
+
 function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser): Step<Expr> {
   const token = input.tokens[pos];
   if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
@@ -192,6 +231,7 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     }
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
+  if (token.text === "if") return parseIf(input, pos, depth, parseExpr);
   if (token.text === "&") {
     const mutable = input.tokens[pos + 1]?.text === "mut";
     const nameToken = input.tokens[pos + (mutable ? 2 : 1)];

@@ -16,6 +16,8 @@ export enum NodeKind {
   Borrow = "Borrow",
   /** A dereference, `*x`, that reads the value a reference points to. */
   Deref = "Deref",
+  /** A conditional expression, `if (condition) then else otherwise`. */
+  If = "If",
 }
 
 /** The kinds of statement that may appear in a block. */
@@ -162,4 +164,19 @@ export interface BlockNode {
 }
 
 /** Any expression node. */
-export type Expr = LiteralNode | BooleanNode | NameNode | BorrowNode | DerefNode | ChainNode | BlockNode;
+/** A conditional expression. Only the branch the condition selects is evaluated. */
+export interface IfNode {
+  /** Always `NodeKind.If`. */
+  kind: NodeKind.If;
+  /** The condition, which must evaluate to a boolean. */
+  condition: Expr;
+  /** The value when the condition is `true`. */
+  thenBranch: Expr;
+  /** The value when the condition is `false`. */
+  elseBranch: Expr;
+  /** Where the `if` sits in the source. */
+  span: Span;
+}
+
+/** Any expression node. */
+export type Expr = LiteralNode | BooleanNode | NameNode | BorrowNode | DerefNode | IfNode | ChainNode | BlockNode;

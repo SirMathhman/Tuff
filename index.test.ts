@@ -392,3 +392,25 @@ test('evaluateTuff("*(3) = 1;") is a NotAReference error at the *', () => {
     error: { kind: TuffErrorKind.NotAReference, span: { start: 0, end: 1 } },
   });
 });
+
+test('evaluateTuff("if (true) 2 else 3") => 2', () => {
+  expect(evaluateTuff("if (true) 2 else 3")).toEqual({ ok: true, value: 2 });
+});
+
+test("a non-boolean condition is a NotABoolean error at the condition", () => {
+  expect(evaluateTuff("if (1) 2 else 3")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NotABoolean, span: { start: 4, end: 5 } },
+  });
+});
+
+test("an unknown name in the unchosen branch is still an UnknownName error", () => {
+  expect(evaluateTuff("if (true) 2 else x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.UnknownName, span: { start: 17, end: 18 } },
+  });
+});
+
+test("only the chosen branch is evaluated", () => {
+  expect(evaluateTuff("if (true) 2 else 1 / 0")).toEqual({ ok: true, value: 2 });
+});

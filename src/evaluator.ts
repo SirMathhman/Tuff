@@ -8,6 +8,7 @@ import {
   type BorrowNode,
   type ChainNode,
   type DerefNode,
+  type IfNode,
   type Expr,
   type NameNode,
 } from "./ast.ts";
@@ -86,6 +87,7 @@ function spanOf(expr: Expr): Span {
     case NodeKind.Name:
     case NodeKind.Borrow:
     case NodeKind.Deref:
+    case NodeKind.If:
       return expr.span;
     case NodeKind.Chain:
       return spanOf(expr.first);
@@ -140,6 +142,8 @@ function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
       return evaluateDeref(expr, env);
     case NodeKind.Chain:
       return evaluateChain(expr, env);
+    case NodeKind.If:
+      return evaluateIf(expr, env);
     case NodeKind.Block:
       return evaluateBlock(expr, env);
   }
@@ -173,6 +177,22 @@ function evaluateDeref(deref: DerefNode, env: Env): Result<Value, TuffError> {
   // Unreachable: a live reference always points at a bound slot.
   if (value === undefined) return err({ kind: TuffErrorKind.InternalError, span: deref.span });
   return ok(value);
+}
+
+/**
+ * Evaluates the branch that the condition selects. The other branch is not evaluated.
+ *
+ * @param node - The conditional.
+ * @param env - The current evaluation state.
+ * @returns The selected branch's value, or an error if the condition is not a boolean or the branch fails.
+ */
+function evaluateIf(node: IfNode, env: Env): Result<Value, TuffError> {
+  const condition = evaluateIn(node.condition, env);
+  if (!condition.ok) return condition;
+  if (typeof condition.value !== "boolean") {
+    return err({ kind: TuffErrorKind.NotABoolean, span: spanOf(node.condition) });
+  }
+  return evaluateIn(condition.value ? node.thenBranch : node.elseBranch, env);
 }
 
 function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
