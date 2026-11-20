@@ -15,6 +15,8 @@ export enum EntryKind {
   If = "if",
   /** A function call whose body is being parsed. */
   Call = "call",
+  /** A while loop in progress. */
+  Loop = "loop",
 }
 
 /**
@@ -88,6 +90,8 @@ export interface GroupEntry {
   statementStart?: boolean;
   /** The body of a statement-level if without else; a body ending in a statement is checked when an else is seen. */
   discardable?: boolean;
+  /** The part of a while loop this bracket opens, if any. */
+  loopPart?: LoopPart;
   /** Whether the block's value is discarded because it ends in an assignment. */
   discardValue?: boolean;
 }
@@ -144,7 +148,7 @@ export interface IfEntry {
  * Any entry on the operator stack.
  */
 export type StackEntry =
-  OperatorEntry | GroupEntry | BindingEntry | IfEntry | CallEntry;
+  OperatorEntry | GroupEntry | BindingEntry | IfEntry | CallEntry | LoopEntry;
 
 /**
  * A variable: its value, and whether it was declared with `let mut`.
@@ -211,6 +215,36 @@ export interface PendingCheck {
   func: FuncDef;
   /** Offset of the function's name. */
   where: number;
+}
+
+/**
+ * The parts of a while loop that a bracket can open.
+ */
+export enum LoopPart {
+  /** The parenthesized condition. */
+  Condition = "condition",
+  /** The braced body. */
+  Body = "body",
+}
+
+/**
+ * A while loop in progress: its condition and body, and where it ends.
+ */
+export interface LoopEntry {
+  /** Discriminates this entry as a loop. */
+  kind: EntryKind.Loop;
+  /** Offset of the `while` keyword. */
+  where: number;
+  /** Offset of the condition's opening parenthesis. */
+  condStart: number;
+  /** Offset of the body's opening brace. */
+  bodyStart: number;
+  /** Offset just past the body's closing brace. */
+  end: number;
+  /** Whether the body runs once without iterating, because the condition was false or the loop is unchosen. */
+  once: boolean;
+  /** Whether the body is parsed in lenient mode, counted in the skip depth. */
+  counted: boolean;
 }
 
 /**

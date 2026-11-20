@@ -378,3 +378,11 @@ test('interpretTuff("fn a() => { let mut k = b(); k = true; } fn b() => 1;") => 
     },
   });
 });
+
+test('interpretTuff("let mut counter = 0; while (counter < 4) { counter += 1; } counter") => 4', () => {
+  expect(
+    interpretTuff(
+      "let mut counter = 0; while (counter < 4) { counter += 1; } counter",
+    ),
+  ).toEqual({ ok: true, value: 4 });
+});

@@ -6,11 +6,11 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()` (a call), a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes, and the body is checked (lenient) when its block ends, then parsed at each call. A braced body needs no `;`; if it ends in an assignment, the call is 0. A statement-start call may end with `;`, discarding its value. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()` (a call), a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes, and the body is checked (lenient) when its block ends, then parsed at each call. A braced body needs no `;`; if it ends in an assignment, the call is 0. A statement-start call may end with `;`, discarding its value. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest; they do not chain.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds an ASCII name; `let` is reserved. `NAME = expression;` and `NAME op= expression;` (`op` is `+ - * /`) reassign a `let mut` name at a statement start, keeping its type. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it; a sign then starts an operand. A program ending in `let` is 0. Blocks `{ ... }` scope bindings.
+`let [mut] NAME = expression;` binds an ASCII name; `let` is reserved. `NAME = expression;` and `NAME op= expression;` (`op` is `+ - * /`) reassign a `let mut` name at a statement start, keeping its type. A block's value is its final expression, unless a top-level block ends in an assignment (discarded). A program ending in `let` is 0. `while (c) { b }` repeats `b` while boolean `c` holds.
 
 ### References
 
@@ -42,11 +42,11 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Implementation
 
-`interpretTuff` is a single loop with explicit stacks and no recursion. Each step first runs `finishCalls`, which completes every finished call, so a return lands at once.
+`interpretTuff` is a single loop with explicit stacks and no recursion. Each step first runs `finishCalls`, which completes every finished call, then `startDeferredCheck`, which runs deferred body checks.
 
 #### Stacks
 
-Value, operator, and scope stacks, plus a skip counter for unchosen branches. A call pushes a `Call` entry onto the operator stack, saving the caller's scopes, depth, and return offset. The callee runs in copies of its declaration's scopes.
+Value, operator, and scope stacks, plus a skip counter for unchosen branches. A call pushes a `Call` entry, saving the caller's scopes, depth, return offset, value base, and flags. The callee sees its declaration's snapshot plus functions declared later in open scopes.
 
 #### Precedence
 
@@ -54,7 +54,7 @@ Pending operators apply left-associatively. `)` and `}` apply pending operators 
 
 ### Quality gates
 
-Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` finds copy-paste duplicates. ESLint adds local, restricted-syntax, and `import-x/no-cycle` rules; `local/no-recursion` checks one file only.
+Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `bun run cpd` checks duplicates. ESLint adds local, restricted-syntax, and `import-x/no-cycle` rules; `local/no-recursion` checks one file only.
 
 #### Size and naming
 
@@ -68,7 +68,7 @@ Every parse step mutates one `ParserState`, so any step can touch any field.
 
 ### Call fan-out
 
-Depth is capped at 100, but total work is not. A body calling an earlier function twice doubles the work per level, so `n` levels cost about 2^n body parses (22 levels take about 13 s).
+Depth is capped at 100, and steps at 200,000. Each call reparses its body, so `n` levels of calls that each call an earlier function twice cost about 2^n parses. 18 levels exceed the step limit, which then rejects valid programs.
 
 ### Failure detection
 
@@ -76,7 +76,7 @@ Failures and values share a return type, told apart by `typeof === "object"`. Th
 
 ### Numeric precision
 
-Numbers are doubles, so large integers round silently (`9007199254740993 + 0` gives `9007199254740992`), and overflow yields `Infinity` with no `TuffError`.
+Numbers are doubles, so large integers round silently (`9007199254740993 + 0` is `9007199254740992`), and overflow yields `Infinity` with no `TuffError`.
 
 ### Reference aliasing
 
@@ -86,7 +86,7 @@ A live `&mut` blocks reads and writes of its owner; any live reference blocks wr
 
 ### Trust boundary
 
-`interpretTuff` performs no I/O and takes only a string from its caller. The REPL reads untrusted stdin and is the only path where untrusted text reaches the interpreter.
+`interpretTuff` performs no I/O and takes only a string from its caller. The REPL, reading untrusted stdin, is the only path for untrusted text.
 
 ### Controls
 
@@ -94,7 +94,7 @@ Explicit stacks mean nesting costs memory, not JavaScript frames; open calls are
 
 ### Gaps
 
-The REPL reads each line with no length limit, and no maximum source length or total work is enforced.
+The REPL reads each line with no length limit, and no maximum source length is enforced.
 
 ## Future Work
 
@@ -104,16 +104,16 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Call limits
 
-Bound total work with a step budget, so fan-out fails with an error. Keep borrow state on the cell, as a list of live references, so checks do not depend on which scopes a body sees. Move calls to their own frame stack, apart from pending operators.
+Stop reparsing bodies on each call. Keep borrow state on the cell, as a list of live references, so checks do not depend on which scopes a body sees. Move calls to their own frame stack, apart from pending operators.
 
 ### Module names
 
-Rename `operations.ts` to `reduce.ts`, which is too close to `operators.ts`. Split parse steps further by statement, bracket, and `if`.
+Rename `operations.ts` to `reduce.ts`, which is too close to `operators.ts`. Split parse steps by statement, bracket, and `if`.
 
 ### Errors and data
 
-Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` by category before it nears 500 lines. Replace `number` with `bigint` or a decimal type, and report line and column in `where`. Build an AST and evaluate it separately, so lenient branches become an evaluator concern.
+Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` (about 400 code lines) by category into a directory before it nears 500. Replace `number` with `bigint` or a decimal type, and report line and column in `where`. Build an AST, then evaluate it, so lenient branches become an evaluator concern.
 
 ## Performance
 
-Token and variable access scans stacks and scopes. Call depth counts `Call` entries by scanning the operator stack; a counter would avoid that. Profile first.
+Variable access scans stacks and scopes. Call depth scans the operator stack; a counter would avoid that. Profile first.

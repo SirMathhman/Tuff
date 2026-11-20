@@ -404,14 +404,18 @@ export function expectedElse(
 }
 
 /**
- * Reports an `if` whose condition is not a boolean.
+ * Reports a condition that is not a boolean.
  *
  * @param where - the offset of the condition's closing parenthesis.
+ * @param keyword - the keyword whose condition it is, such as "if" or "while".
  * @returns a failure describing the non-boolean condition.
  */
-export function nonBooleanCondition(where: number): Failure<TuffError> {
+export function nonBooleanCondition(
+  where: number,
+  keyword: string,
+): Failure<TuffError> {
   return fail(
-    "The condition of 'if' must be a boolean",
+    `The condition of '${keyword}' must be a boolean`,
     where,
     "Only a boolean can choose a branch; a number has no truth value.",
     "Use a comparison such as 'x < 5', or a boolean value.",
@@ -699,8 +703,8 @@ export function tooMuchWork(where: number): Failure<TuffError> {
   return fail(
     "Program does too much work",
     where,
-    "Calls to earlier functions repeat the work of their bodies, so the work can grow very large.",
-    "Remove repeated calls to earlier functions.",
+    "The program runs more steps than allowed, from a loop that never ends or from calls that repeat a lot of work.",
+    "Make the loop end, or remove repeated calls to earlier functions.",
   );
 }
 

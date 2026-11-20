@@ -30,7 +30,7 @@ import {
   toOperator,
 } from "../scanner";
 import type { BindingEntry, IfEntry, ParserState } from "../types";
-import { EntryKind, IfPhase, Step } from "../types";
+import { EntryKind, IfPhase, LoopPart, Step } from "../types";
 import {
   completeBranch,
   innermostGroup,
@@ -40,6 +40,7 @@ import {
   attachRef,
   borrowedBy,
 } from "./helpers";
+import { closeLoopBody, closeLoopCondition } from "./loops";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
 // still parsed for syntax, but its errors and assignments have no effect.
@@ -51,7 +52,7 @@ function startBranch(
   const entry = ops[ops.length - 1];
   if (entry?.kind !== EntryKind.If) return Step.Continue;
   const value = values.pop() ?? false;
-  if (typeof value !== "boolean") return nonBooleanCondition(closePos);
+  if (typeof value !== "boolean") return nonBooleanCondition(closePos, "if");
   entry.condition = value === true;
   const bodyStart = skipSpaces(source, state.pos);
   entry.statement =
@@ -214,6 +215,10 @@ function closeBracket(
     state.expectOperand = true;
     if (state.depth === 0) flags.afterLet = true;
   }
+  if (group.loopPart === LoopPart.Condition) {
+    return closeLoopCondition(state, closePos);
+  }
+  if (group.loopPart === LoopPart.Body) return closeLoopBody(state);
   if (group.ifCondition) return startBranch(state, closePos);
   return completeBranch(state) ?? Step.Continue;
 }
