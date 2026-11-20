@@ -61,10 +61,17 @@ type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
 
 const MAX_NESTING_DEPTH = 256;
 
-const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
-const err = <E>(error: E): Err<E> => ({ ok: false, error });
-const finite = (n: number): Result<number, TuffErrorKind.NumericOverflow> =>
-  Number.isFinite(n) ? ok(n) : err(TuffErrorKind.NumericOverflow);
+function ok<T>(value: T): Ok<T> {
+  return { ok: true, value };
+}
+
+function err<E>(error: E): Err<E> {
+  return { ok: false, error };
+}
+
+function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
+  return Number.isFinite(n) ? ok(n) : err(TuffErrorKind.NumericOverflow);
+}
 
 const ADDITIVE = new Map<string, BinaryOp>([
   ["+", (a, b) => finite(a + b)],
