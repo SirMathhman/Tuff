@@ -15,6 +15,10 @@ export default tseslint.config(
     rules: {
       "local/no-recursion": "error",
       "id-length": ["error", { min: 2 }],
+      "max-lines": [
+        "error",
+        { max: 500, skipBlankLines: true, skipComments: true },
+      ],
       // Exported top-level members must have JSDoc, with @param names and @returns.
       "jsdoc/require-jsdoc": [
         "error",
