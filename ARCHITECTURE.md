@@ -1,12 +1,12 @@
 # Architecture
 
-Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum, difference, or product of integers, with `*` binding tighter than `+` and `-`.
+Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum, difference, or product of integers and parenthesized groups, with `*` binding tighter than `+` and `-`.
 
 ## Layout
 
 | File | Role |
 | --- | --- |
-| `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, `Factor`, and `TuffError`. |
+| `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, `Parsed`, and `TuffError`. |
 | `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
 | `eslint.config.js` | ESLint configuration (recommended JavaScript and TypeScript rules, plus restricted syntax). |
 | `package.json` | Project metadata and the `lint` script. Declares `@types/bun`, ESLint, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
@@ -15,7 +15,7 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ## Definitions
 
-- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an integer with an optional sign directly before its digits. A sign may follow a binary operator, so `1 - -2` and `2 * -3` are valid.
+- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an optional sign followed by either an integer or a parenthesized expression. A sign may follow a binary operator, so `1 - -2`, `2 * -3`, and `-(2 + 3)` are valid.
 - **Result:** `{ ok: true, value }` (a `Success`) on success or `{ ok: false, error }` (a `Failure`) on failure.
 - **TuffError:** a four-part description of a syntax error:
   - `what`: the error, for example `Expected '+' or '-' but found 'x'`.
@@ -27,9 +27,17 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ### `interpretTuff(tuffSource: string): Result<number, TuffError>`
 
-1. Scans the original source left to right with character checks (no regular expressions), skipping whitespace. A sign must touch its digits. Whitespace is allowed around operators.
-2. `parseFactor` reads an optional sign and digits. When it finds no digits, it returns an "expected a number" error at that offset.
-3. The term loop multiplies factors joined by `*`. The expression loop adds or subtracts terms joined by `+` or `-`, starting from `0`. When a character after a term is neither `+`, `-`, nor `*`, it returns an "expected '+', '-', or '*'" error at that offset.
+A recursive-descent parser over the original source, using character checks (no regular expressions) and skipping whitespace. A sign must touch its digits or its `(`. Whitespace is allowed around operators.
+
+1. `parseExpression` parses terms joined by `+` or `-`, starting from `0`. Inside parentheses (`grouped`), it stops at `)`.
+2. `parseTerm` parses factors joined by `*`.
+3. `parseFactor` reads an optional sign, then either digits or a parenthesized expression (which calls `parseExpression` recursively).
+
+Errors:
+
+- No digits and no `(` where a factor is expected: "Expected a number or '('".
+- A character after a term that is not an operator (or `)` inside parentheses): "Expected '+', '-', or '*'" at top level, or "Expected '+', '-', '*', or ')'" inside parentheses.
+- Input ends inside parentheses: "Expected ')'".
 
 Behavior:
 
@@ -39,9 +47,12 @@ Behavior:
 - `interpretTuff("1 - -2")` returns `{ ok: true, value: 3 }`.
 - `interpretTuff("2 * 3 + 4")` returns `{ ok: true, value: 10 }`.
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
+- `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
+- `interpretTuff("-(2 + 3) * 4")` returns `{ ok: true, value: -20 }`.
 - `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
-- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number but found 'x'`.
-- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number but found the end of the input`.
+- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number or '(' but found 'x'`.
+- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number or '(' but found the end of the input`.
+- `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
 
 ## Testing
 
@@ -49,7 +60,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 ## Known gaps and open decisions
 
-- **Operators:** `+`, `-`, and `*` are supported, and only between integers. Grouping with parentheses is not implemented.
+- **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized groups. Division and other operators are not implemented.
 - **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The project size limits are not enforced by lint.
 
 ## Potential Problems
@@ -73,7 +84,6 @@ The ideal architecture keeps these rules as the project grows:
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report line and column in addition to the offset in `where`.
 - Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.
-- Add grouping with parentheses.
 
 ## Performance
 

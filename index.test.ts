@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { interpretTuff } from "./index";
 
 const NUMBER_WHY =
-  "Every '+', '-', or '*' must be followed by an integer, and an expression must start with one.";
-const NUMBER_FIX = "Put an integer at this position, or remove the operator before it.";
+  "Every '+', '-', or '*' must be followed by an integer or a parenthesized expression, and an expression must start with one.";
+const NUMBER_FIX = "Put an integer or '(' at this position, or remove the operator before it.";
 const OPERATOR_WHY =
   "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.";
 const OPERATOR_FIX = "Insert '+', '-', or '*' between the numbers, or remove the extra character.";
@@ -52,7 +52,7 @@ test('interpretTuff("1 + x") => error', () => {
   expect(interpretTuff("1 + x")).toEqual({
     ok: false,
     error: {
-      what: "Expected a number but found 'x'",
+      what: "Expected a number or '(' but found 'x'",
       where: 4,
       why: NUMBER_WHY,
       fix: NUMBER_FIX,
@@ -64,7 +64,7 @@ test('interpretTuff("") => error', () => {
   expect(interpretTuff("")).toEqual({
     ok: false,
     error: {
-      what: "Expected a number but found the end of the input",
+      what: "Expected a number or '(' but found the end of the input",
       where: 0,
       why: NUMBER_WHY,
       fix: NUMBER_FIX,
@@ -86,6 +86,10 @@ test('interpretTuff("2 * 3 + 4") => 10', () => {
 
 test('interpretTuff("2 + 3 * 4") => 14', () => {
   expect(interpretTuff("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
+});
+
+test('interpretTuff("(2 + 3) * 4") => 20', () => {
+  expect(interpretTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
 });
 
 test('interpretTuff("1 - -2") => 3', () => {

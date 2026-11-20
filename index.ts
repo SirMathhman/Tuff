@@ -17,7 +17,7 @@ export interface Failure<E> {
 
 export type Result<T, E> = Success<T> | Failure<E>;
 
-export interface Factor {
+export interface Parsed {
   value: number;
   end: number;
 }
@@ -42,32 +42,48 @@ function describe(c: string): string {
   return `'${c}'`;
 }
 
+function fail(what: string, where: number, why: string, fix: string): Failure<TuffError> {
+  return { ok: false, error: { what, where, why, fix } };
+}
+
 function expectedNumber(source: string, where: number): Failure<TuffError> {
-  return {
-    ok: false,
-    error: {
-      what: `Expected a number but found ${describe(source.charAt(where))}`,
-      where,
-      why: "Every '+', '-', or '*' must be followed by an integer, and an expression must start with one.",
-      fix: "Put an integer at this position, or remove the operator before it.",
-    },
-  };
+  return fail(
+    `Expected a number or '(' but found ${describe(source.charAt(where))}`,
+    where,
+    "Every '+', '-', or '*' must be followed by an integer or a parenthesized expression, and an expression must start with one.",
+    "Put an integer or '(' at this position, or remove the operator before it.",
+  );
 }
 
-function expectedOperator(source: string, where: number): Failure<TuffError> {
-  return {
-    ok: false,
-    error: {
-      what: `Expected '+', '-', or '*' but found ${describe(source.charAt(where))}`,
+function expectedOperator(source: string, where: number, grouped: boolean): Failure<TuffError> {
+  const found = describe(source.charAt(where));
+  if (grouped) {
+    return fail(
+      `Expected '+', '-', '*', or ')' but found ${found}`,
       where,
-      why: "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.",
-      fix: "Insert '+', '-', or '*' between the numbers, or remove the extra character.",
-    },
-  };
+      "Two terms can only be combined with '+', '-', or '*', and a '(' must be closed with ')'; any other character cannot follow a number.",
+      "Insert '+', '-', '*', or ')' here, or remove the extra character.",
+    );
+  }
+  return fail(
+    `Expected '+', '-', or '*' but found ${found}`,
+    where,
+    "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.",
+    "Insert '+', '-', or '*' between the numbers, or remove the extra character.",
+  );
 }
 
-// A factor is an integer with an optional sign directly before its digits.
-function parseFactor(source: string, start: number): Result<Factor, TuffError> {
+function expectedClose(source: string, where: number): Failure<TuffError> {
+  return fail(
+    `Expected ')' but found ${describe(source.charAt(where))}`,
+    where,
+    "Every '(' must be closed by a matching ')'.",
+    "Add a ')' at the end of the parenthesized expression.",
+  );
+}
+
+// factor: [sign] (digits | "(" expression ")")
+function parseFactor(source: string, start: number): Result<Parsed, TuffError> {
   let pos = start;
   let sign = 1;
   const c = source.charAt(pos);
@@ -75,6 +91,13 @@ function parseFactor(source: string, start: number): Result<Factor, TuffError> {
     if (c === "-") sign = -1;
     pos++;
   }
+
+  if (source.charAt(pos) === "(") {
+    const inner = parseExpression(source, pos + 1, true);
+    if (!inner.ok) return inner;
+    return { ok: true, value: { value: sign * inner.value.value, end: inner.value.end + 1 } };
+  }
+
   const digitsStart = pos;
   while (isDigit(source.charAt(pos))) pos++;
   if (pos === digitsStart) return expectedNumber(source, pos);
@@ -84,31 +107,49 @@ function parseFactor(source: string, start: number): Result<Factor, TuffError> {
   };
 }
 
-// Grammar: term ( ("+" | "-") term )*, where term is factor ( "*" factor )*.
-// Offsets in errors refer to the unmodified source.
-export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  let pos = skipSpaces(tuffSource, 0);
+// term: factor ( "*" factor )*
+function parseTerm(source: string, start: number): Result<Parsed, TuffError> {
+  const first = parseFactor(source, start);
+  if (!first.ok) return first;
+  let value = first.value.value;
+  let pos = skipSpaces(source, first.value.end);
+
+  while (source.charAt(pos) === "*") {
+    const next = parseFactor(source, skipSpaces(source, pos + 1));
+    if (!next.ok) return next;
+    value *= next.value.value;
+    pos = skipSpaces(source, next.value.end);
+  }
+  return { ok: true, value: { value, end: pos } };
+}
+
+// expression: term ( ("+" | "-") term )*. When grouped, it stops before ")" and
+// the returned end points at that ")". Offsets refer to the unmodified source.
+function parseExpression(source: string, start: number, grouped: boolean): Result<Parsed, TuffError> {
+  let pos = skipSpaces(source, start);
   let total = 0;
   let termSign = 1; // sign from the additive operator before the next term
   for (;;) {
-    const first = parseFactor(tuffSource, pos);
-    if (!first.ok) return first;
-    let term = first.value.value;
-    pos = skipSpaces(tuffSource, first.value.end);
+    const term = parseTerm(source, pos);
+    if (!term.ok) return term;
+    total += termSign * term.value.value;
+    pos = term.value.end;
 
-    while (tuffSource.charAt(pos) === "*") {
-      const next = parseFactor(tuffSource, skipSpaces(tuffSource, pos + 1));
-      if (!next.ok) return next;
-      term *= next.value.value;
-      pos = skipSpaces(tuffSource, next.value.end);
+    if (pos === source.length) {
+      if (grouped) return expectedClose(source, pos);
+      return { ok: true, value: { value: total, end: pos } };
     }
 
-    total += termSign * term;
-    if (pos === tuffSource.length) return { ok: true, value: total };
-
-    const op = tuffSource.charAt(pos);
-    if (op !== "+" && op !== "-") return expectedOperator(tuffSource, pos);
+    const op = source.charAt(pos);
+    if (grouped && op === ")") return { ok: true, value: { value: total, end: pos } };
+    if (op !== "+" && op !== "-") return expectedOperator(source, pos, grouped);
     termSign = op === "-" ? -1 : 1;
-    pos = skipSpaces(tuffSource, pos + 1);
+    pos = skipSpaces(source, pos + 1);
   }
+}
+
+export function interpretTuff(tuffSource: string): Result<number, TuffError> {
+  const result = parseExpression(tuffSource, 0, false);
+  if (!result.ok) return result;
+  return { ok: true, value: result.value.value };
 }
