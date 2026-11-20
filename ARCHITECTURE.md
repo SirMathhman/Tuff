@@ -60,7 +60,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### Lint rules
 
-ESLint adds local and restricted-syntax rules to its recommended set (`eslint.config.ts`). `local/no-recursion` checks one file and can false-positive on method names.
+ESLint adds local, restricted-syntax, and `import-x/no-cycle` rules to its recommended set (`eslint.config.ts`). `local/no-recursion` checks one file and can false-positive on method names.
 
 #### Size and naming
 
@@ -92,10 +92,6 @@ Numbers are doubles, so values above `Number.MAX_SAFE_INTEGER` round silently (`
 
 A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `src/parse/helpers.ts`).
 
-### Cross-file cycles
-
-The recursion lint rule sees one file, so import cycles between files go unchecked.
-
 ## Security Concerns
 
 ### Trust boundary
@@ -111,10 +107,6 @@ Explicit stacks mean nesting costs memory, not call frames. Future I/O must go b
 The REPL reads each stdin line with no length limit. No maximum source length or nesting depth is enforced, so deep input can use a lot of memory.
 
 ## Future Work
-
-### Cycle check
-
-Lint rejects import cycles between project files, before the module split.
 
 ### Known gaps
 

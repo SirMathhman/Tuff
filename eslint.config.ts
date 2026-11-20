@@ -4,6 +4,7 @@ import tseslint from "typescript-eslint";
 const { configs: jsConfigs } = eslint;
 const { configs: tsConfigs } = tseslint;
 import jsdoc from "eslint-plugin-jsdoc";
+import importX from "eslint-plugin-import-x";
 import maxInterfaceMembers from "./eslint-rules/max-interface-members";
 import exportReferencedTypes from "./eslint-rules/export-referenced-types";
 import requireMemberDocs from "./eslint-rules/require-member-docs";
@@ -24,8 +25,14 @@ export default tseslint.config(
         },
       },
       jsdoc,
+      "import-x": importX,
+    },
+    settings: {
+      "import-x/extensions": [".ts"],
+      "import-x/resolver": { node: { extensions: [".ts"] } },
     },
     rules: {
+      "import-x/no-cycle": "error",
       "local/no-recursion": "error",
       "local/max-interface-members": "error",
       "local/require-member-docs": "error",
