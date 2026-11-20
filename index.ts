@@ -40,6 +40,7 @@ import {
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
 import { parseExportDeclaration, parseModuleMember } from "./src/parse/imports";
+import { parseDestructuring } from "./src/parse/destructure";
 import { callHostFunction } from "./src/host";
 import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
@@ -930,6 +931,9 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
   if (peekName(text, cursor) === "mut") {
     cursor.pos += "mut".length;
     mutable = true;
+  }
+  if (peek(text, cursor) === "{") {
+    return parseDestructuring(text, cursor, mutable, parseInitializer);
   }
   const name = peekName(text, cursor);
   if (name === "" || RESERVED_WORDS.has(name)) {

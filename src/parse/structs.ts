@@ -1,4 +1,4 @@
-import { peek, peekName, peekStart, type Problem } from "../lexing";
+import { peek, peekName, peekStart, consumeListSeparator, type Problem } from "../lexing";
 import { parseTypeAnnotation } from "./annotations";
 import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
 import { type Cursor, type Value } from "../types";
@@ -51,10 +51,9 @@ export function parseStructDeclaration(
       return { offset: fieldStart, expected: `a field name not already used in ${name}` };
     }
     fields.set(field, annotation.value);
-    if (peek(text, cursor) === ",") {
-      cursor.pos++;
-    } else if (peek(text, cursor) !== "}") {
-      return { offset: cursor.pos, expected: `"," or "}"` };
+    const separator = consumeListSeparator(text, cursor, "}");
+    if (separator !== undefined) {
+      return separator;
     }
   }
   cursor.pos++;

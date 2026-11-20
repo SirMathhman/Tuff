@@ -218,3 +218,22 @@ export function findTopLevel(
   }
   return -1;
 }
+
+/**
+ * Consumes a "," between list items, or checks that the list ends at the closer.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position after an item, advanced past a ",".
+ * @param closer - The character that ends the list, such as "}".
+ * @returns A problem if the next character is neither "," nor the closer, otherwise undefined.
+ */
+export function consumeListSeparator(text: string, cursor: Position, closer: string): Problem | undefined {
+  if (peek(text, cursor) === ",") {
+    cursor.pos++;
+    return undefined;
+  }
+  if (peek(text, cursor) !== closer) {
+    return { offset: cursor.pos, expected: `"," or "${closer}"` };
+  }
+  return undefined;
+}
