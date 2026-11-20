@@ -2,8 +2,8 @@ import type { Result, TuffError } from "./errors";
 import { reduceOperators } from "./operations";
 import type { ParserState } from "./types";
 import { Step } from "./types";
-import { stepOperand } from "./operands";
-import { stepOperator } from "./operators";
+import { stepOperand } from "./parse/operands";
+import { stepOperator } from "./parse/operators";
 
 /**
  * Evaluates a Tuff program: `let NAME = value;` statements followed by an

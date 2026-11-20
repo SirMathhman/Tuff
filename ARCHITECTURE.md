@@ -39,13 +39,13 @@ Checks live in `scripts/`, `eslint-rules/`, and `markdown-rules/`.
 - `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/operands.ts`, `src/operators.ts`: parse steps, with `*` in `operands.ts`. `src/references.ts`: `&` steps. `src/index.ts`: `interpretTuff`.
+- `src/parse/helpers.ts`: shared lookups and state transitions (`completeBranch`, `pushOperand`, `attachRef`). `src/parse/operands.ts`, `src/parse/operators.ts`: parse steps, with `*` in `operands.ts`. `src/parse/references.ts`: `&` steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/*.test.ts`: `bun:test` suites.
 
 ### Dependency direction
 
-`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, steps depend on `helpers.ts`, `references.ts` and `operations.ts`, `references.ts` depends on `helpers.ts`, and `helpers.ts` depends on `operations.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -95,7 +95,7 @@ Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` ro
 
 ### Reference aliasing
 
-A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `helpers.ts`).
+A live `&mut` blocks reads and writes of its owner, and any live reference blocks writes (`borrowedBy` in `src/parse/helpers.ts`).
 
 ## Security Concerns
 
@@ -119,7 +119,7 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Module names
 
-`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, move `closeBinding` and `endStatement` into `statements.ts`, and move the parse steps into `src/parse/`, since `src/` would otherwise hold 11 files.
+`operations.ts` is too close to `operators.ts` in name. Target: rename `operations.ts` to `reduce.ts`, and move `closeBinding` and `endStatement` into `src/parse/statements.ts`.
 
 ### Parse tree
 

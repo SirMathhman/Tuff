@@ -1,5 +1,5 @@
-import type { Failure, TuffError } from "./errors";
-import { applySign } from "./operations";
+import type { Failure, TuffError } from "../errors";
+import { applySign } from "../operations";
 import type {
   BindingRef,
   Cell,
@@ -8,8 +8,8 @@ import type {
   Scope,
   StackEntry,
   Value,
-} from "./types";
-import { EntryKind, IfPhase, Step } from "./types";
+} from "../types";
+import { EntryKind, IfPhase, Step } from "../types";
 
 /**
  * Reports whether a reference to a cell is in scope. With exclusiveOnly, only `&mut`

@@ -1,4 +1,4 @@
-import type { Failure, TuffError } from "./errors";
+import type { Failure, TuffError } from "../errors";
 import {
   Bracket,
   expectedClose,
@@ -10,9 +10,9 @@ import {
   referenceOverlap,
   referenceUse,
   undefinedName,
-} from "./errors";
+} from "../errors";
 import { borrowedBy, lookupCell, pushOperand } from "./helpers";
-import { readName, skipSpaces } from "./scanner";
+import { readName, skipSpaces } from "../scanner";
 import type {
   BindingEntry,
   Cell,
@@ -20,8 +20,8 @@ import type {
   ParserState,
   Scope,
   StackEntry,
-} from "./types";
-import { EntryKind, IfPhase, Step } from "./types";
+} from "../types";
+import { EntryKind, IfPhase, Step } from "../types";
 
 // Whether a new reference to `cell` conflicts with one already in scope: a `&mut`
 // conflicts with any reference, and a `&` conflicts with a `&mut`.

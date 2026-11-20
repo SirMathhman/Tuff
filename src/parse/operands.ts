@@ -1,4 +1,4 @@
-import type { Failure, TuffError } from "./errors";
+import type { Failure, TuffError } from "../errors";
 import {
   Bracket,
   blockEndsWithStatement,
@@ -16,8 +16,8 @@ import {
   reservedName,
   undefinedName,
   unexpectedSemicolon,
-} from "./errors";
-import { applySign } from "./operations";
+} from "../errors";
+import { applySign } from "../operations";
 import { operandRef } from "./references";
 import {
   isLetter,
@@ -25,9 +25,9 @@ import {
   readName,
   skipSpaces,
   toBracket,
-} from "./scanner";
-import type { Cell, ParserState } from "./types";
-import { EntryKind, IfPhase, Step } from "./types";
+} from "../scanner";
+import type { Cell, ParserState } from "../types";
+import { EntryKind, IfPhase, Step } from "../types";
 import { borrowedBy, lookupCell, pushOperand } from "./helpers";
 
 // Names with a fixed meaning. They cannot be variable names.

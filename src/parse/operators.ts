@@ -1,4 +1,4 @@
-import type { Failure, TuffError } from "./errors";
+import type { Failure, TuffError } from "../errors";
 import {
   Bracket,
   chainedComparison,
@@ -12,7 +12,7 @@ import {
   ownerBorrowed,
   typeMismatch,
   unexpectedSemicolon,
-} from "./errors";
+} from "../errors";
 import {
   applyTop,
   closeGroup,
@@ -20,16 +20,16 @@ import {
   isComparison,
   precedence,
   reduceOperators,
-} from "./operations";
+} from "../operations";
 import {
   Operator,
   isCloser,
   readName,
   skipSpaces,
   toOperator,
-} from "./scanner";
-import type { BindingEntry, IfEntry, ParserState } from "./types";
-import { EntryKind, IfPhase, Step } from "./types";
+} from "../scanner";
+import type { BindingEntry, IfEntry, ParserState } from "../types";
+import { EntryKind, IfPhase, Step } from "../types";
 import {
   completeBranch,
   innermostGroup,
