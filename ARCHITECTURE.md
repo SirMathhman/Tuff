@@ -1,26 +1,26 @@
 # Architecture
 
-Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evaluates `let` statements followed by one expression. It is at an early stage, and the sections below give the details.
+Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evaluates `let` and assignment statements followed by one expression. It is at an early stage, and the sections below give the details.
 
 ## Source files
 
 Repository layout and dependency rules.
 
-### Interpreter (index.ts)
+### Interpreter (src/index.ts)
 
-Exports `interpretTuff`. Error types and messages live in `errors.ts`.
+Exports `interpretTuff`. Error types and messages live in `src/errors.ts`.
 
-### REPL (repl.ts)
+### REPL (src/repl.ts)
 
 Reads stdin lines, evaluates each with `interpretTuff`, and prints the value or the error. Run with `bun run repl`.
 
-### Tests (index.test.ts)
+### Tests (src/index.test.ts)
 
 Uses Bun's built-in `bun:test` runner. Each feature has a test named after its expression. Error tests check all four `TuffError` fields.
 
 ### Dependency direction
 
-`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on no project file and performs no I/O.
+`repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends only on `errors.ts`, which depends on no project file. Neither performs I/O.
 
 ### Configuration
 
@@ -28,7 +28,7 @@ Uses Bun's built-in `bun:test` runner. Each feature has a test named after its e
 
 ## Language
 
-A program is zero or more `let` statements followed by one expression.
+A program is zero or more statements, each a `let` or an assignment ending in `;`, followed by one expression.
 
 ### Grammar
 
@@ -139,6 +139,10 @@ Method names match loosely, so unrelated objects can produce false positives. Co
 
 `max-lines-per-function` caps functions at 100 lines, `max-lines` caps files at 500, and `id-length` requires names of at least two characters. Blank lines and comments are skipped.
 
+#### Directories
+
+A directory may hold at most 10 files of any type, subdirectories excluded. `scripts/max-files-per-dir.ts` checks this.
+
 ### Documentation
 
 Exported top-level functions, classes, interfaces, type aliases, and enums need JSDoc. Exported functions need `@param` names and a `@returns` entry.
@@ -170,7 +174,7 @@ Planned changes, in rough order.
 #### Structure
 
 - Split into `lexer`, `parser` (producing an AST), and `evaluator`, with `interpretTuff` as the composition point. The combined evaluator is a stopgap until then.
-- Check the 10-files-per-directory limit by hand, since ESLint has no rule for it.
+-
 
 #### Numbers and output
 

@@ -18,8 +18,8 @@
     "typescript": "^5"
   },
   "scripts": {
-    "lint": "eslint . && bun scripts/unused-exports.ts && markdownlint-cli2 \"**/*.md\"",
-    "repl": "bun run repl.ts",
+    "lint": "eslint . && bun scripts/unused-exports.ts && bun scripts/max-files-per-dir.ts && markdownlint-cli2 \"**/*.md\"",
+    "repl": "bun run src/repl.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:md": "markdownlint-cli2 \"**/*.md\""

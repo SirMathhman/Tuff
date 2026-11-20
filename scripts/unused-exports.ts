@@ -21,7 +21,7 @@ function listSources(dir: string): string[] {
 }
 
 const rootNames = [
-  ...listSources(projectRoot),
+  ...listSources(join(projectRoot, "src")),
   ...listSources(join(projectRoot, "scripts")),
 ];
 
