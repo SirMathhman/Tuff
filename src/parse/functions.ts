@@ -1,10 +1,10 @@
 import { peek, peekName, type Problem } from "../lexing";
 import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
-import { checkTypedValue, findFunctionBodyEnd } from "../scope";
+import { checkTypedValue, findFunctionBodyEnd, lookup } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
 import { type Cursor, type Param } from "../types";
 
-/** The parsed signature of a function declared with "in fn". */
+/** The parsed signature of a function declared with "extern fn". */
 interface HostSignature {
   /** The function name. */
   readonly name: string;
@@ -89,7 +89,7 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
 }
 
 /**
- * Declares a function whose body the host supplies, written "in fn name(params) : Type;".
+ * Declares a function whose body the host supplies, written "extern fn name(params) : Type;".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at the ";" after the signature, advanced past it.
@@ -98,8 +98,8 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
  */
 function declareHostFunction(text: string, cursor: Cursor, signature: HostSignature): Problem | undefined {
   const { name, params, returnType, declStart } = signature;
-  if (!precededByIn(text, declStart)) {
-    return { offset: cursor.pos, expected: `"=>" and a body (a function without one is declared with "in fn")` };
+  if (!precededByExtern(text, declStart)) {
+    return { offset: cursor.pos, expected: `"=>" and a body (a function without one is declared with "extern fn")` };
   }
   if (returnType === undefined) {
     return { offset: declStart, expected: `a return type for host function "${name}"` };
@@ -116,20 +116,20 @@ function declareHostFunction(text: string, cursor: Cursor, signature: HostSignat
 }
 
 /**
- * Reports whether the word "in" immediately precedes the given offset, ignoring spaces.
+ * Reports whether the word "extern" immediately precedes the given offset, ignoring spaces.
  *
  * @param text - The source being parsed.
  * @param declStart - Offset of the declaration keyword.
- * @returns True if "in" is the word before the declaration.
+ * @returns True if "extern" is the word before the declaration.
  */
-function precededByIn(text: string, declStart: number): boolean {
+function precededByExtern(text: string, declStart: number): boolean {
   const before = text.slice(0, declStart).trimEnd();
-  const charBefore = before.charAt(before.length - 3);
-  return before.endsWith("in") && !/[A-Za-z0-9_]/.test(charBefore);
+  const charBefore = before.charAt(before.length - "extern".length - 1);
+  return before.endsWith("extern") && !/[A-Za-z0-9_]/.test(charBefore);
 }
 
 /**
- * Declares a variable whose value the host supplies, written "in let name : Type;".
+ * Declares a variable whose value the host supplies, written "extern let name : Type;".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "let", advanced past the declaration.
@@ -151,18 +151,24 @@ export function parseHostVariable(text: string, cursor: Cursor): Problem | undef
   if (!annotation.ok) {
     return annotation.error;
   }
-  const { hostValues } = cursor;
-  const value = hostValues.get(name);
-  if (value === undefined || typeof value === "function") {
-    return { offset: declStart, expected: `a host value named "${name}" to be provided` };
-  }
   const type = annotation.value;
+  const { scope } = cursor;
+  const { vars } = scope;
+  const sameScope = vars.get(name);
+  if (sameScope !== undefined && sameScope.extern === true) {
+    return { offset: declStart, expected: `only one extern "${name}" in this scope` };
+  }
+  const earlier = lookup(scope, name);
+  const { hostValues } = cursor;
+  const hosted = hostValues.get(name);
+  const value = earlier !== undefined ? earlier.value : hosted;
+  if (value === undefined || typeof value === "function") {
+    return { offset: declStart, expected: `a value for "${name}" from an earlier binding or the host` };
+  }
   const problem = checkTypedValue(value, declStart, type);
   if (problem !== undefined) {
     return problem;
   }
-  const { scope } = cursor;
-  const { vars } = scope;
-  vars.set(name, { value, mutable: false, depth: scope.depth, type });
+  vars.set(name, { value, mutable: false, depth: scope.depth, type, extern: true });
   return undefined;
 }

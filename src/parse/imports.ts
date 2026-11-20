@@ -23,7 +23,7 @@ export function parseModuleMember(
     return err({ offset: cursor.pos, expected: `a name exported by module "${moduleName}"` });
   }
   cursor.pos += member.length;
-  const loaded = loadExports(cursor, start, moduleName);
+  const loaded = loadExports(cursor, start, moduleName, false);
   if (!loaded.ok) {
     return loaded;
   }
@@ -79,10 +79,16 @@ export function parseExportDeclaration(
  * @param cursor - The parse state, which supplies the module loader.
  * @param start - Offset of the module name, for error reporting.
  * @param moduleName - The name the source used for the module.
+ * @param native - True if the name was written with "extern" and refers to a native module.
  * @returns An Ok result with the module value, or an Err result if no module with that name loads.
  */
-export function parseModuleValue(cursor: Cursor, start: number, moduleName: string): Result<Value, Problem> {
-  const loaded = loadExports(cursor, start, moduleName);
+export function parseModuleValue(
+  cursor: Cursor,
+  start: number,
+  moduleName: string,
+  native: boolean,
+): Result<Value, Problem> {
+  const loaded = loadExports(cursor, start, moduleName, native);
   if (!loaded.ok) {
     return loaded;
   }
@@ -95,10 +101,16 @@ export function parseModuleValue(cursor: Cursor, start: number, moduleName: stri
  * @param cursor - The parse state, which supplies the module loader.
  * @param start - Offset of the module name, for error reporting.
  * @param moduleName - The name the source used for the module.
+ * @param native - True if the name refers to a native module rather than a Tuff module.
  * @returns An Ok result with the exported values, or an Err result with the first problem found.
  */
-function loadExports(cursor: Cursor, start: number, moduleName: string): Result<ReadonlyMap<string, Value>, Problem> {
-  const loaded = cursor.modules(moduleName);
+function loadExports(
+  cursor: Cursor,
+  start: number,
+  moduleName: string,
+  native: boolean,
+): Result<ReadonlyMap<string, Value>, Problem> {
+  const loaded = cursor.modules(moduleName, native);
   if (loaded === undefined) {
     return err({ offset: start, expected: `a variable or module in scope (no "${moduleName}" is defined)` });
   }
@@ -106,4 +118,21 @@ function loadExports(cursor: Cursor, start: number, moduleName: string): Result<
     return err({ offset: start, expected: `module "${moduleName}" to load (${loaded.error})` });
   }
   return ok(loaded.value);
+}
+
+/**
+ * Parses the module name after "extern" in an expression, and yields that module as a value.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position after "extern", advanced past the module name.
+ * @param start - Offset of "extern", for error reporting.
+ * @returns An Ok result with the module value, or an Err result with the first problem found.
+ */
+export function parseExternValue(text: string, cursor: Cursor, start: number): Result<Value, Problem> {
+  const moduleName = peekName(text, cursor);
+  if (moduleName === "") {
+    return err({ offset: cursor.pos, expected: `a module name after "extern"` });
+  }
+  cursor.pos += moduleName.length;
+  return parseModuleValue(cursor, start, moduleName, true);
 }

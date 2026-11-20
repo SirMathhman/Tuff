@@ -31,6 +31,9 @@ export function parseDestructuring(
   cursor.pos++;
   const names: string[] = [];
   while (peek(text, cursor) !== "}") {
+    if (peekName(text, cursor) === "extern") {
+      cursor.pos += "extern".length;
+    }
     const name = peekName(text, cursor);
     if (name === "" || RESERVED_WORDS.has(name)) {
       return { offset: cursor.pos, expected: `a field name or "}"` };

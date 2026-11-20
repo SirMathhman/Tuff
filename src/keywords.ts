@@ -18,6 +18,6 @@ export const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "fn",
   "type",
   "struct",
-  "in",
+  "extern",
   "out",
 ]);

@@ -58,6 +58,8 @@ export interface ArrayValue {
  * A variable's current value and whether it may be reassigned.
  */
 export interface Binding {
+  /** True if the binding was made by an "extern let" declaration. */
+  readonly extern?: boolean;
   /**
    * The variable's current value.
    */
@@ -121,7 +123,7 @@ export interface FunctionDef {
   readonly bodyEnd: number;
   /** The scope the function was declared in. */
   readonly scope: Scope;
-  /** True if the function was declared with "in fn" and its body is supplied by the host. */
+  /** True if the function was declared with "extern fn" and its body is supplied by the host. */
   readonly external: boolean;
 }
 /**
@@ -158,7 +160,7 @@ export interface Cursor {
   readonly exported: Map<string, Value>;
 }
 /** Finds a module by name and returns the values it exports, or an error if it fails to load. */
-export type ModuleLoader = (name: string) => Result<ReadonlyMap<string, Value>, string> | undefined;
+export type ModuleLoader = (name: string, native: boolean) => Result<ReadonlyMap<string, Value>, string> | undefined;
 /**
  * The value a "break" produced, which ends the enclosing loop.
  */

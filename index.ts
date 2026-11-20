@@ -39,7 +39,7 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import { parseExportDeclaration, parseModuleMember, parseModuleValue } from "./src/parse/imports";
+import { parseExportDeclaration, parseExternValue, parseModuleMember, parseModuleValue } from "./src/parse/imports";
 import { parseDestructuring } from "./src/parse/destructure";
 import { callHostFunction } from "./src/host";
 import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
@@ -54,7 +54,7 @@ import { parseStructDeclaration, parseStructLiteral } from "./src/parse/structs"
  * @param tuffSource - The Tuff source text to interpret.
  * @param hostValues - Values and functions the host supplies, by name.
  * @param modules - Loads imported modules by name.
- * @param hostValues - Values and functions the host supplies, by name, for "in let" and "in fn" declarations.
+ * @param hostValues - Values and functions the host supplies, by name, for "extern let" and "extern fn" declarations.
  * @returns An Ok result with the numeric result of the program, or an Err result describing what is wrong, where, why, and how to fix it.
  */
 export function interpretTuff(
@@ -256,6 +256,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (name === "true" || name === "false") {
       return ok(name === "true");
     }
+    if (name === "extern") {
+      return parseExternValue(text, cursor, start);
+    }
     if (name === "if") {
       return parseIf(text, cursor);
     }
@@ -280,7 +283,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       if (peek(text, cursor) === ".") {
         return parseModuleMember(text, cursor, start, name);
       }
-      return parseModuleValue(cursor, start, name);
+      return parseModuleValue(cursor, start, name, false);
     }
     return parsePostfix(text, cursor, start, binding.value, parseExpression);
   }
@@ -566,14 +569,14 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   if (name === "out" && allowDeclaration) {
     return { matched: true, problem: parseExportDeclaration(text, cursor, parseDeclaration) };
   }
-  if (name === "in" && allowDeclaration) {
-    cursor.pos += "in".length;
+  if (name === "extern" && allowDeclaration) {
+    cursor.pos += "extern".length;
     const keyword = peekName(text, cursor);
     if (keyword === "let") {
       return { matched: true, problem: parseHostVariable(text, cursor) };
     }
     if (keyword !== "fn") {
-      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" or "let" after "in"` } };
+      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" or "let" after "extern"` } };
     }
     return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
   }
