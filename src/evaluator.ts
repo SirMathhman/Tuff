@@ -1,69 +1,13 @@
-import {
-  NodeKind,
-  Operator,
-  StatementKind,
-  type AssignStatement,
-  type AssignThroughStatement,
-  type BlockNode,
-  type BorrowNode,
-  type ChainNode,
-  type DerefNode,
-  type Expr,
-  type NameNode,
-} from "./ast.ts";
-import { evaluateIf, evaluateIfStatement, evaluateMatch } from "./eval/branch.ts";
+import { NodeKind, type BorrowNode, type Expr, type NameNode } from "./ast.ts";
+import { evaluateIf, evaluateMatch } from "./eval/branch.ts";
+import { evaluateBlock } from "./eval/block.ts";
+import { evaluateChain, evaluateDeref, finite } from "./eval/chain.ts";
 import type { Env } from "./eval/env.ts";
 import { spanOf } from "./eval/span-of.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
-import type { Frame, NameRefs } from "./scope.ts";
+import type { NameRefs } from "./scope.ts";
 import { isReference, type Value } from "./value.ts";
-
-type OperatorError =
-  | TuffErrorKind.DivisionByZero
-  | TuffErrorKind.NumericOverflow
-  | TuffErrorKind.BooleanOperand
-  | TuffErrorKind.ReferenceAsValue;
-type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
-
-function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
-  return Number.isFinite(n) ? ok(n) : err(TuffErrorKind.NumericOverflow);
-}
-
-const OPERATORS: Record<Operator, BinaryOp> = {
-  [Operator.Add]: (a, b) => finite(a + b),
-  [Operator.Subtract]: (a, b) => finite(a - b),
-  [Operator.Multiply]: (a, b) => finite(a * b),
-  [Operator.Divide]: (a, b) => (b === 0 ? err(TuffErrorKind.DivisionByZero) : ok(Math.trunc(a / b))),
-};
-
-/**
- * Applies an arithmetic operator. Both operands must be numbers.
- *
- * @param operator - The operator to apply.
- * @param a - The left operand.
- * @param b - The right operand.
- * @returns The result, or an error if an operand is a boolean or a reference, or the arithmetic fails.
- */
-function applyOperator(operator: Operator, a: Value, b: Value): Result<number, OperatorError> {
-  if (typeof a === "number" && typeof b === "number") return OPERATORS[operator](a, b);
-  if (isReference(a) || isReference(b)) return err(TuffErrorKind.ReferenceAsValue);
-  return err(TuffErrorKind.BooleanOperand);
-}
-
-/**
- * Whether a value would outlive the block that holds the slot it is stored into.
- *
- * @param value - The value being stored.
- * @param env - The current evaluation state.
- * @param destIndex - The position in `env.frames` of the block receiving the value.
- * @returns True if the value is a reference to a block that is not open at or outside the destination.
- */
-function outlives(value: Value, env: Env, destIndex: number): boolean {
-  if (!isReference(value)) return false;
-  const targetIndex = env.frames.indexOf(value.target);
-  return targetIndex === -1 || targetIndex > destIndex;
-}
 
 /**
  * Folds the AST to a value. Every name was bound by resolver.ts before this runs.
@@ -80,6 +24,14 @@ export function evaluate(expr: Expr, refs: NameRefs): Result<number, TuffError> 
   return ok(result.value ? 1 : 0);
 }
 
+/**
+ * Dispatches one expression to its evaluator. The only entry point of the evaluation recursion;
+ * helpers in `eval/` receive it as a parameter.
+ *
+ * @param expr - The expression.
+ * @param env - The current evaluation state.
+ * @returns The expression's value, or its error.
+ */
 function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal: {
@@ -94,15 +46,15 @@ function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
     case NodeKind.Borrow:
       return evaluateBorrow(expr, env);
     case NodeKind.Deref:
-      return evaluateDeref(expr, env);
+      return evaluateDeref(expr, env, evaluateIn);
     case NodeKind.Chain:
-      return evaluateChain(expr, env);
+      return evaluateChain(expr, env, evaluateIn);
     case NodeKind.If:
       return evaluateIf(expr, env, evaluateIn);
     case NodeKind.Match:
       return evaluateMatch(expr, env, evaluateIn);
     case NodeKind.Block:
-      return evaluateBlock(expr, env);
+      return evaluateBlock(expr, env, evaluateIn);
   }
 }
 
@@ -124,112 +76,4 @@ function evaluateBorrow(borrow: BorrowNode, env: Env): Result<Value, TuffError> 
     return err({ kind: TuffErrorKind.InternalError, span: borrow.span });
   }
   return ok({ target: frame, index: ref.index, mutable: borrow.mutable });
-}
-
-function evaluateDeref(deref: DerefNode, env: Env): Result<Value, TuffError> {
-  const pointer = evaluateIn(deref.operand, env);
-  if (!pointer.ok) return pointer;
-  if (!isReference(pointer.value)) return err({ kind: TuffErrorKind.NotAReference, span: deref.span });
-  const value = pointer.value.target[pointer.value.index];
-  // Unreachable: a live reference always points at a bound slot.
-  if (value === undefined) return err({ kind: TuffErrorKind.InternalError, span: deref.span });
-  return ok(value);
-}
-
-function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
-  const first = evaluateIn(chain.first, env);
-  if (!first.ok) return first;
-  let value = first.value;
-  for (const step of chain.steps) {
-    const right = evaluateIn(step.operand, env);
-    if (!right.ok) return right;
-    const applied = applyOperator(step.operator, value, right.value);
-    if (!applied.ok) return err({ kind: applied.error, span: step.operatorSpan });
-    value = applied.value;
-  }
-  return ok(value);
-}
-
-function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
-  const frame: Frame<Value> = [];
-  env.frames.push(frame);
-  const result = evaluateBlockBody(block, env, frame);
-  env.frames.pop();
-  if (!result.ok) return result;
-  if (!isReference(result.value)) return result;
-  // The block's own frame is popped, so a reference to it, or to anything deeper, is not in env.frames.
-  if (env.frames.includes(result.value.target)) return result;
-  return err({ kind: TuffErrorKind.ReferenceEscapes, span: spanOf(block) });
-}
-
-function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame<Value>): Result<Value, TuffError> {
-  for (const statement of block.statements) {
-    if (statement.kind === StatementKind.Let) {
-      const value = evaluateIn(statement.value, env);
-      if (!value.ok) return value;
-      frame.push(value.value);
-      continue;
-    }
-    if (statement.kind === StatementKind.Block) {
-      const ran = evaluateIn(statement.block, env);
-      if (!ran.ok) return ran;
-      continue;
-    }
-    if (statement.kind === StatementKind.If) {
-      const ran = evaluateIfStatement(statement, env, evaluateIn);
-      if (!ran.ok) return ran;
-      continue;
-    }
-    const assigned =
-      statement.kind === StatementKind.AssignThrough
-        ? evaluateAssignThrough(statement, env)
-        : evaluateAssign(statement, env);
-    if (!assigned.ok) return assigned;
-  }
-  if (block.result === undefined) return ok(0);
-  return evaluateIn(block.result, env);
-}
-
-function evaluateAssign(statement: AssignStatement, env: Env): Result<undefined, TuffError> {
-  const value = evaluateIn(statement.value, env);
-  if (!value.ok) return value;
-  const ref = env.refs.get(statement.target);
-  const frame = ref === undefined ? undefined : env.frames[env.frames.length - 1 - ref.depth];
-  const previous = ref === undefined || frame === undefined ? undefined : frame[ref.index];
-  // Unreachable when the resolver ran first; see evaluateName.
-  if (ref === undefined || frame === undefined || previous === undefined) {
-    return err({ kind: TuffErrorKind.InternalError, span: statement.target.span });
-  }
-  if (typeof previous !== typeof value.value) {
-    return err({ kind: TuffErrorKind.TypeMismatch, span: statement.target.span });
-  }
-  if (outlives(value.value, env, env.frames.indexOf(frame))) {
-    return err({ kind: TuffErrorKind.ReferenceEscapes, span: spanOf(statement.value) });
-  }
-  frame[ref.index] = value.value;
-  return ok(undefined);
-}
-
-function evaluateAssignThrough(statement: AssignThroughStatement, env: Env): Result<undefined, TuffError> {
-  const value = evaluateIn(statement.value, env);
-  if (!value.ok) return value;
-  const pointer = evaluateIn(statement.target, env);
-  if (!pointer.ok) return pointer;
-  if (!isReference(pointer.value)) return err({ kind: TuffErrorKind.NotAReference, span: statement.span });
-  const { target, index, mutable } = pointer.value;
-  if (!mutable) return err({ kind: TuffErrorKind.ImmutableAssignment, span: statement.span });
-  const previous = target[index];
-  const destIndex = env.frames.indexOf(target);
-  // Unreachable: a live reference points into a block that is still open.
-  if (previous === undefined || destIndex === -1) {
-    return err({ kind: TuffErrorKind.InternalError, span: statement.span });
-  }
-  if (typeof previous !== typeof value.value) {
-    return err({ kind: TuffErrorKind.TypeMismatch, span: statement.span });
-  }
-  if (outlives(value.value, env, destIndex)) {
-    return err({ kind: TuffErrorKind.ReferenceEscapes, span: spanOf(statement.value) });
-  }
-  target[index] = value.value;
-  return ok(undefined);
 }

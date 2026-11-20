@@ -22,7 +22,9 @@ src/
   check/
     resolver.ts     AST -> Result<void, TuffError>: checks every name is bound. Computes no values
   eval/
-    evaluator.ts    the recursion root of evaluation: evaluateIn walks the AST, blocks create scopes, operators are applied
+    evaluator.ts    the recursion root of evaluation: evaluateIn dispatches each expression; names and borrows are read here
+    eval/block.ts   blocks, let, and assignments; receives evaluateIn as a parameter (type Evaluate)
+    eval/chain.ts   operator chains and dereference; receives evaluateIn as a parameter
     env.ts          Env (the state of one evaluation: name bindings and open frames)
     span-of.ts      spanOf: the source span of an expression
     branch.ts       conditionals and matches: evaluates the chosen and unchosen branches and undoes the unchosen one's writes. Receives the expression evaluator as a parameter (type Evaluate); never imports evaluator.ts
@@ -33,8 +35,10 @@ src/
 Arrows mean "may import".
 
 ```
-index.ts            -> syntax/lexer.ts, syntax/parser.ts, check/resolver.ts, eval/evaluator.ts, errors.ts, result.ts (evaluateTuff composes the stages; re-exports the public types)
-eval/evaluator.ts   -> syntax/ast.ts, scope.ts, value.ts, limits.ts, eval/branch.ts, eval/env.ts, eval/span-of.ts, errors.ts, result.ts
+index.ts            -> syntax/lexer.ts, syntax/parser.ts, check/resolver.ts, evaluator.ts, errors.ts, result.ts (evaluateTuff composes the stages; re-exports the public types)
+evaluator.ts        -> syntax/ast.ts, scope.ts, value.ts, limits.ts, eval/branch.ts, eval/block.ts, eval/chain.ts, eval/env.ts, eval/span-of.ts, errors.ts, result.ts
+eval/block.ts       -> syntax/ast.ts, scope.ts, value.ts, errors.ts, result.ts, eval/branch.ts, eval/env.ts, eval/span-of.ts (never evaluator.ts)
+eval/chain.ts       -> syntax/ast.ts, value.ts, errors.ts, result.ts, eval/branch.ts, eval/env.ts (never evaluator.ts)
 eval/branch.ts      -> syntax/ast.ts, scope.ts, value.ts, errors.ts, result.ts, eval/env.ts, eval/span-of.ts (never evaluator.ts)
 eval/env.ts         -> scope.ts, value.ts
 eval/span-of.ts     -> syntax/ast.ts, span.ts
