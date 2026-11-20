@@ -26,6 +26,19 @@ export default tseslint.config(
           message: "Do not use for(;;); use while (true) instead.",
         },
         {
+          selector:
+            "Program > :matches(FunctionDeclaration, ExportNamedDeclaration:has(> FunctionDeclaration)) ~ :matches(TSInterfaceDeclaration, TSTypeAliasDeclaration, ExportNamedDeclaration:has(> TSInterfaceDeclaration), ExportNamedDeclaration:has(> TSTypeAliasDeclaration))",
+          message: "Declare types and interfaces above the functions that use them.",
+        },
+        {
+          selector: "TSInterfaceBody > TSPropertySignature:has(TSUndefinedKeyword)",
+          message: "Declare the member optional (name?: Type) instead of using | undefined.",
+        },
+        {
+          selector: "TSTypeLiteral",
+          message: "Do not use inline object types; declare a named interface instead.",
+        },
+        {
           selector: "ClassDeclaration",
           message: "Do not declare classes; use functions and plain objects instead.",
         },

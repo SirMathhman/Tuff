@@ -75,7 +75,7 @@ interface Scope {
   /**
    * The enclosing scope, or undefined for the program's outermost scope.
    */
-  readonly parent: Scope | undefined;
+  readonly parent?: Scope;
   /**
    * Nesting depth of this scope; the program's scope is 0.
    */
@@ -98,6 +98,50 @@ interface Cursor {
    * True inside a branch of "if" that is not taken: it is checked but its assignments do not run.
    */
   dead: boolean;
+}
+
+/**
+ * Outcome of trying to parse one statement: either no statement starts here, or one was
+ * parsed, possibly with a problem.
+ */
+type StatementStep = NoStatement | ParsedStatement;
+
+/**
+ * Outcome when no statement starts at the cursor.
+ */
+interface NoStatement {
+  /**
+   * Always false for this outcome.
+   */
+  readonly matched: false;
+}
+
+/**
+ * Outcome when a statement was parsed.
+ */
+interface ParsedStatement {
+  /**
+   * Always true for this outcome.
+   */
+  readonly matched: true;
+  /**
+   * The first problem found in the statement, or undefined if it parsed.
+   */
+  readonly problem?: Problem;
+}
+
+/**
+ * A one-based position in source text.
+ */
+interface Location {
+  /**
+   * One-based line number.
+   */
+  readonly line: number;
+  /**
+   * One-based column number.
+   */
+  readonly column: number;
 }
 
 /**
@@ -624,12 +668,6 @@ function parseStatements(text: string, cursor: Cursor): Problem | undefined {
   }
 }
 
-/**
- * Outcome of trying to parse one statement: either no statement starts here, or one was
- * parsed, possibly with a problem.
- */
-type StatementStep = { readonly matched: false } | { readonly matched: true; readonly problem: Problem | undefined };
-
 const NOT_A_STATEMENT: StatementStep = { matched: false };
 
 /**
@@ -1025,7 +1063,7 @@ function describeUnsupported(tuffSource: string, problem: Problem): string {
  * @param offset - The zero-based offset to locate.
  * @returns The one-based line and column of the offset.
  */
-function locate(text: string, offset: number): { line: number; column: number } {
+function locate(text: string, offset: number): Location {
   let line = 1;
   let column = 1;
   for (let i = 0; i < offset && i < text.length; i++) {
