@@ -5,11 +5,11 @@ import {
   type AssignStatement,
   type AssignThroughStatement,
   type BlockNode,
-  type BorrowNode,
-  type DerefNode,
   type BooleanNode,
+  type BorrowNode,
   type ChainNode,
   type ChainStep,
+  type DerefNode,
   type Expr,
   type LetStatement,
   type LiteralNode,
@@ -90,20 +90,32 @@ function parseAssign(input: Input, pos: number, depth: number, parseExpr: Parser
   return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
-function parseAssignThrough(input: Input, pos: number, depth: number, parseExpr: Parser): Step<AssignThroughStatement> {
-  const star = input.tokens[pos];
-  const nameToken = input.tokens[pos + 1];
-  if (star === undefined || nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-  const rhs = parseExpr(input, pos + 3, depth);
+/**
+ * Parses the rest of a write through a dereference, `*P = value;`, once the dereference and the `=` are seen.
+ *
+ * @param input - The tokens being parsed.
+ * @param deref - The dereference already parsed on the left of the `=`.
+ * @param equalsPos - The position of the `=` token.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the right-hand side.
+ * @returns The write-through statement, or the first syntax error found.
+ */
+function parseAssignThrough(
+  input: Input,
+  deref: DerefNode,
+  equalsPos: number,
+  depth: number,
+  parseExpr: Parser,
+): Step<AssignThroughStatement> {
+  const rhs = parseExpr(input, equalsPos + 1, depth);
   if (!rhs.ok) return rhs;
   const semicolon = input.tokens[rhs.value.next];
   if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
   if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
-  const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
   const statement: AssignThroughStatement = {
     kind: StatementKind.AssignThrough,
-    span: star.span,
-    target,
+    span: deref.span,
+    target: deref.operand,
     value: rhs.value.value,
   };
   return ok({ value: statement, next: rhs.value.next + 1 });
@@ -139,13 +151,6 @@ function parseBlock(
       cursor = statement.value.next;
       continue;
     }
-    if (token.text === "*" && isName(input.tokens[cursor + 1]?.text ?? "") && input.tokens[cursor + 2]?.text === "=") {
-      const statement = parseAssignThrough(input, cursor, depth, parseExpr);
-      if (!statement.ok) return statement;
-      statements.push(statement.value.value);
-      cursor = statement.value.next;
-      continue;
-    }
     if (isName(token.text) && input.tokens[cursor + 1]?.text === "=") {
       const statement = parseAssign(input, cursor, depth, parseExpr);
       if (!statement.ok) return statement;
@@ -156,7 +161,15 @@ function parseBlock(
 
     const result = parseExpr(input, cursor, depth);
     if (!result.ok) return result;
-    const block: BlockNode = { kind: NodeKind.Block, statements, result: result.value.value };
+    const expr = result.value.value;
+    if (expr.kind === NodeKind.Deref && input.tokens[result.value.next]?.text === "=") {
+      const statement = parseAssignThrough(input, expr, result.value.next, depth, parseExpr);
+      if (!statement.ok) return statement;
+      statements.push(statement.value.value);
+      cursor = statement.value.next;
+      continue;
+    }
+    const block: BlockNode = { kind: NodeKind.Block, statements, result: expr };
     return ok({ value: block, next: result.value.next });
   }
 }
@@ -189,12 +202,10 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     return ok({ value: borrow, next: pos + (mutable ? 3 : 2) });
   }
   if (token.text === "*") {
-    const nameToken = input.tokens[pos + 1];
-    if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-    if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
-    const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
-    const deref: DerefNode = { kind: NodeKind.Deref, target, span: token.span };
-    return ok({ value: deref, next: pos + 2 });
+    const operand = parseFactor(input, pos + 1, depth, parseExpr);
+    if (!operand.ok) return operand;
+    const deref: DerefNode = { kind: NodeKind.Deref, operand: operand.value.value, span: token.span };
+    return ok({ value: deref, next: operand.value.next });
   }
   if (/^\d+$/.test(token.text)) {
     const literal: LiteralNode = { kind: NodeKind.Literal, value: Number(token.text), span: token.span };

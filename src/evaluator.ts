@@ -166,7 +166,7 @@ function evaluateBorrow(borrow: BorrowNode, env: Env): Result<Value, TuffError> 
 }
 
 function evaluateDeref(deref: DerefNode, env: Env): Result<Value, TuffError> {
-  const pointer = evaluateName(deref.target, env);
+  const pointer = evaluateIn(deref.operand, env);
   if (!pointer.ok) return pointer;
   if (!isReference(pointer.value)) return err({ kind: TuffErrorKind.NotAReference, span: deref.span });
   const value = pointer.value.target[pointer.value.index];
@@ -242,7 +242,7 @@ function evaluateAssign(statement: AssignStatement, env: Env): Result<undefined,
 function evaluateAssignThrough(statement: AssignThroughStatement, env: Env): Result<undefined, TuffError> {
   const value = evaluateIn(statement.value, env);
   if (!value.ok) return value;
-  const pointer = evaluateName(statement.target, env);
+  const pointer = evaluateIn(statement.target, env);
   if (!pointer.ok) return pointer;
   if (!isReference(pointer.value)) return err({ kind: TuffErrorKind.NotAReference, span: statement.span });
   const { target, index, mutable } = pointer.value;

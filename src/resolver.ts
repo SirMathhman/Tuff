@@ -51,11 +51,8 @@ function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<un
       }
       return ok(undefined);
     }
-    case NodeKind.Deref: {
-      const found = lookupUse(expr.target, blocks, refs);
-      if (!found.ok) return found;
-      return ok(undefined);
-    }
+    case NodeKind.Deref:
+      return resolveExpr(expr.operand, blocks, refs);
     case NodeKind.Chain:
       return resolveChain(expr, blocks, refs);
     case NodeKind.Block:
@@ -97,7 +94,7 @@ function resolveBlockBody(
       continue;
     }
     if (statement.kind === StatementKind.AssignThrough) {
-      const target = lookupUse(statement.target, blocks, refs);
+      const target = resolveExpr(statement.target, blocks, refs);
       if (!target.ok) return target;
       const value = resolveExpr(statement.value, blocks, refs);
       if (!value.ok) return value;

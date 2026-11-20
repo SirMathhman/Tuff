@@ -12,7 +12,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow union of `TuffErrorKind` members (for example `DivisionByZero`). The operator never sees source positions. The evaluator attaches the operator token's span and widens the failure to a `TuffError`.
 - **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
 - **Boolean**: `true` or `false`, a value distinct from a number. Arithmetic on a boolean is a `BooleanOperand` error. A source whose final value is a boolean is returned as 1 for `true` and 0 for `false`, so the result is always a number. A binding keeps the kind (number or boolean) of the value it was declared with. Assigning a value of the other kind is a `TypeMismatch` error at the assignment target.
-- **Reference**: `&x` (shared) or `&mut x` (mutable) produces a live pointer to the slot of a binding. `*x` reads the value it points to, and `*x = value;` writes through it, which requires `&mut` on a `let mut` binding. A reference may not leave the block that declares its binding (`ReferenceEscapes`), and it is not a number, so using one as an arithmetic operand is `ReferenceAsValue`.
+- **Reference**: `&x` (shared) or `&mut x` (mutable) produces a live pointer to the slot of a binding. `*e` reads the value that the reference `e` points to, where `e` is any factor (a name, a parenthesized expression, or another `*`). `*e = value;` writes through the reference that `e` yields. The reference being written through must be `&mut` on a `let mut` binding; a shared reference earlier on the path, such as the `z` in `*(*z) = 1`, does not block the write. A reference may not leave the block that declares its binding (`ReferenceEscapes`), and it is not a number, so using one as an arithmetic operand is `ReferenceAsValue`.
 - **Block**: a sequence of zero or more statements (`let` and assignment) followed by an optional final expression, optionally wrapped in `{ }`. A braced block must end in a final expression: `{ }` and `{ let x = 0; }` are `UnexpectedToken` errors at the closing brace. A source with statements but no final expression evaluates to 0, and an empty source is an error. The whole source is a block without braces. A block is the only construct that creates a scope.
 - **Binding**: `let NAME = expr;` or `let mut NAME = expr;`. It introduces a name for the rest of its block. Only a `let mut` binding may be changed later; assigning a plain `let` binding is `ImmutableAssignment`.
 - **Assignment**: `NAME = expr;`. It changes the value of a `let mut` binding, found by the same lookup as a read, so a nested block may assign a `mut` binding of an enclosing block. The right-hand side is evaluated before the name exists, so `let x = x;` refers to an outer `x` or fails with `UnknownName`.
@@ -21,7 +21,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Invariant 2**: evaluation always terminates or returns a `TuffError` for resource exhaustion. It never hangs the caller.
 - **Invariant 3**: a module under `src/` never imports from `index.ts`.
 - **Invariant 4**: a name is bound at most once per block (`DuplicateName`). A nested block may shadow an outer name. Every name used must resolve to a binding in scope (`UnknownName`). Both are static errors: decided from the source before any value is computed.
-- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `TypeMismatch`), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
+- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `TypeMismatch`, `NotAReference`, `ReferenceAsValue`, `ReferenceEscapes`, and `ImmutableAssignment` for a write through a shared reference), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
 - **Invariant 6**: name lookup uses `Map`-based scopes only, never plain objects, so a name such as `constructor` cannot reach host prototype properties.
 
 ## Structure
@@ -37,7 +37,8 @@ src/
   lexer.ts          source -> token stream
   parser.ts         token stream -> AST
   ast.ts            AST node types (no logic): literals, names, chains, blocks, let and assign statements
-  scope.ts          Scope type, creation, and name lookup; NameRef and NameRefs (the resolver's output). No evaluation
+  scope.ts          Scope type, creation, and name lookup; Frame (the runtime slots of one open block); NameRef and NameRefs (the resolver's output). No evaluation
+  value.ts          Value (number, boolean, or Reference) and Reference (a live pointer to one frame slot). Types and guards only
   resolver.ts       AST -> Result<void, TuffError>: checks every name is bound. Computes no values
   evaluator.ts      AST -> value: walks blocks, creates scopes, applies operators, enforces limits
   limits.ts         configurable limits (max depth, max steps, max source length)
@@ -47,7 +48,8 @@ Dependency direction (arrows mean "may import"):
 
 ```
 index.ts       -> lexer.ts, parser.ts, resolver.ts, evaluator.ts, errors.ts, result.ts (evaluateTuff composes the stages; re-exports the public types)
-evaluator.ts   -> ast.ts, scope.ts, errors.ts, result.ts (limits.ts once it exists)
+evaluator.ts   -> ast.ts, scope.ts, value.ts, errors.ts, result.ts (limits.ts once it exists)
+value.ts       -> scope.ts (for the Frame type)
 resolver.ts    -> ast.ts, scope.ts, errors.ts, result.ts
 parser.ts      -> lexer.ts, ast.ts, errors.ts, result.ts, span.ts
 lexer.ts       -> errors.ts, result.ts, span.ts

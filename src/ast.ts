@@ -76,8 +76,8 @@ export interface BorrowNode {
 export interface DerefNode {
   /** Always `NodeKind.Deref`. */
   kind: NodeKind.Deref;
-  /** The name whose reference is read, located in the source. */
-  target: NameNode;
+  /** The expression that yields the reference, such as a name or a parenthesized expression. */
+  operand: Expr;
   /** Where the `*` sits in the source. */
   span: Span;
 }
@@ -142,8 +142,8 @@ export interface AssignThroughStatement {
   kind: StatementKind.AssignThrough;
   /** Where the `*` sits in the source. */
   span: Span;
-  /** The name of the reference being written through, located in the source. */
-  target: NameNode;
+  /** The expression that yields the reference being written through. */
+  target: Expr;
   /** The new value. */
   value: Expr;
 }

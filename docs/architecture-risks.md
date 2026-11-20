@@ -13,6 +13,7 @@ Part of the canonical architecture. The definitions, structure, and performance 
 - **Shared nesting budget.** Block braces and group parentheses share one nesting limit. It lives in `limits.ts`, not in each parser function.
 - **Name rules spread across stages.** Shadowing, the `let` keyword, and the ban on re-binding are language rules. If they are checked in more than one place, they will drift. Each rule belongs to one stage, as stated in the Rules above.
 - **Parallel name models.** Name slots would be modeled three times (resolver tables, evaluator frames, and `scope.ts`) if each stage kept its own. The ideal is one `scope.ts` definition used by both the resolver and the evaluator. Two models will disagree on shadowing or slot order.
+- **Reference checks deferred to evaluation.** `NotAReference`, `ReferenceAsValue`, `ReferenceEscapes`, and a write through a shared reference (`ImmutableAssignment`) are decided only when a value is computed. Only `&mut` of a plain `let` is caught by the resolver. Reading the source alone does not show which `*x = value;` will fail.
 - **Kind checks deferred to evaluation.** `BooleanOperand` and `TypeMismatch` are decided only when a value is computed, so they are reported after the static name errors and cannot be seen by a reader of the source alone. A static kind pass would move them earlier, but it needs a kind for every expression and every `let mut` slot, so it waits until the value model has more kinds.
 - **Silent number parsing rules.** Whatever numeric literal grammar Tuff adopts must be defined explicitly in the lexer, not inherited from a host function.
 
@@ -43,6 +44,6 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 
 ## Future Work
 
-1. Add lint enforcement of the modularity limits and the no-`eval` rule, plus a reviewer lint command in `package.json`.
+1. Add lint enforcement of the modularity limits: `max-lines` (500, skipping blank lines and comments), `max-lines-per-function` (100), and `no-eval` / `no-implied-eval` / `no-new-func`, all in `eslint.config.js`. Directories (10 files) are checked by a script beside `scripts/check-markdown-size.mjs`. Add a reviewer lint command in `package.json`.
 2. Define the Tuff numeric and expression grammar explicitly in the lexer.
 3. Add the remaining resource limits (source length, bindings per block, step budget) and tests that each one produces the right `TuffError`.

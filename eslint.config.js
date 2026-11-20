@@ -54,6 +54,11 @@ export default tseslint.config(
     files: ["**/*.ts"],
     languageOptions: { parser: tseslint.parser },
     rules: {
+      "max-lines": ["error", { max: 500, skipBlankLines: true, skipComments: true }],
+      "max-lines-per-function": ["error", { max: 100, skipBlankLines: true, skipComments: true }],
+      "no-eval": "error",
+      "no-implied-eval": "error",
+      "no-new-func": "error",
       "no-restricted-syntax": [
         "error",
         {

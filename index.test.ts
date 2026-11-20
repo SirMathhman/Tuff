@@ -318,3 +318,7 @@ test("a reference used as an arithmetic operand is a ReferenceAsValue error at t
     error: { kind: TuffErrorKind.ReferenceAsValue, span: { start: 25, end: 26 } },
   });
 });
+
+test('evaluateTuff("let mut x = 0; let y = &mut x; let z = &y; *(*z) = 1; x") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; let y = &mut x; let z = &y; *(*z) = 1; x")).toEqual({ ok: true, value: 1 });
+});
