@@ -87,6 +87,14 @@ test("interpretTuff('type Bool = I32; let temp : Bool = 1; temp + 1') => 2", () 
   expect(interpretTuff("type Bool = I32; let temp : Bool = 1; temp + 1")).toEqual({ ok: true, value: 2 });
 });
 
+test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get returns a number, not a Bool", () => {
+  expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
+});
+
+test("interpretTuff('let x : I32 = get(); fn get() => 1; x') => 1", () => {
+  expect(interpretTuff("let x : I32 = get(); fn get() => 1; x")).toEqual({ ok: true, value: 1 });
+});
+
 test("interpretTuff('type Temp = I32; let temp : Temp = 1; temp') => 1", () => {
   expect(interpretTuff("type Temp = I32; let temp : Temp = 1; temp")).toEqual({ ok: true, value: 1 });
 });

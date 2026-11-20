@@ -36,6 +36,7 @@ import {
   OUTLIVES_MESSAGE,
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
+import { hoistFunctions } from "./src/hoisting";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -531,6 +532,7 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns The first problem found, or undefined if all statements parsed.
  */
 function parseStatements(text: string, cursor: Cursor): Problem | undefined {
+  hoistFunctions(text, cursor, parseFunctionDeclaration);
   while (true) {
     const step = parseOneStatement(text, cursor, true);
     if (!step.matched) {
