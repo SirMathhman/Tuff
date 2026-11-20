@@ -422,6 +422,44 @@ test('interpretTuff("(let x = 1; x)") => error', () => {
   });
 });
 
+test('interpretTuff("let mut x = 0; x = 1; x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let x = 0; x = 1; x") => error', () => {
+  expect(interpretTuff("let x = 0; x = 1; x")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign to 'x' because it was not declared with 'let mut'",
+      where: 11,
+      why: "Only variables declared with 'let mut' can be reassigned.",
+      fix: "Declare 'x' with 'let mut x = ...;' to allow reassignment.",
+    },
+  });
+});
+
+test('interpretTuff("y = 1;") => error', () => {
+  expect(interpretTuff("y = 1;")).toEqual({
+    ok: false,
+    error: {
+      what: "Name 'y' is not defined",
+      where: 0,
+      why: UNDEFINED_WHY,
+      fix: "Declare it with 'let y = ...;' before using it, in this block or an enclosing one.",
+    },
+  });
+});
+
+test('interpretTuff("let mut x = 0; let y = { x = 1; x }; x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; let y = { x = 1; x }; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
 test('interpretTuff("1 - -2") => 3', () => {
   expect(interpretTuff("1 - -2")).toEqual({ ok: true, value: 3 });
 });

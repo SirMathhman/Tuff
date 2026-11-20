@@ -1,21 +1,20 @@
-interface TuffError {
-  what: string;
-  where: number;
-  why: string;
-  fix: string;
-}
-
-interface Success<T> {
-  ok: true;
-  value: T;
-}
-
-interface Failure<E> {
-  ok: false;
-  error: E;
-}
-
-type Result<T, E> = Success<T> | Failure<E>;
+import type { Failure, Result, TuffError } from "./errors";
+import {
+  Bracket,
+  closerFor,
+  expectedClose,
+  expectedEquals,
+  expectedMismatch,
+  expectedNumber,
+  expectedOperator,
+  expectedSemicolon,
+  expectedVariableName,
+  letNotAllowed,
+  notMutable,
+  reservedName,
+  undefinedName,
+  unexpectedSemicolon,
+} from "./errors";
 
 enum Operator {
   Add = "+",
@@ -27,11 +26,6 @@ enum EntryKind {
   Operator = "operator",
   Group = "group",
   Binding = "binding",
-}
-
-enum Bracket {
-  Paren = "(",
-  Brace = "{",
 }
 
 enum Step {
@@ -51,15 +45,22 @@ interface GroupEntry {
   sign: number;
 }
 
-// A `let` statement whose value is still being evaluated; ends at ";".
+// A `let` or assignment whose value is still being evaluated; ends at ";".
 interface BindingEntry {
   kind: EntryKind.Binding;
   name: string;
+  mutable: boolean;
+  assign: boolean;
 }
 
 type StackEntry = OperatorEntry | GroupEntry | BindingEntry;
 
-type Scope = Map<string, number>;
+interface Cell {
+  value: number;
+  mutable: boolean;
+}
+
+type Scope = Map<string, Cell>;
 
 interface ParserState {
   source: string;
@@ -70,7 +71,7 @@ interface ParserState {
   depth: number; // number of open brackets
   expectOperand: boolean;
   atStatementStart: boolean;
-  afterLet: boolean; // the last top-level statement was a `let`
+  afterLet: boolean; // the last top-level statement was a `let` or an assignment
 }
 
 function isDigit(ch: string): boolean {
@@ -102,10 +103,6 @@ function isCloser(ch: string): boolean {
   return ch === ")" || ch === "}";
 }
 
-function closerFor(bracket: Bracket): string {
-  return bracket === Bracket.Paren ? ")" : "}";
-}
-
 function skipSpaces(source: string, pos: number): number {
   let idx = pos;
   while (isSpace(source.charAt(idx))) idx++;
@@ -122,151 +119,6 @@ function readName(source: string, start: number): number {
   let idx = start;
   while (isLetter(source.charAt(idx))) idx++;
   return idx;
-}
-
-function describe(ch: string): string {
-  if (ch === "") return "the end of the input";
-  if (isSpace(ch)) return "whitespace";
-  return `'${ch}'`;
-}
-
-function fail(
-  what: string,
-  where: number,
-  why: string,
-  fix: string,
-): Failure<TuffError> {
-  return { ok: false, error: { what, where, why, fix } };
-}
-
-function expectedNumber(source: string, where: number): Failure<TuffError> {
-  return fail(
-    `Expected a number, a variable, '(', or '{' but found ${describe(source.charAt(where))}`,
-    where,
-    "Every '+', '-', or '*' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
-    "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.",
-  );
-}
-
-function expectedOperator(
-  source: string,
-  where: number,
-  grouped: boolean,
-): Failure<TuffError> {
-  const found = describe(source.charAt(where));
-  if (grouped) {
-    return fail(
-      `Expected '+', '-', '*', ')', or '}' but found ${found}`,
-      where,
-      "Two terms can only be combined with '+', '-', or '*', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
-      "Insert '+', '-', '*', or a closing bracket here, or remove the extra character.",
-    );
-  }
-  return fail(
-    `Expected '+', '-', or '*' but found ${found}`,
-    where,
-    "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.",
-    "Insert '+', '-', or '*' between the numbers, or remove the extra character.",
-  );
-}
-
-function expectedClose(
-  source: string,
-  where: number,
-  bracket: Bracket,
-): Failure<TuffError> {
-  const closer = closerFor(bracket);
-  const noun = bracket === Bracket.Paren ? "parenthesized" : "braced";
-  return fail(
-    `Expected '${closer}' but found ${describe(source.charAt(where))}`,
-    where,
-    `Every '${bracket}' must be closed by a matching '${closer}'.`,
-    `Add a '${closer}' at the end of the ${noun} expression.`,
-  );
-}
-
-function expectedMismatch(
-  source: string,
-  where: number,
-  bracket: Bracket,
-): Failure<TuffError> {
-  const closer = closerFor(bracket);
-  return fail(
-    `Expected '${closer}' to close '${bracket}' but found ${describe(source.charAt(where))}`,
-    where,
-    "Each opening bracket must be closed by its own kind of bracket: '(' by ')' and '{' by '}'.",
-    `Replace this character with '${closer}', or change the opening bracket.`,
-  );
-}
-
-function undefinedName(where: number, name: string): Failure<TuffError> {
-  return fail(
-    `Name '${name}' is not defined`,
-    where,
-    "A variable is only visible inside the block where it was declared with 'let', and inside blocks nested in that block.",
-    `Declare it with 'let ${name} = ...;' before using it, in this block or an enclosing one.`,
-  );
-}
-
-function expectedVariableName(
-  source: string,
-  where: number,
-): Failure<TuffError> {
-  return fail(
-    `Expected a variable name after 'let' but found ${describe(source.charAt(where))}`,
-    where,
-    "A 'let' statement names the variable it declares, as in 'let x = 1;'.",
-    "Write a name made of letters after 'let'.",
-  );
-}
-
-function reservedName(where: number): Failure<TuffError> {
-  return fail(
-    "'let' is a keyword and cannot be a variable name",
-    where,
-    "'let' starts a declaration, so it cannot also name a variable.",
-    "Choose a different name.",
-  );
-}
-
-function expectedEquals(
-  source: string,
-  where: number,
-  name: string,
-): Failure<TuffError> {
-  return fail(
-    `Expected '=' after 'let ${name}' but found ${describe(source.charAt(where))}`,
-    where,
-    "A 'let' statement gives its variable a value with '='.",
-    "Insert '=' between the name and its value.",
-  );
-}
-
-function expectedSemicolon(source: string, where: number): Failure<TuffError> {
-  return fail(
-    `Expected ';' but found ${describe(source.charAt(where))}`,
-    where,
-    "Every 'let' statement must end with ';'.",
-    "Add ';' after the value.",
-  );
-}
-
-function letNotAllowed(where: number): Failure<TuffError> {
-  return fail(
-    "'let' is only allowed at the start of a statement",
-    where,
-    "A 'let' statement can only begin the program, a block, or follow a ';', so it cannot be part of a larger expression.",
-    "Move the 'let' statement out of the parentheses or operator, or remove the 'let'.",
-  );
-}
-
-function unexpectedSemicolon(where: number): Failure<TuffError> {
-  return fail(
-    "Unexpected ';' outside a let statement",
-    where,
-    "';' only ends a 'let' statement.",
-    "Remove the ';', or start the statement with 'let name ='.",
-  );
 }
 
 function precedence(op: Operator): number {
@@ -318,11 +170,11 @@ function innermostNonOperator(ops: StackEntry[]): StackEntry | null {
   return null;
 }
 
-// The innermost scope that defines `name`, or undefined.
-function lookup(scopes: Scope[], name: string): number | undefined {
+// The innermost scope's cell for `name`, or undefined.
+function lookupCell(scopes: Scope[], name: string): Cell | undefined {
   for (let idx = scopes.length - 1; idx >= 0; idx--) {
-    const value = scopes[idx]?.get(name);
-    if (value !== undefined) return value;
+    const cell = scopes[idx]?.get(name);
+    if (cell !== undefined) return cell;
   }
   return undefined;
 }
@@ -336,12 +188,19 @@ function closeGroup(values: number[], ops: StackEntry[]): void {
   values.push(group.sign * (values.pop() ?? 0));
 }
 
-// Completes a `let`: its value is the newest value, bound in the current scope.
+// Completes a `let` or assignment: its value is the newest value. A `let` binds
+// in the current scope; an assignment updates the nearest declaration.
 function closeBinding(state: ParserState, binding: BindingEntry): void {
   reduceOperators(state.values, state.ops);
   state.ops.pop();
   const value = state.values.pop() ?? 0;
-  state.scopes[state.scopes.length - 1]?.set(binding.name, value);
+  if (binding.assign) {
+    const cell = lookupCell(state.scopes, binding.name);
+    if (cell !== undefined) cell.value = value;
+  } else {
+    const cell = { value, mutable: binding.mutable };
+    state.scopes[state.scopes.length - 1]?.set(binding.name, cell);
+  }
   if (state.depth === 0) state.afterLet = true;
 }
 
@@ -362,22 +221,50 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   return Step.Continue;
 }
 
-// Reads `let NAME =` and leaves the parser ready for the value.
+// Reads `let [mut] NAME =` and leaves the parser ready for the value.
 function startLet(
   state: ParserState,
   letEnd: number,
 ): Failure<TuffError> | Step {
-  const nameStart = skipSpaces(state.source, letEnd);
-  const nameEnd = readName(state.source, nameStart);
+  let nameStart = skipSpaces(state.source, letEnd);
+  let nameEnd = readName(state.source, nameStart);
+  let mutable = false;
+  if (state.source.slice(nameStart, nameEnd) === "mut") {
+    mutable = true;
+    nameStart = skipSpaces(state.source, nameEnd);
+    nameEnd = readName(state.source, nameStart);
+  }
   if (nameEnd === nameStart)
     return expectedVariableName(state.source, nameStart);
   const name = state.source.slice(nameStart, nameEnd);
-  if (name === "let") return reservedName(nameStart);
+  if (name === "let" || name === "mut") return reservedName(nameStart);
   const equals = skipSpaces(state.source, nameEnd);
   if (state.source.charAt(equals) !== "=") {
     return expectedEquals(state.source, equals, name);
   }
-  state.ops.push({ kind: EntryKind.Binding, name });
+  state.ops.push({ kind: EntryKind.Binding, name, mutable, assign: false });
+  state.pos = skipSpaces(state.source, equals + 1);
+  state.expectOperand = true;
+  state.atStatementStart = false;
+  return Step.Continue;
+}
+
+// Reads `NAME =` at a statement start and leaves the parser ready for the value.
+function startAssign(
+  state: ParserState,
+  name: string,
+  nameStart: number,
+  equals: number,
+): Failure<TuffError> | Step {
+  const cell = lookupCell(state.scopes, name);
+  if (cell === undefined) return undefinedName(nameStart, name);
+  if (!cell.mutable) return notMutable(nameStart, name);
+  state.ops.push({
+    kind: EntryKind.Binding,
+    name,
+    mutable: false,
+    assign: true,
+  });
   state.pos = skipSpaces(state.source, equals + 1);
   state.expectOperand = true;
   state.atStatementStart = false;
@@ -395,9 +282,17 @@ function operandName(
     if (state.atStatementStart && !signed) return startLet(state, end);
     return letNotAllowed(state.pos);
   }
-  const value = lookup(state.scopes, name);
-  if (value === undefined) return undefinedName(state.pos, name);
-  return pushOperand(state, sign * value, end);
+  const equals = skipSpaces(state.source, end);
+  if (
+    state.atStatementStart &&
+    !signed &&
+    state.source.charAt(equals) === "="
+  ) {
+    return startAssign(state, name, state.pos, equals);
+  }
+  const cell = lookupCell(state.scopes, name);
+  if (cell === undefined) return undefinedName(state.pos, name);
+  return pushOperand(state, sign * cell.value, end);
 }
 
 function operandNumber(

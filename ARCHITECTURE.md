@@ -8,7 +8,7 @@ Repository layout and dependency rules.
 
 ### Interpreter (index.ts)
 
-Exports `interpretTuff` only. The result and error types stay internal.
+Exports `interpretTuff`. Error types and messages live in `errors.ts`.
 
 ### REPL (repl.ts)
 
@@ -36,11 +36,11 @@ Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds t
 
 ### Statements and scope
 
-`let NAME = expression;` binds a name of ASCII letters. `let` cannot be a name. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
+`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name at a statement start.
 
 ### Blocks
 
-A block's value is its final expression, so it cannot end with a `let`. A program that ends with a `let` evaluates to 0.
+A block's value is its final expression, so it cannot end with a `let`. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
 
 ### Results and errors
 
@@ -88,6 +88,7 @@ Each example below gives an error at the stated offset.
 
 - `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
 - `interpretTuff("{ let x = 2 + 3; x } * 4")` returns `{ ok: true, value: 20 }`.
+- `interpretTuff("let mut x = 0; x = 1; x")` returns `{ ok: true, value: 1 }`.
 
 ##### Scope
 
@@ -116,7 +117,7 @@ A character that is not an operator gives `Expected '+', '-', or '*'`. Inside br
 
 ### Statement errors
 
-A `let` with no name, a keyword as its name, no `=`, or no `;` has its own message. A `let` that is not at a statement start and a stray `;` each have a message too.
+A `let` with no name, a keyword as its name, no `=`, or no `;` has its own message. A misplaced `let`, a stray `;`, reassigning a plain `let`, and assigning an undeclared name each have a message too.
 
 ## Quality gates
 
@@ -152,7 +153,7 @@ Known gaps, numeric risks, security, and planned work.
 
 ### Known gaps
 
-Operators are `+`, `-`, and `*`, applied to integers, variables, and groups. Not implemented: division, assignment outside `let`, functions, and names with digits or underscores.
+Operators are `+`, `-`, and `*`, applied to integers, variables, and groups. Not implemented: division, assignment outside statement starts, functions, and names with digits or underscores.
 
 ### Numeric risks
 
