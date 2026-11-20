@@ -6,7 +6,8 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 | File | Role |
 | --- | --- |
-| `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, `Parsed`, and `TuffError`. |
+| `index.ts` | Entry module. Exports `interpretTuff` only; the result and error types are internal. |
+| `scripts/unused-exports.ts` | Checks that no export goes unused by other project files, using the TypeScript compiler API. Run as part of `bun run lint`. |
 | `repl.ts` | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`. |
 | `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
 | `eslint.config.js` | ESLint configuration (recommended JavaScript and TypeScript rules, plus restricted syntax). |
@@ -66,13 +67,13 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 ## Known gaps and open decisions
 
 - **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized groups. Division and other operators are not implemented.
-- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The project size limits are not enforced by lint.
+- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules) and then `scripts/unused-exports.ts`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. The project size limits are not enforced by lint.
 
 ## Potential Problems
 
 - **Integer precision:** numbers are parsed with `parseInt` into JavaScript doubles. Values above `Number.MAX_SAFE_INTEGER` are silently rounded, so `9007199254740993 + 0` returns `9007199254740992` with `ok: true`. The result is wrong without any error.
 - **Overflow is unreported:** the sum can exceed the double range or lose precision without any `TuffError`. A literal of 400 digits parses to `Infinity` with `ok: true`.
-- **Stack overflow on deep nesting:** each `(` adds several call frames (`parseExpression`, `parseTerm`, `parseFactor`, and the group closure). About 20,000 nested parentheses throw `RangeError: Maximum call stack size exceeded`. The exception escapes `interpretTuff` instead of returning a `TuffError`, which breaks the no-exceptions rule and would propagate out of the REPL's line handler.
+- **Stack overflow on deep nesting:** mitigated by the 256-level limit (see Security Concerns). Without it, about 20,000 nested parentheses throw `RangeError: Maximum call stack size exceeded`.
 
 ## Security Concerns
 
@@ -82,7 +83,7 @@ The ideal architecture keeps these rules as the project grows:
 
 - Source text is untrusted. It must never be passed to `eval`, `Function`, or a shell.
 - Input length must be bounded before it is scanned. The current scanner has no length limit. Control: a maximum source length, returned as a `TuffError`.
-- Nesting depth must be bounded. The recursive parser has no depth limit, so hostile input can exhaust the call stack. Control: a maximum parenthesis depth, returned as a `TuffError` at the offending `(`. Gap: none exists yet.
+- Nesting depth must be bounded. Control in place: a maximum parenthesis depth of 256, returned as a `TuffError` at the offending `(`. Gap: the limit is a fixed count, not tied to the actual call-stack size.
 - Any future I/O (file reads, module imports, network) sits behind an explicit capability parameter, so `interpretTuff` stays pure. Gap: none of these exist yet.
 
 ## Future Work

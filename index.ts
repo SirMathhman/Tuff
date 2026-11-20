@@ -1,23 +1,23 @@
-export interface TuffError {
+interface TuffError {
   what: string;
   where: number;
   why: string;
   fix: string;
 }
 
-export interface Success<T> {
+interface Success<T> {
   ok: true;
   value: T;
 }
 
-export interface Failure<E> {
+interface Failure<E> {
   ok: false;
   error: E;
 }
 
-export type Result<T, E> = Success<T> | Failure<E>;
+type Result<T, E> = Success<T> | Failure<E>;
 
-export interface Parsed {
+interface Parsed {
   value: number;
   end: number;
 }
