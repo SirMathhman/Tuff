@@ -1,4 +1,4 @@
-import { peek, peekName, peekStart, type Problem } from "./lexing";
+import { peek, peekName, peekStart, type Problem } from "../lexing";
 import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "../scope";
 import { type Cursor, type Scope } from "../types";
 import { err, ok, type Result } from "../result";

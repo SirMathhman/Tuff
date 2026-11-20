@@ -1,4 +1,4 @@
-import { peek, peekName, type Problem } from "./lexing";
+import { peek, peekName, type Problem } from "../lexing";
 import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
 import { checkTypedValue, findFunctionBodyEnd } from "../scope";
 import { RESERVED_WORDS } from "../keywords";

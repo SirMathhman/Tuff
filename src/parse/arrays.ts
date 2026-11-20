@@ -1,4 +1,4 @@
-import { peek, type Problem } from "./lexing";
+import { peek, type Problem } from "../lexing";
 import { kindOf } from "../scope";
 import { type Cursor, type Value } from "../types";
 import { err, ok, type Result } from "../result";

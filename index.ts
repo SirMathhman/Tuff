@@ -10,7 +10,7 @@ import {
   skipSpaces,
   type Problem,
   findTopLevel,
-} from "./src/parse/lexing";
+} from "./src/lexing";
 import {
   type Value,
   type FunctionDef,

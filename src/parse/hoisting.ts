@@ -1,4 +1,4 @@
-import { type Problem } from "./lexing";
+import { type Problem } from "../lexing";
 import { type Cursor } from "../types";
 
 /**

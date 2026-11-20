@@ -1,7 +1,7 @@
 /**
  * Types shared by the Tuff parser: values, bindings, scopes, and parse state.
  */
-import type { Problem } from "./parse/lexing";
+import type { Problem } from "./lexing";
 import { type Result } from "./result";
 
 /**

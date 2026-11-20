@@ -1,4 +1,4 @@
-import { peekName, type Problem } from "./lexing";
+import { peekName, type Problem } from "../lexing";
 import { type Cursor, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 

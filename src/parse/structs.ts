@@ -1,4 +1,4 @@
-import { peek, peekName, peekStart, type Problem } from "./lexing";
+import { peek, peekName, peekStart, type Problem } from "../lexing";
 import { parseTypeAnnotation } from "./annotations";
 import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
 import { type Cursor, type Value } from "../types";

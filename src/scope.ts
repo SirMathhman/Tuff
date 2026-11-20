@@ -14,7 +14,7 @@ import {
   type StructDef,
   type Param,
 } from "./types";
-import { findTopLevel, type Problem } from "./parse/lexing";
+import { findTopLevel, type Problem } from "./lexing";
 import { ok, err, type Result } from "./result";
 
 /**
