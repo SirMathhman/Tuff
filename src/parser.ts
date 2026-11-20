@@ -202,7 +202,8 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     return ok({ value: borrow, next: pos + (mutable ? 3 : 2) });
   }
   if (token.text === "*") {
-    const operand = parseFactor(input, pos + 1, depth, parseExpr);
+    if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: token.span });
+    const operand = parseFactor(input, pos + 1, depth + 1, parseExpr);
     if (!operand.ok) return operand;
     const deref: DerefNode = { kind: NodeKind.Deref, operand: operand.value.value, span: token.span };
     return ok({ value: deref, next: operand.value.next });

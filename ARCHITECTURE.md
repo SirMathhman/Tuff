@@ -23,6 +23,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Invariant 4**: a name is bound at most once per block (`DuplicateName`). A nested block may shadow an outer name. Every name used must resolve to a binding in scope (`UnknownName`). Both are static errors: decided from the source before any value is computed.
 - **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `TypeMismatch`, `NotAReference`, `ReferenceAsValue`, `ReferenceEscapes`, and `ImmutableAssignment` for a write through a shared reference), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
 - **Invariant 6**: name lookup uses `Map`-based scopes only, never plain objects, so a name such as `constructor` cannot reach host prototype properties.
+- **Invariant 7**: nesting is bounded. Block braces, group parentheses, and prefix `*` share one nesting limit. Exceeding it is `NestingTooDeep`, never a host stack overflow.
 
 ## Structure
 
@@ -68,13 +69,11 @@ Rules:
 - `NameRef` and `NameRefs` are defined in `scope.ts`, not in `resolver.ts`. The resolver writes them and the evaluator reads them, so the evaluator never imports the resolver. The resolver and evaluator both use `scope.ts` for block-level name slots; there is one definition of a slot, not one per stage.
 - The parser must not evaluate and must not look up names. Its output is a syntactically valid AST and nothing more.
 - Recursion is allowed only inside the parser, resolver, and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
-- Limits: 100 lines per function, 500 code lines per file, 10 files per directory. These must be enforced by lint (see Future Work). Lint does not enforce them yet.
+- Limits: 100 lines per function, 500 code lines per file, 10 files per directory, enforced by `bun run lint` on every change.
 
 ## Risks, Security, and Future Work
 
 See [docs/architecture-risks.md](docs/architecture-risks.md) for potential problems, security concerns, and future work.
-
-4. Define a host-capability interface before any feature needs I/O.
 
 ## Performance
 

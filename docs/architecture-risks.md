@@ -7,10 +7,10 @@ Part of the canonical architecture. The definitions, structure, and performance 
 - **Public API surface growing before the contract is fixed.** Any export becomes a compatibility commitment. Return types should change only while the project has no external callers.
 - **Stringly-typed errors.** Plain string messages cannot be matched on, tested precisely, or localized. Use `TuffError` variants.
 - **Single-file growth.** `index.ts` is the natural place for "just one more function". Without the layout above it will exceed the file limit quickly.
-- **Unbounded recursion in the evaluator.** The parser caps group nesting at 256 and reports `NestingTooDeep`. Any later recursive stage must enforce the same limit (or a shared one in `limits.ts`) and produce a `TuffError`, not a `RangeError` crash.
+- **Unbounded recursion over the AST.** The parser caps group nesting at 256 and reports `NestingTooDeep`, but prefix `*` recurses without counting depth. `"*".repeat(200000) + "z"` crashes with a host `RangeError` instead of a `TuffError`. Every recursive production in the parser must count toward the shared limit (Invariant 7). The resolver and evaluator recurse over the same AST, so they inherit that bound.
 - **Parsing and evaluating in one pass.** A parser that evaluates `let` right-hand sides as it reads them is an evaluator in disguise. It cannot be split into `parser.ts` and `evaluator.ts`, and it cannot report a binding's value without running the whole block. The AST in `ast.ts` is the boundary that prevents this. Any stage that needs a value must go through the evaluator.
 - **Error-order drift.** If evaluation can run before the resolver, the reported error depends on evaluation order. For example, `1 / 0 + x` would report `DivisionByZero` instead of `UnknownName`. Invariant 5 forbids this, and tests must pin mixed-error inputs.
-- **Shared nesting budget.** Block braces and group parentheses share one nesting limit. It lives in `limits.ts`, not in each parser function.
+- **Shared nesting budget.** Block braces, group parentheses, and prefix `*` share one nesting limit. It lives in `limits.ts`, not in each parser function.
 - **Name rules spread across stages.** Shadowing, the `let` keyword, and the ban on re-binding are language rules. If they are checked in more than one place, they will drift. Each rule belongs to one stage, as stated in the Rules above.
 - **Parallel name models.** Name slots would be modeled three times (resolver tables, evaluator frames, and `scope.ts`) if each stage kept its own. The ideal is one `scope.ts` definition used by both the resolver and the evaluator. Two models will disagree on shadowing or slot order.
 - **Reference checks deferred to evaluation.** `NotAReference`, `ReferenceAsValue`, `ReferenceEscapes`, and a write through a shared reference (`ImmutableAssignment`) are decided only when a value is computed. Only `&mut` of a plain `let` is caught by the resolver. Reading the source alone does not show which `*x = value;` will fail.
@@ -32,9 +32,9 @@ What untrusted input can reach:
 Controls the architecture should have:
 
 1. Maximum source length, checked before lexing. **Missing.**
-2. Maximum nesting depth, checked during parsing and evaluation, producing a `TuffError`. **Satisfied in the parser** (256 groups, `NestingTooDeep`); **missing in the evaluator**, which does not exist yet.
+2. Maximum nesting depth, checked during parsing, producing a `TuffError`. **Partly satisfied**: the parser counts groups (256, `NestingTooDeep`) but not prefix `*`. The resolver and evaluator rely on the parser's bound.
 3. Step budget in the evaluator, producing a `TuffError` when exhausted. **Missing.**
-4. No dynamic code execution anywhere in the pipeline. **Satisfied today** (no `eval` or `Function` in the code), but must be enforced by a lint rule banning `eval` and `Function` constructors. **Lint rule missing.**
+4. No dynamic code execution anywhere in the pipeline. **Satisfied**: no `eval` or `Function` in the code, and lint bans `eval`, implied eval, and `Function` constructors.
 5. No ambient authority: the evaluator takes all capabilities as parameters. **Not yet applicable** (no capabilities exist), but the rule is recorded here so it is kept when they are added.
 6. Data exposure: error messages must not echo unbounded source text back to the caller. Spans identify the location; names are never copied into a `TuffError`; excerpts must be truncated. **Satisfied today** (spans only); **excerpt rule missing** until excerpts exist.
 7. Maximum bindings per block, checked during parsing, producing a `TuffError`. **Missing.**
@@ -44,6 +44,7 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 
 ## Future Work
 
-1. Add lint enforcement of the modularity limits: `max-lines` (500, skipping blank lines and comments), `max-lines-per-function` (100), and `no-eval` / `no-implied-eval` / `no-new-func`, all in `eslint.config.js`. Directories (10 files) are checked by a script beside `scripts/check-markdown-size.mjs`. Add a reviewer lint command in `package.json`.
-2. Define the Tuff numeric and expression grammar explicitly in the lexer.
-3. Add the remaining resource limits (source length, bindings per block, step budget) and tests that each one produces the right `TuffError`.
+1. Define the Tuff numeric and expression grammar explicitly in the lexer.
+2. Add the remaining resource limits (source length, bindings per block, step budget) and tests that each one produces the right `TuffError`.
+3. Define a host-capability interface before any feature needs I/O.
+4. Add a reviewer lint command in `package.json` that reports architecture-review warnings beyond the standard lint.
