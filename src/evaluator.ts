@@ -133,9 +133,13 @@ function evaluateAssign(statement: AssignStatement, env: Env): Result<undefined,
   if (!value.ok) return value;
   const ref = env.refs.get(statement.target);
   const frame = ref === undefined ? undefined : env.frames[env.frames.length - 1 - ref.depth];
+  const previous = ref === undefined || frame === undefined ? undefined : frame[ref.index];
   // Unreachable when the resolver ran first; see evaluateName.
-  if (ref === undefined || frame === undefined || ref.index >= frame.length) {
+  if (ref === undefined || frame === undefined || previous === undefined) {
     return err({ kind: TuffErrorKind.InternalError, span: statement.target.span });
+  }
+  if (typeof previous !== typeof value.value) {
+    return err({ kind: TuffErrorKind.TypeMismatch, span: statement.target.span });
   }
   frame[ref.index] = value.value;
   return ok(undefined);

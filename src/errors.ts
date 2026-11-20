@@ -26,6 +26,8 @@ export enum TuffErrorKind {
   ImmutableAssignment = "ImmutableAssignment",
   /** A boolean was used as an operand of an arithmetic operator. */
   BooleanOperand = "BooleanOperand",
+  /** An assignment gives a binding a value of a different kind than the binding's initial value. */
+  TypeMismatch = "TypeMismatch",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -49,7 +51,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.DuplicateName>
   | TuffErrorOf<TuffErrorKind.InternalError>
   | TuffErrorOf<TuffErrorKind.ImmutableAssignment>
-  | TuffErrorOf<TuffErrorKind.BooleanOperand>;
+  | TuffErrorOf<TuffErrorKind.BooleanOperand>
+  | TuffErrorOf<TuffErrorKind.TypeMismatch>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -133,6 +136,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Boolean used as a number",
     why: "Arithmetic operators accept only numbers. true and false are booleans, not numbers.",
     fix: "Replace the boolean operand with a number.",
+  },
+  [TuffErrorKind.TypeMismatch]: {
+    what: "Type mismatch in assignment",
+    why: "A binding keeps the kind of its initial value: a number stays a number, and a boolean stays a boolean.",
+    fix: "Assign a value of the same kind as the binding's initial value, or declare a new name with let.",
   },
 };
 
