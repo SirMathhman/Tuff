@@ -180,7 +180,7 @@ function evaluateDeref(deref: DerefNode, env: Env): Result<Value, TuffError> {
 }
 
 /**
- * Evaluates the branch that the condition selects. The other branch is not evaluated.
+ * Evaluates both branches, reports an error from either, and returns the chosen branch's value.
  *
  * @param node - The conditional.
  * @param env - The current evaluation state.
@@ -192,7 +192,41 @@ function evaluateIf(node: IfNode, env: Env): Result<Value, TuffError> {
   if (typeof condition.value !== "boolean") {
     return err({ kind: TuffErrorKind.NotABoolean, span: spanOf(node.condition) });
   }
-  return evaluateIn(condition.value ? node.thenBranch : node.elseBranch, env);
+  const thenResult = evaluateBranch(node.thenBranch, env, condition.value);
+  const elseResult = evaluateBranch(node.elseBranch, env, !condition.value);
+  if (!thenResult.ok) return thenResult;
+  if (!elseResult.ok) return elseResult;
+  return condition.value ? thenResult : elseResult;
+}
+
+/**
+ * Evaluates one branch. If the branch is not the chosen one, the writes it made are undone.
+ *
+ * @param branch - The branch to evaluate.
+ * @param env - The current evaluation state.
+ * @param chosen - Whether the condition selected this branch.
+ * @returns The branch's value, or its error.
+ */
+function evaluateBranch(branch: Expr, env: Env, chosen: boolean): Result<Value, TuffError> {
+  const snapshot = env.frames.map((frame) => [...frame]);
+  const result = evaluateIn(branch, env);
+  if (!chosen) restoreFrames(env.frames, snapshot);
+  return result;
+}
+
+/**
+ * Restores every open block's values to a snapshot taken earlier, in place.
+ *
+ * @param frames - The open blocks' values, outermost first.
+ * @param snapshot - Copies of the same blocks' values, taken earlier.
+ */
+function restoreFrames(frames: Value[][], snapshot: Value[][]): void {
+  for (const [index, frame] of frames.entries()) {
+    const saved = snapshot[index];
+    if (saved === undefined) continue;
+    frame.length = 0;
+    frame.push(...saved);
+  }
 }
 
 function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {

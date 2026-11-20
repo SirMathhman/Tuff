@@ -411,6 +411,20 @@ test("an unknown name in the unchosen branch is still an UnknownName error", () 
   });
 });
 
-test("only the chosen branch is evaluated", () => {
-  expect(evaluateTuff("if (true) 2 else 1 / 0")).toEqual({ ok: true, value: 2 });
+test("an error in the unchosen branch is still reported", () => {
+  expect(evaluateTuff("if (true) 2 else 1 / 0")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 19, end: 20 } },
+  });
+});
+
+test('evaluateTuff("if (true) 2 else { 1 / 0 }") is a DivisionByZero error at the /', () => {
+  expect(evaluateTuff("if (true) 2 else { 1 / 0 }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 21, end: 22 } },
+  });
+});
+
+test("writes made in the unchosen branch are undone", () => {
+  expect(evaluateTuff("let mut x = 0; let y = if (false) { x = 1; 0 } else 2; x")).toEqual({ ok: true, value: 0 });
 });
