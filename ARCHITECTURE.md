@@ -8,6 +8,7 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 | --- | --- |
 | `index.ts` | Entry module. Exports `interpretTuff` only; the result and error types are internal. |
 | `scripts/unused-exports.ts` | Checks that no export goes unused by other project files, using the TypeScript compiler API. Run as part of `bun run lint`. |
+| `eslint-rules/no-recursion.js` | Custom ESLint rule. Reports any function that can reach itself through calls in its file, including calls through parameters and nested closures. |
 | `repl.ts` | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`. |
 | `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
 | `eslint.config.js` | ESLint configuration (recommended JavaScript and TypeScript rules, plus restricted syntax). |
@@ -29,11 +30,12 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ### `interpretTuff(tuffSource: string): Result<number, TuffError>`
 
-A recursive-descent parser over the original source, using character checks (no regular expressions) and skipping whitespace. A sign must touch its digits or its `(`. Whitespace is allowed around operators.
+A shunting-yard evaluator with explicit stacks, written as one loop with no recursion. It reads the original source with character checks (no regular expressions) and skips whitespace. A sign must touch its digits or its `(`. Whitespace is allowed around operators.
 
-1. `parseExpression(source, start, depth)` parses terms joined by `+` or `-`, starting from `0`. At `depth > 0` (inside parentheses) it stops at `)`. A group that would exceed `MAX_NESTING_DEPTH` (256) returns the error "Parentheses are nested more than 256 levels deep" at the offending `(`, instead of exhausting the call stack.
-2. `parseTerm` parses factors joined by `*`.
-3. `parseFactor` reads an optional sign, then either digits or a parenthesized group. It reaches the group through a `GroupParser` parameter that `parseExpression` supplies, so `parseFactor` and `parseTerm` never call `parseExpression` directly. The recursion is confined to `parseExpression`.
+- A value stack holds numbers. An operator stack holds pending `+`, `-`, `*` operators and open-group entries. Each group entry remembers the sign written before its `(`.
+- Operands are read directly. A pending operator is applied first when it binds at least as tightly (`*` above `+` and `-`), which makes operators left-associative.
+- `)` applies pending operators back to the group entry, then scales the group's value by its sign.
+- Nesting depth is limited only by memory, not by the call stack.
 
 Errors:
 
@@ -67,13 +69,13 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 ## Known gaps and open decisions
 
 - **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized groups. Division and other operators are not implemented.
-- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules) and then `scripts/unused-exports.ts`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. The project size limits are not enforced by lint.
+- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax) and then `scripts/unused-exports.ts`. The recursion rule works within one file, so recursion that crosses files is not detected. Calls through parameters and nested closures are counted, so passing a function into a parameter does not hide a cycle. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. The project size limits are not enforced by lint.
 
 ## Potential Problems
 
 - **Integer precision:** numbers are parsed with `parseInt` into JavaScript doubles. Values above `Number.MAX_SAFE_INTEGER` are silently rounded, so `9007199254740993 + 0` returns `9007199254740992` with `ok: true`. The result is wrong without any error.
 - **Overflow is unreported:** the sum can exceed the double range or lose precision without any `TuffError`. A literal of 400 digits parses to `Infinity` with `ok: true`.
-- **Stack overflow on deep nesting:** mitigated by the 256-level limit (see Security Concerns). Without it, about 20,000 nested parentheses throw `RangeError: Maximum call stack size exceeded`.
+- **Stack overflow on deep nesting:** resolved. The parser no longer recurses, so deep nesting does not exhaust the call stack.
 
 ## Security Concerns
 
@@ -83,13 +85,12 @@ The ideal architecture keeps these rules as the project grows:
 
 - Source text is untrusted. It must never be passed to `eval`, `Function`, or a shell.
 - Input length must be bounded before it is scanned. The current scanner has no length limit. Control: a maximum source length, returned as a `TuffError`.
-- Nesting depth must be bounded. Control in place: a maximum parenthesis depth of 256, returned as a `TuffError` at the offending `(`. Gap: the limit is a fixed count, not tied to the actual call-stack size.
+- Nesting depth must not exhaust the call stack. Control in place: the parser uses explicit stacks, so nesting costs memory, not call frames. Gap: deeply nested input can still use a lot of memory; no maximum depth is enforced.
 - Any future I/O (file reads, module imports, network) sits behind an explicit capability parameter, so `interpretTuff` stays pure. Gap: none of these exist yet.
 
 ## Future Work
 
 - Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-pass scanner is a stopgap.
-- Replace call-stack recursion with an explicit-stack parser (for example shunting-yard) so nesting depth is limited by a documented `TuffError`, not by the JavaScript call stack.
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report line and column in addition to the offset in `where`.
 - Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.

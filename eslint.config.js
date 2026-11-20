@@ -1,10 +1,15 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
+import noRecursion from "./eslint-rules/no-recursion.js";
 
 export default tseslint.config(
   { ignores: ["node_modules/**"] },
   eslint.configs.recommended,
   tseslint.configs.recommended,
+  {
+    plugins: { local: { rules: { "no-recursion": noRecursion } } },
+    rules: { "local/no-recursion": "error" },
+  },
   {
     rules: {
       "no-restricted-syntax": [

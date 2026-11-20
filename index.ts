@@ -17,16 +17,20 @@ interface Failure<E> {
 
 type Result<T, E> = Success<T> | Failure<E>;
 
-interface Parsed {
-  value: number;
-  end: number;
+type Operator = "+" | "-" | "*";
+
+interface OperatorEntry {
+  kind: "operator";
+  operator: Operator;
 }
 
-// Parses a parenthesized group whose "(" sits just before `start`.
-type GroupParser = (source: string, start: number) => Result<Parsed, TuffError>;
+// An open parenthesis, remembering the sign written directly before it.
+interface GroupEntry {
+  kind: "group";
+  sign: number;
+}
 
-// Deeper nesting is reported as a TuffError rather than exhausting the call stack.
-const MAX_NESTING_DEPTH = 256;
+type StackEntry = OperatorEntry | GroupEntry;
 
 function isDigit(c: string): boolean {
   return c >= "0" && c <= "9";
@@ -34,6 +38,10 @@ function isDigit(c: string): boolean {
 
 function isSpace(c: string): boolean {
   return c.length === 1 && c.trim() === "";
+}
+
+function isOperator(c: string): c is Operator {
+  return c === "+" || c === "-" || c === "*";
 }
 
 function skipSpaces(source: string, pos: number): number {
@@ -88,90 +96,94 @@ function expectedClose(source: string, where: number): Failure<TuffError> {
   );
 }
 
-// factor: [sign] (digits | "(" expression ")")
-function parseFactor(source: string, start: number, parseGroup: GroupParser): Result<Parsed, TuffError> {
-  let pos = start;
-  let sign = 1;
-  const c = source.charAt(pos);
-  if (c === "+" || c === "-") {
-    if (c === "-") sign = -1;
-    pos++;
-  }
-
-  if (source.charAt(pos) === "(") {
-    const inner = parseGroup(source, pos + 1);
-    if (!inner.ok) return inner;
-    return { ok: true, value: { value: sign * inner.value.value, end: inner.value.end + 1 } };
-  }
-
-  const digitsStart = pos;
-  while (isDigit(source.charAt(pos))) pos++;
-  if (pos === digitsStart) return expectedNumber(source, pos);
-  return {
-    ok: true,
-    value: { value: sign * parseInt(source.slice(digitsStart, pos), 10), end: pos },
-  };
+function precedence(op: Operator): number {
+  return op === "*" ? 2 : 1;
 }
 
-// term: factor ( "*" factor )*
-function parseTerm(source: string, start: number, parseGroup: GroupParser): Result<Parsed, TuffError> {
-  const first = parseFactor(source, start, parseGroup);
-  if (!first.ok) return first;
-  let value = first.value.value;
-  let pos = skipSpaces(source, first.value.end);
-
-  while (source.charAt(pos) === "*") {
-    const next = parseFactor(source, skipSpaces(source, pos + 1), parseGroup);
-    if (!next.ok) return next;
-    value *= next.value.value;
-    pos = skipSpaces(source, next.value.end);
-  }
-  return { ok: true, value: { value, end: pos } };
+function apply(left: number, op: Operator, right: number): number {
+  if (op === "+") return left + right;
+  if (op === "-") return left - right;
+  return left * right;
 }
 
-// expression: term ( ("+" | "-") term )*. When depth > 0 it is inside parentheses:
-// it stops before ")" and the returned end points at that ")". Offsets refer to
-// the unmodified source.
-function parseExpression(source: string, start: number, depth: number): Result<Parsed, TuffError> {
-  const grouped = depth > 0;
-  // Passing the group parser down keeps parseFactor and parseTerm free of a
-  // direct dependency on parseExpression.
-  const parseGroup: GroupParser = (s, p) => {
-    if (depth + 1 > MAX_NESTING_DEPTH) {
-      return fail(
-        `Parentheses are nested more than ${MAX_NESTING_DEPTH} levels deep`,
-        p - 1,
-        "Each '(' adds a level of nesting, and nesting beyond the limit cannot be evaluated safely.",
-        "Remove some parentheses or split the expression.",
-      );
-    }
-    return parseExpression(s, p, depth + 1);
-  };
-
-  let pos = skipSpaces(source, start);
-  let total = 0;
-  let termSign = 1; // sign from the additive operator before the next term
-  for (;;) {
-    const term = parseTerm(source, pos, parseGroup);
-    if (!term.ok) return term;
-    total += termSign * term.value.value;
-    pos = term.value.end;
-
-    if (pos === source.length) {
-      if (grouped) return expectedClose(source, pos);
-      return { ok: true, value: { value: total, end: pos } };
-    }
-
-    const op = source.charAt(pos);
-    if (grouped && op === ")") return { ok: true, value: { value: total, end: pos } };
-    if (op !== "+" && op !== "-") return expectedOperator(source, pos, grouped);
-    termSign = op === "-" ? -1 : 1;
-    pos = skipSpaces(source, pos + 1);
-  }
+// Pops the newest operator and applies it to the two newest values. The grammar
+// guarantees both operands are present.
+function applyTop(values: number[], ops: StackEntry[]): void {
+  const entry = ops.pop();
+  if (entry?.kind !== "operator") return;
+  const right = values.pop() ?? 0;
+  const left = values.pop() ?? 0;
+  values.push(apply(left, entry.operator, right));
 }
 
+// Closes the innermost group: applies its operators, then scales the result by
+// the sign written before the "(".
+function closeGroup(values: number[], ops: StackEntry[]): void {
+  for (let top = ops[ops.length - 1]; top?.kind === "operator"; top = ops[ops.length - 1]) {
+    applyTop(values, ops);
+  }
+  const group = ops.pop();
+  if (group?.kind !== "group") return;
+  values.push(group.sign * (values.pop() ?? 0));
+}
+
+// Shunting-yard evaluation with explicit stacks, so nesting depth is not limited
+// by the JavaScript call stack. Offsets in errors refer to the unmodified source.
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  const result = parseExpression(tuffSource, 0, 0);
-  if (!result.ok) return result;
-  return { ok: true, value: result.value.value };
+  const values: number[] = [];
+  const ops: StackEntry[] = [];
+  let depth = 0; // number of open parentheses
+  let pos = 0;
+  let expectOperand = true;
+
+  for (;;) {
+    if (expectOperand) {
+      pos = skipSpaces(tuffSource, pos);
+      let sign = 1;
+      let c = tuffSource.charAt(pos);
+      if (c === "+" || c === "-") {
+        if (c === "-") sign = -1;
+        pos++;
+        c = tuffSource.charAt(pos);
+      }
+      if (c === "(") {
+        ops.push({ kind: "group", sign });
+        depth++;
+        pos++;
+        continue;
+      }
+      const start = pos;
+      while (isDigit(tuffSource.charAt(pos))) pos++;
+      if (pos === start) return expectedNumber(tuffSource, pos);
+      values.push(sign * parseInt(tuffSource.slice(start, pos), 10));
+      expectOperand = false;
+      continue;
+    }
+
+    pos = skipSpaces(tuffSource, pos);
+    const grouped = depth > 0;
+    if (pos === tuffSource.length) {
+      if (grouped) return expectedClose(tuffSource, pos);
+      break;
+    }
+    const c = tuffSource.charAt(pos);
+    if (grouped && c === ")") {
+      closeGroup(values, ops);
+      depth--;
+      pos++;
+      continue;
+    }
+    if (!isOperator(c)) return expectedOperator(tuffSource, pos, grouped);
+
+    // Left-associative: apply pending operators that bind at least as tightly.
+    for (let top = ops[ops.length - 1]; top?.kind === "operator" && precedence(top.operator) >= precedence(c); top = ops[ops.length - 1]) {
+      applyTop(values, ops);
+    }
+    ops.push({ kind: "operator", operator: c });
+    pos++;
+    expectOperand = true;
+  }
+
+  while (ops.length > 0) applyTop(values, ops);
+  return { ok: true, value: values.pop() ?? 0 };
 }
