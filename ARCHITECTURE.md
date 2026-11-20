@@ -79,7 +79,7 @@ Every parse step mutates one `ParserState`, so any step can touch any field.
 
 ### Lenient flag threading
 
-A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors never do.
+A `lenient` flag reaches only the two `valueError` sites: the condition check in `startBranch` and the assignment check in `closeBinding`. Other errors ignore it, so the value/static line follows call sites, not error kinds.
 
 ### Cell kinds
 
@@ -127,7 +127,7 @@ Build an AST in a parse module, then evaluate it separately. Lenient branches be
 
 ### Error classes
 
-Value errors go through `valueError`; static errors do not. Target: tag each `TuffError` as static or value at construction.
+Value errors (non-boolean conditions, assignment type mismatches) use `valueError`. Target: report them in unchosen branches, delete `valueError`, and let the lenient flag suppress only writes.
 
 ### Numbers and output
 
@@ -135,4 +135,4 @@ Replace `number` with `bigint` or a decimal type. Report line and column in `whe
 
 ## Performance
 
-Each token scans the operator stack. Each variable access scans the scope chain and every visible cell (`borrowedBy`). Profile before optimizing.
+Each token scans the operator stack, and each variable access scans the scope chain and `borrowedBy`. Profile first.
