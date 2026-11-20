@@ -46,4 +46,3 @@ Prompt injection and unauthenticated state changes: Tuff has no network, no pers
 1. Add lint enforcement of the modularity limits and the no-`eval` rule, plus a reviewer lint command in `package.json`.
 2. Define the Tuff numeric and expression grammar explicitly in the lexer.
 3. Add the remaining resource limits (source length, bindings per block, step budget) and tests that each one produces the right `TuffError`.
-4. Pin the boolean operand ordering with tests.

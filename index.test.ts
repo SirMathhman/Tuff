@@ -236,3 +236,49 @@ test("hex and exponent forms are rejected", () => {
     error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 1, end: 2 } },
   });
 });
+
+test('evaluateTuff("false + 1") is a BooleanOperand error at the operator', () => {
+  expect(evaluateTuff("false + 1")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.BooleanOperand, span: { start: 6, end: 7 } },
+  });
+});
+
+test('evaluateTuff("let x = true; x - 0") is a BooleanOperand error at the operator', () => {
+  expect(evaluateTuff("let x = true; x - 0")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.BooleanOperand, span: { start: 16, end: 17 } },
+  });
+});
+
+test('evaluateTuff("true + 1 / 0") reports the division by zero, not the boolean operand', () => {
+  expect(evaluateTuff("true + 1 / 0")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 9, end: 10 } },
+  });
+});
+
+test('evaluateTuff("1 / 0 + true") reports the first division by zero', () => {
+  expect(evaluateTuff("1 / 0 + true")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 2, end: 3 } },
+  });
+});
+
+test('evaluateTuff("{ true }") => 1', () => {
+  expect(evaluateTuff("{ true }")).toEqual({ ok: true, value: 1 });
+});
+
+test('evaluateTuff("let mut x = 1; x = true; x") is a TypeMismatch at the assignment target', () => {
+  expect(evaluateTuff("let mut x = 1; x = true; x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.TypeMismatch, span: { start: 15, end: 16 } },
+  });
+});
+
+test('evaluateTuff("let mut x = true; x = 0; x") is a TypeMismatch at the assignment target', () => {
+  expect(evaluateTuff("let mut x = true; x = 0; x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.TypeMismatch, span: { start: 18, end: 19 } },
+  });
+});
