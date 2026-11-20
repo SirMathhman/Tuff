@@ -1,136 +1,21 @@
-import type { Failure, Result, TuffError } from "./errors";
-import { fail } from "./errors";
+import type { Result, TuffError } from "./errors";
 import {
   Bracket,
   blockEndsWithStatement,
-  chainedComparison,
-  closerFor,
   expectedClose,
   expectedEquals,
-  expectedMismatch,
   expectedNumber,
-  expectedOperator,
-  expectedSemicolon,
   expectedVariableName,
   notMutable,
   reservedName,
   undefinedName,
   unexpectedSemicolon,
 } from "./errors";
-import { isComparison, precedence } from "./operations";
-import type { Value } from "./types";
 import type { Operator } from "./scanner";
-import {
-  isCloser,
-  isLetter,
-  matchingClose,
-  readDigits,
-  readName,
-  signOf,
-  skipSpaces,
-  toOperator,
-} from "./scanner";
-
-/**
- * One instruction of compiled code. Code runs left to right on a value stack.
- */
-export interface Instruction {
-  /** What the instruction does. */
-  kind: InstructionKind;
-  /** The offset in the source, for errors. */
-  where: number;
-  /** The value pushed, when the kind is push. */
-  value?: Value;
-  /** The variable read or written, when the kind is load, declare, or assign. */
-  name?: string;
-  /** The sign applied, when the kind is sign. */
-  sign?: number;
-  /** The binary operator, when the kind is binary. */
-  operator?: Operator;
-  /** Whether a declared variable may be reassigned, when the kind is declare. */
-  mutable?: boolean;
-  /** The body of a block, when the kind is enter. */
-  block?: Instruction[];
-}
-
-/**
- * The kinds of compiled instruction.
- */
-export enum InstructionKind {
-  /** Push a literal value. */
-  Push = "push",
-  /** Push the value of a variable. */
-  Load = "load",
-  /** Apply a sign to the value on top. */
-  Sign = "sign",
-  /** Apply a binary operator to the two values on top. */
-  Binary = "binary",
-  /** Pop a value and bind it to a new variable. */
-  Declare = "declare",
-  /** Pop a value and store it into an existing variable. */
-  Assign = "assign",
-  /** Run a block in a new scope; its final value stays on the value stack. */
-  Enter = "enter",
-}
-
-/**
- * A variable at run time: its value, and whether it may be reassigned.
- */
-export interface Binding {
-  /** The current value. */
-  value: Value;
-  /** Whether the variable may be reassigned. */
-  mutable: boolean;
-}
-
-/**
- * A pending sign, operator, or open bracket on the compiler's stack.
- */
-export interface Pending {
-  /** The binary operator, or undefined for a sign or an open bracket. */
-  operator?: Operator;
-  /** The sign written before an operand, or undefined. */
-  sign?: number;
-  /** Whether this is an open bracket. */
-  open: boolean;
-  /** The offset of the pending item. */
-  where: number;
-}
-
-/**
- * The variables visible while compiling: whether each may be reassigned.
- */
-export type Names = Map<string, boolean>;
-
-/**
- * A piece of code still to compile: the program, or the body of a block.
- */
-export interface Unit {
-  /** The instructions being filled in. */
-  code: Instruction[];
-  /** The offset where the unit's text starts. */
-  pos: number;
-  /** The variables visible at the start of the unit. */
-  names: Names;
-  /** Whether the unit is a block, which ends at its closing brace. */
-  block: boolean;
-}
-
-// Where reading an operand stopped, and whether the operand is complete.
-interface Advance {
-  /** The offset after what was read. */
-  next: number;
-  /** Whether a complete operand was read, so an operator must come next. */
-  done: boolean;
-}
-
-// A compiled expression, and the offset after it.
-interface Compiled {
-  /** The instructions. */
-  code: Instruction[];
-  /** The offset after the compiled text. */
-  next: number;
-}
+import { readName, skipSpaces, toOperator } from "./scanner";
+import type { Instruction, Names, Unit } from "./instructions";
+import { InstructionKind, UnitKind } from "./instructions";
+import { UNSUPPORTED_WHAT, compileFrom, unsupportedAt } from "./compile-expression";
 
 // Words that have a fixed meaning and cannot name a variable.
 const RESERVED_NAMES = new Set([
@@ -146,61 +31,6 @@ const RESERVED_NAMES = new Set([
   "case",
 ]);
 
-// The message of the marker that tells the caller to fall back to the parser.
-const UNSUPPORTED_WHAT = "Unsupported construct";
-
-// Words the compiled path does not handle yet; a program using one falls back to the parser.
-const UNSUPPORTED_WORDS = new Set([
-  "if",
-  "else",
-  "fn",
-  "while",
-  "match",
-  "case",
-  "mut",
-  "let",
-]);
-
-// A failure that means "not handled by the compiled path".
-function unsupportedAt(where: number): Failure<TuffError> {
-  return fail(
-    UNSUPPORTED_WHAT,
-    where,
-    "The compiled path does not handle this construct yet.",
-    "Fall back to the parser.",
-  );
-}
-
-// Whether the text at `pos` is a brace that opens an object literal: `{ name :`.
-function opensObject(source: string, pos: number): boolean {
-  const start = skipSpaces(source, pos + 1);
-  const end = readName(source, start);
-  if (end === start) return false;
-  return source.charAt(skipSpaces(source, end)) === ":";
-}
-
-// Whether an open bracket is still waiting to be closed.
-function hasOpenBracket(stack: Pending[]): boolean {
-  return stack.some((pending) => pending.open);
-}
-
-// Emits a pending sign or operator as an instruction.
-function emitPending(code: Instruction[], pending: Pending): void {
-  if (pending.operator !== undefined) {
-    code.push({
-      kind: InstructionKind.Binary,
-      where: pending.where,
-      operator: pending.operator,
-    });
-  } else if (pending.sign !== undefined) {
-    code.push({
-      kind: InstructionKind.Sign,
-      where: pending.where,
-      sign: pending.sign,
-    });
-  }
-}
-
 /**
  * Compiles an expression with no variables into instructions.
  *
@@ -211,7 +41,9 @@ export function compileExpression(
   source: string,
 ): Result<Instruction[], TuffError> {
   const code: Instruction[] = [];
-  const queue: Unit[] = [{ code, pos: 0, names: new Map(), block: false }];
+  const queue: Unit[] = [
+    { code, pos: 0, names: new Map(), kind: UnitKind.Program },
+  ];
   const drained = drain(source, queue);
   if (!drained.ok) return drained;
   return { ok: true, value: code };
@@ -228,7 +60,9 @@ export function compileProgram(
   source: string,
 ): Result<Instruction[], TuffError> | undefined {
   const code: Instruction[] = [];
-  const queue: Unit[] = [{ code, pos: 0, names: new Map(), block: false }];
+  const queue: Unit[] = [
+    { code, pos: 0, names: new Map(), kind: UnitKind.Program },
+  ];
   const drained = drain(source, queue);
   if (!drained.ok) {
     const { error } = drained;
@@ -255,22 +89,26 @@ function compileUnit(
   unit: Unit,
   queue: Unit[],
 ): Result<true, TuffError> {
+  if (unit.kind === UnitKind.Condition) {
+    return compileCondition(source, unit, queue);
+  }
   const { code, names } = unit;
+  const block = unit.kind === UnitKind.Block;
   let pos = unit.pos;
   let statement = false;
   for (;;) {
     pos = skipSpaces(source, pos);
     if (pos >= source.length) {
-      if (unit.block) return expectedClose(source, pos, Bracket.Brace);
+      if (block) return expectedClose(source, pos, Bracket.Brace);
       break;
     }
-    if (unit.block && source.charAt(pos) === "}") {
+    if (block && source.charAt(pos) === "}") {
       if (statement) return blockEndsWithStatement(pos);
       if (code.length === 0) return expectedNumber(source, pos);
       return { ok: true, value: true };
     }
     if (source.charAt(pos) === ";") return unexpectedSemicolon(pos);
-    if (!unit.block && source.charAt(pos) === "{") return unsupportedAt(pos);
+    if (!block && source.charAt(pos) === "{") return unsupportedAt(pos);
     const end = readName(source, pos);
     const word = source.slice(pos, end);
     if (word === "let") {
@@ -293,22 +131,39 @@ function compileUnit(
       names,
       undefined,
       queue,
-      unit.block,
+      block ? "}" : undefined,
     );
     if (!expression.ok) return expression;
     const { value: compiledExpr } = expression;
     code.push(...compiledExpr.code);
     pos = compiledExpr.next;
     statement = false;
-    if (unit.block && source.charAt(pos) === "}") {
+    if (block && source.charAt(pos) === "}") {
       return { ok: true, value: true };
     }
   }
-  if (!unit.block && statement) {
+  if (!block && statement) {
     code.push({ kind: InstructionKind.Push, where: source.length, value: 0 });
-  } else if (!unit.block && code.length === 0) {
+  } else if (!block && code.length === 0) {
     return expectedNumber(source, pos);
   }
+  return { ok: true, value: true };
+}
+
+// Compiles the condition of an if: an expression that ends at its closing parenthesis.
+function compileCondition(
+  source: string,
+  unit: Unit,
+  queue: Unit[],
+): Result<true, TuffError> {
+  const { code, names, pos } = unit;
+  const expression = compileFrom(source, pos, names, undefined, queue, ")");
+  if (!expression.ok) return expression;
+  const { value: compiledExpr } = expression;
+  if (source.charAt(compiledExpr.next) !== ")") {
+    return unsupportedAt(compiledExpr.next);
+  }
+  code.push(...compiledExpr.code);
   return { ok: true, value: true };
 }
 
@@ -343,7 +198,7 @@ function compileLet(
     names,
     "'let' statement",
     queue,
-    false,
+    undefined,
   );
   if (!value.ok) return value;
   const { value: compiledValue } = value;
@@ -396,7 +251,7 @@ function compileAssign(
     names,
     "assignment",
     queue,
-    false,
+    undefined,
   );
   if (!value.ok) return value;
   const { value: compiledValue } = value;
@@ -406,201 +261,4 @@ function compileAssign(
   }
   code.push({ kind: InstructionKind.Assign, where: pos, name });
   return { ok: true, value: compiledValue.next + 1 };
-}
-
-// Compiles an expression from `start`. With a statement noun, it stops at the ';' that
-// ends the statement, and a missing ';' is reported for that noun. In a block it stops at
-// the block's closing brace.
-function compileFrom(
-  source: string,
-  start: number,
-  names: Names,
-  noun: string | undefined,
-  queue: Unit[],
-  inBlock: boolean,
-): Result<Compiled, TuffError> {
-  const code: Instruction[] = [];
-  const stack: Pending[] = [];
-  let pos = start;
-  let expectOperand = true;
-  for (;;) {
-    pos = skipSpaces(source, pos);
-    if (pos >= source.length) break;
-    const ch = source.charAt(pos);
-    if (
-      noun !== undefined &&
-      !hasOpenBracket(stack) &&
-      !expectOperand &&
-      ch === ";"
-    ) {
-      break;
-    }
-    if (inBlock && !hasOpenBracket(stack) && ch === "}") break;
-    if (expectOperand) {
-      const operand = readOperand(source, pos, code, stack, names, queue);
-      if (!("next" in operand)) return operand;
-      pos = operand.next;
-      expectOperand = !operand.done;
-      continue;
-    }
-    if (ch === ")" || isCloser(ch)) {
-      const failure = closeGroup(source, pos, code, stack);
-      if (failure !== undefined) return failure;
-      pos++;
-      continue;
-    }
-    const operator = toOperator(source, pos);
-    if (operator === undefined) {
-      if (noun !== undefined && !hasOpenBracket(stack)) {
-        return expectedSemicolon(source, pos, noun);
-      }
-      if (ch === ";") return unexpectedSemicolon(pos);
-      return expectedOperator(source, pos, stack.length > 0);
-    }
-    const failure = pushOperator(operator, pos, code, stack);
-    if (failure !== undefined) return failure;
-    pos += operator.length;
-    expectOperand = true;
-  }
-  if (expectOperand) return expectedNumber(source, pos);
-  for (let index = stack.length - 1; index >= 0; index--) {
-    const pending = stack[index];
-    if (pending?.open === true) {
-      return expectedClose(source, pos, Bracket.Paren);
-    }
-    if (pending !== undefined) emitPending(code, pending);
-  }
-  if (noun !== undefined && pos >= source.length) {
-    return expectedSemicolon(source, pos, noun);
-  }
-  return { ok: true, value: { code, next: pos } };
-}
-
-// Reads an operand at `pos`: a sign, a bracket, a block, a literal, or a name.
-function readOperand(
-  source: string,
-  pos: number,
-  code: Instruction[],
-  stack: Pending[],
-  names: Names,
-  queue: Unit[],
-): Advance | Failure<TuffError> {
-  let at = pos;
-  const ch = source.charAt(at);
-  const written = signOf(ch);
-  if (written !== undefined) {
-    at++;
-    stack.push({ sign: written, open: false, where: at });
-    if (source.charAt(at) === "+" || source.charAt(at) === "-") {
-      return expectedNumber(source, at);
-    }
-  }
-  const next = source.charAt(at);
-  if (next === "[" || next === "&" || next === "*") return unsupportedAt(at);
-  if (next === "(") {
-    stack.push({ open: true, where: at });
-    return { next: at + 1, done: false };
-  }
-  if (next === "{") {
-    if (opensObject(source, at)) return unsupportedAt(at);
-    const close = matchingClose(source, at);
-    if (close === undefined) {
-      return expectedClose(source, source.length, Bracket.Brace);
-    }
-    const body: Instruction[] = [];
-    code.push({ kind: InstructionKind.Enter, where: at, block: body });
-    queue.push({ code: body, pos: at + 1, names: new Map(names), block: true });
-    return { next: finishOperand(close + 1, code, stack), done: true };
-  }
-  if (isLetter(next)) {
-    const end = readName(source, at);
-    const word = source.slice(at, end);
-    if (UNSUPPORTED_WORDS.has(word)) return unsupportedAt(at);
-    if (word === "true" || word === "false") {
-      code.push({
-        kind: InstructionKind.Push,
-        where: at,
-        value: word === "true",
-      });
-    } else {
-      if (!names.has(word)) return undefinedName(at, word);
-      code.push({ kind: InstructionKind.Load, where: at, name: word });
-    }
-    return { next: finishOperand(end, code, stack), done: true };
-  }
-  const end = readDigits(source, at);
-  if (end === at) return expectedNumber(source, at);
-  code.push({
-    kind: InstructionKind.Push,
-    where: at,
-    value: parseInt(source.slice(at, end), 10),
-  });
-  return { next: finishOperand(end, code, stack), done: true };
-}
-
-// After an operand, applies any signs written directly before it.
-function finishOperand(
-  end: number,
-  code: Instruction[],
-  stack: Pending[],
-): number {
-  for (;;) {
-    const top = stack[stack.length - 1];
-    if (top?.sign === undefined) break;
-    stack.pop();
-    emitPending(code, top);
-  }
-  return end;
-}
-
-// Applies pending operators that bind at least as tightly, then pushes this one.
-function pushOperator(
-  operator: Operator,
-  pos: number,
-  code: Instruction[],
-  stack: Pending[],
-): Failure<TuffError> | undefined {
-  for (;;) {
-    const top = stack[stack.length - 1];
-    if (
-      top?.operator === undefined ||
-      precedence(top.operator) < precedence(operator)
-    ) {
-      break;
-    }
-    if (isComparison(top.operator) && isComparison(operator)) {
-      return chainedComparison(pos);
-    }
-    stack.pop();
-    emitPending(code, top);
-  }
-  stack.push({ operator, open: false, where: pos });
-  return undefined;
-}
-
-// Closes the innermost bracket, emitting what it contains.
-function closeGroup(
-  source: string,
-  pos: number,
-  code: Instruction[],
-  stack: Pending[],
-): Failure<TuffError> | undefined {
-  for (;;) {
-    const top = stack.pop();
-    if (top === undefined) return expectedOperator(source, pos, false);
-    if (top.open) {
-      if (source.charAt(pos) !== closerFor(Bracket.Paren)) {
-        return expectedMismatch(source, pos, Bracket.Paren);
-      }
-      break;
-    }
-    emitPending(code, top);
-  }
-  for (;;) {
-    const top = stack[stack.length - 1];
-    if (top?.sign === undefined) break;
-    stack.pop();
-    emitPending(code, top);
-  }
-  return undefined;
 }

@@ -67,6 +67,27 @@ for (const source of SIGN_SOURCES) {
   });
 }
 
+// Braced if-else: the compiled path must match interpretTuff.
+const IF_PROGRAMS = [
+  "if (false) { 2 } else { 3 }",
+  "if (true) { 2 } else { 3 }",
+  "if (false) { let x = 0; x = 1; x } else { 3 }",
+  "if (false) { 1 / { let x = 0; x } } else { 1 }",
+  "if (true) { 1 } else { true + true }",
+  "if (1) { 1 } else { 2 }",
+  "if (true) { 1 } else { 2 } + 10",
+  "if (true) { 1 } else { 2 }; 3",
+  "let mut x = 0; let y = if (true) { x = 5; 1 } else { x = 7; 2 }; x + y",
+  "let x = 1; let y = if (x > 0) { x + 1 } else { 0 }; y",
+];
+
+for (const source of IF_PROGRAMS) {
+  test(`compiled if program "${source}" matches interpretTuff`, () => {
+    const actual = runProgram(source);
+    expect(actual).toEqual(interpretTuff(source));
+  });
+}
+
 // Programs with blocks used as values: the compiled path must match interpretTuff.
 const BLOCK_PROGRAMS = [
   "let q = { 1 + 2 }; q",

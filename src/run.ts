@@ -1,12 +1,17 @@
 import type { Failure, Result, TuffError } from "./errors";
-import { tooMuchWork, typeMismatch, undefinedName } from "./errors";
+import {
+  nonBooleanCondition,
+  tooMuchWork,
+  typeMismatch,
+  undefinedName,
+} from "./errors";
+import { applySign, combine } from "./operations";
+import type { Binding, Instruction } from "./instructions";
+import { InstructionKind } from "./instructions";
+import type { Value } from "./types";
 
 // The most instructions one run may execute, so a runaway loop stops with an error.
 const MAX_STEPS = 200000;
-import { applySign, combine } from "./operations";
-import type { Binding, Instruction } from "./code";
-import { InstructionKind } from "./code";
-import type { Value } from "./types";
 
 /**
  * A scope at run time: its variables, and the scope it is nested in.
@@ -28,6 +33,8 @@ export interface Frame {
   pc: number;
   /** The scope the block's variables live in. */
   scope: Scope;
+  /** Whether the block runs without effects: its writes are checked but not stored. */
+  lenient: boolean;
 }
 
 /**
@@ -43,12 +50,12 @@ export function runCode(
 ): Result<number, TuffError> {
   const values: Value[] = [];
   const top: Scope = { vars: env, parent: undefined };
-  const frames: Frame[] = [{ code, pc: 0, scope: top }];
+  const frames: Frame[] = [{ code, pc: 0, scope: top, lenient: false }];
   let steps = 0;
   for (;;) {
     const frame = frames[frames.length - 1];
     if (frame === undefined) break;
-    const { code: frameCode, pc, scope } = frame;
+    const { code: frameCode, pc, scope, lenient } = frame;
     const instruction = frameCode[pc];
     if (instruction === undefined) {
       frames.pop();
@@ -59,10 +66,20 @@ export function runCode(
     if (steps > MAX_STEPS) return tooMuchWork(instruction.where);
     if (instruction.kind === InstructionKind.Enter) {
       const inner: Scope = { vars: new Map(), parent: scope };
-      frames.push({ code: instruction.block ?? [], pc: 0, scope: inner });
+      frames.push({
+        code: instruction.block ?? [],
+        pc: 0,
+        scope: inner,
+        lenient,
+      });
       continue;
     }
-    const failure = step(instruction, values, scope);
+    if (instruction.kind === InstructionKind.Branch) {
+      const failure = pushBranches(instruction, values, frames, frame);
+      if (failure !== undefined) return failure;
+      continue;
+    }
+    const failure = step(instruction, values, scope, lenient);
     if (failure !== undefined) return failure;
   }
   const result = values.pop() ?? 0;
@@ -84,11 +101,41 @@ function lookup(scope: Scope, name: string): Binding | undefined {
   return undefined;
 }
 
-// Runs one instruction against the value stack.
+// Pushes the two branches of an if, the then-branch on top so it runs first. The branch
+// that is not chosen runs without effects, so its errors are still reported.
+function pushBranches(
+  instruction: Instruction,
+  values: Value[],
+  frames: Frame[],
+  frame: Frame,
+): Failure<TuffError> | undefined {
+  const condition = values[values.length - 1];
+  if (typeof condition !== "boolean") {
+    return nonBooleanCondition(instruction.where, "if");
+  }
+  const { scope, lenient } = frame;
+  frames.push({
+    code: instruction.otherwise ?? [],
+    pc: 0,
+    scope: { vars: new Map(), parent: scope },
+    lenient: lenient || condition,
+  });
+  frames.push({
+    code: instruction.block ?? [],
+    pc: 0,
+    scope: { vars: new Map(), parent: scope },
+    lenient: lenient || !condition,
+  });
+  return undefined;
+}
+
+// Runs one instruction against the value stack. In a lenient block a write is checked
+// but not stored.
 function step(
   instruction: Instruction,
   values: Value[],
   scope: Scope,
+  lenient: boolean,
 ): Failure<TuffError> | undefined {
   const { kind, where } = instruction;
   if (kind === InstructionKind.Push) {
@@ -125,7 +172,14 @@ function step(
     if (typeof binding.value !== typeof value) {
       return typeMismatch(where, name, typeof binding.value, typeof value);
     }
-    binding.value = value;
+    if (!lenient) binding.value = value;
+    return undefined;
+  }
+  if (kind === InstructionKind.Pick) {
+    const otherwise = values.pop() ?? 0;
+    const taken = values.pop() ?? 0;
+    const condition = values.pop() ?? false;
+    values.push(condition ? taken : otherwise);
     return undefined;
   }
   const right = values.pop() ?? 0;
