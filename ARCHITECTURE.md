@@ -11,7 +11,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **TuffError**: a discriminated union (error enum) of failure kinds. Each variant carries its kind and the span where it occurred (start and end offsets). `describeError` answers what the error is, where it is, why it is an error, and what the caller can change to fix it. It derives the wording from the kind, so no text is built on the failure path.
 - **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow union of `TuffErrorKind` members (for example `DivisionByZero`). The operator never sees source positions. The evaluator attaches the operator token's span and widens the failure to a `TuffError`.
 - **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
-- **Block**: a sequence of zero or more statements (`let` and assignment) followed by an optional final expression, optionally wrapped in `{ }`. A block with statements but no final expression evaluates to 0. An empty block is an error. The whole source is a block without braces. A block is the only construct that creates a scope.
+- **Block**: a sequence of zero or more statements (`let` and assignment) followed by an optional final expression, optionally wrapped in `{ }`. A braced block must end in a final expression: `{ }` and `{ let x = 0; }` are `UnexpectedToken` errors at the closing brace. A source with statements but no final expression evaluates to 0, and an empty source is an error. The whole source is a block without braces. A block is the only construct that creates a scope.
 - **Binding**: `let NAME = expr;` or `let mut NAME = expr;`. It introduces a name for the rest of its block. Only a `let mut` binding may be changed later; assigning a plain `let` binding is `ImmutableAssignment`.
 - **Assignment**: `NAME = expr;`. It changes the value of a `let mut` binding, found by the same lookup as a read, so a nested block may assign a `mut` binding of an enclosing block. The right-hand side is evaluated before the name exists, so `let x = x;` refers to an outer `x` or fails with `UnknownName`.
 - **Scope**: the lexical environment of one block: its bindings plus a link to the enclosing scope. Lookup walks outward and stops at the first match. A scope exists only while its block is being evaluated.
@@ -34,8 +34,8 @@ src/
   span.ts           source positions shared by all stages
   lexer.ts          source -> token stream
   parser.ts         token stream -> AST
-  ast.ts            AST node types (no logic): literals, names, operators, groups, blocks, bindings
-  scope.ts          Scope type, creation, and name lookup (no evaluation)
+  ast.ts            AST node types (no logic): literals, names, chains, blocks, let and assign statements
+  scope.ts          Scope type, creation, and name lookup; NameRef and NameRefs (the resolver's output). No evaluation
   resolver.ts       AST -> Result<void, TuffError>: checks every name is bound. Computes no values
   evaluator.ts      AST -> value: walks blocks, creates scopes, applies operators, enforces limits
   limits.ts         configurable limits (max depth, max steps, max source length)
@@ -61,8 +61,9 @@ Rules:
 - Dependencies flow one way, from `index.ts` toward the leaves. No cycles between files.
 - Each stage is a pure function from its input type to a `Result` of its output type. A stage never calls a later stage.
 - Name checks run before evaluation. `DuplicateName` is a property of the block's syntax, so the parser reports it when it builds a `Block`. `UnknownName` is reported by `resolver.ts`, a static pass over the AST that uses `scope.ts`. The resolver records the binding of every name use as a block depth and a position within that block, and the evaluator reads values by that reference. The evaluator never reports a name error. It reports `InternalError` only if the resolver and evaluator disagree, which is a bug in Tuff.
+- `NameRef` and `NameRefs` are defined in `scope.ts`, not in `resolver.ts`. The resolver writes them and the evaluator reads them, so the evaluator never imports the resolver. The resolver and evaluator both use `scope.ts` for block-level name slots; there is one definition of a slot, not one per stage.
 - The parser must not evaluate and must not look up names. Its output is a syntactically valid AST and nothing more.
-- Recursion is allowed only inside the parser and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
+- Recursion is allowed only inside the parser, resolver, and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
 - Limits: 100 lines per function, 500 code lines per file, 10 files per directory. These must be enforced by lint (see Future Work). Lint does not enforce them yet.
 
 ## Potential Problems
@@ -75,6 +76,7 @@ Rules:
 - **Error-order drift.** If evaluation can run before the resolver, the reported error depends on evaluation order. For example, `1 / 0 + x` would report `DivisionByZero` instead of `UnknownName`. Invariant 5 forbids this, and tests must pin mixed-error inputs.
 - **Shared nesting budget.** Block braces and group parentheses share one nesting limit. It lives in `limits.ts`, not in each parser function.
 - **Name rules spread across stages.** Shadowing, the `let` keyword, and the ban on re-binding are language rules. If they are checked in more than one place, they will drift. Each rule belongs to one stage, as stated in the Rules above.
+- **Parallel name models.** Name slots would be modeled three times (resolver tables, evaluator frames, and `scope.ts`) if each stage kept its own. The ideal is one `scope.ts` definition used by both the resolver and the evaluator. Two models will disagree on shadowing or slot order.
 - **Silent number parsing rules.** Whatever numeric literal grammar Tuff adopts must be defined explicitly in the lexer, not inherited from a host function.
 
 ## Security Concerns

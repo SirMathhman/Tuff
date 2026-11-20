@@ -114,6 +114,10 @@ test('evaluateTuff("let mut x = 0; x = 1; x") => 1', () => {
   expect(evaluateTuff("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
 });
 
+test('evaluateTuff("let y = { let x = 0; };") is an UnexpectedToken error at the closing brace', () => {
+  expect(evaluateTuff("let y = { let x = 0; };")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 21, end: 22 } } });
+});
+
 test('evaluateTuff("let mut x = 0; x = 1;") => 0', () => {
   expect(evaluateTuff("let mut x = 0; x = 1;")).toEqual({ ok: true, value: 0 });
 });

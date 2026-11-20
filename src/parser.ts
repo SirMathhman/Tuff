@@ -79,11 +79,13 @@ function parseBlock(input: Input, pos: number, depth: number, parseExpr: Parser,
   for (;;) {
     const token = input.tokens[cursor];
     if (token === undefined || token.text === closer) {
-      if (statements.length === 0) {
+      if (closer !== undefined) {
+        // A braced block must end in a final expression, so the closing bracket is where one was expected.
         return token === undefined
           ? err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end })
           : err({ kind: TuffErrorKind.UnexpectedToken, span: token.span });
       }
+      if (statements.length === 0) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
       const block: BlockNode = { kind: NodeKind.Block, statements, result: undefined };
       return ok({ value: block, next: cursor });
     }
@@ -128,9 +130,7 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
   if (/^\d+$/.test(token.text)) {
-    const value = Number(token.text);
-    if (!Number.isFinite(value)) return err({ kind: TuffErrorKind.NumericOverflow, span: token.span });
-    const literal: LiteralNode = { kind: NodeKind.Literal, value, span: token.span };
+    const literal: LiteralNode = { kind: NodeKind.Literal, value: Number(token.text), span: token.span };
     return ok({ value: literal, next: pos + 1 });
   }
   if (isName(token.text)) {

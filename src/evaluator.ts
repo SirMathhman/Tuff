@@ -38,8 +38,11 @@ export function evaluate(expr: Expr, refs: NameRefs): Result<number, TuffError> 
 
 function evaluateIn(expr: Expr, env: Env): Result<number, TuffError> {
   switch (expr.kind) {
-    case NodeKind.Literal:
-      return ok(expr.value);
+    case NodeKind.Literal: {
+      const checked = finite(expr.value);
+      if (!checked.ok) return err({ kind: checked.error, span: expr.span });
+      return ok(checked.value);
+    }
     case NodeKind.Name:
       return evaluateName(expr, env);
     case NodeKind.Chain:
