@@ -16,7 +16,6 @@ import {
 import {
   applyTop,
   closeGroup,
-  valueError,
   isComparison,
   precedence,
   reduceOperators,
@@ -50,14 +49,7 @@ function startBranch(
   const entry = ops[ops.length - 1];
   if (entry?.kind !== EntryKind.If) return Step.Continue;
   const value = values.pop() ?? false;
-  if (typeof value !== "boolean") {
-    const failure = valueError(
-      isLenient(state),
-      nonBooleanCondition(closePos),
-      false,
-    );
-    if (typeof failure === "object") return failure;
-  }
+  if (typeof value !== "boolean") return nonBooleanCondition(closePos);
   entry.condition = value === true;
   entry.phase = IfPhase.Then;
   entry.skipping = !entry.condition;
@@ -129,17 +121,12 @@ function closeBinding(
       return ownerBorrowed(binding.where, binding.name, true);
     }
     if (cell !== undefined && typeof cell.value !== typeof value) {
-      const failure = valueError(
-        lenient,
-        typeMismatch(
-          binding.where,
-          binding.name,
-          typeof cell.value,
-          typeof value,
-        ),
-        undefined,
+      return typeMismatch(
+        binding.where,
+        binding.name,
+        typeof cell.value,
+        typeof value,
       );
-      if (typeof failure === "object") return failure;
     }
     if (cell !== undefined && !lenient) cell.value = value;
   } else {

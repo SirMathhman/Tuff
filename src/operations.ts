@@ -45,23 +45,6 @@ function apply(left: number, op: Operator, right: number): Value {
 }
 
 /**
- * Handles a value error. In an unchosen branch the error is not reported, and the
- * fallback stands in for the value; otherwise the failure is returned.
- *
- * @param lenient - whether the operation is in an unchosen branch.
- * @param failure - the value error that would be reported.
- * @param fallback - the value used in place of the error when lenient.
- * @returns the fallback when lenient, or the failure.
- */
-export function valueError<T extends Value | undefined>(
-  lenient: boolean,
-  failure: Failure<TuffError>,
-  fallback: T,
-): Failure<TuffError> | T {
-  return lenient ? fallback : failure;
-}
-
-/**
  * Applies a sign to a value. Only numbers take a sign, so a negative sign on a boolean
  * is an error, even in an unchosen branch.
  *

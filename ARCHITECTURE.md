@@ -18,7 +18,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Value errors there (non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, reference misuse, division by zero, boolean operands, signs on booleans) are reported.
+The unchosen branch of an `if` is parsed for syntax only. Every error there is reported, and assignments have no effect.
 
 ### Results and errors
 
@@ -79,7 +79,7 @@ Every parse step mutates one `ParserState`, so any step can touch any field.
 
 ### Lenient flag threading
 
-A `lenient` flag reaches only the two `valueError` sites: the condition check in `startBranch` and the assignment check in `closeBinding`. Other errors ignore it, so the value/static line follows call sites, not error kinds.
+A `lenient` flag only guards writes: the assignment in `closeBinding` and the skip counter. No error depends on it.
 
 ### Cell kinds
 
@@ -124,10 +124,6 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 ### Parse tree
 
 Build an AST in a parse module, then evaluate it separately. Lenient branches become an evaluator concern.
-
-### Error classes
-
-Value errors (non-boolean conditions, assignment type mismatches) use `valueError`. Target: report them in unchosen branches, delete `valueError`, and let the lenient flag suppress only writes.
 
 ### Numbers and output
 

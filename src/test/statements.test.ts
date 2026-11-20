@@ -393,6 +393,32 @@ test('interpretTuff("if (true) 1 else { -true }") => error', () => {
   });
 });
 
+test('interpretTuff("if (true) 1 else if (1) 2 else 3") => error', () => {
+  expect(interpretTuff("if (true) 1 else if (1) 2 else 3")).toEqual({
+    ok: false,
+    error: {
+      what: "The condition of 'if' must be a boolean",
+      where: 22,
+      why: "Only a boolean can choose a branch; a number has no truth value.",
+      fix: "Use a comparison such as 'x < 5', or a boolean value.",
+    },
+  });
+});
+
+test('interpretTuff("let mut x = 1; if (true) 1 else { x = true; 2 }") => error', () => {
+  expect(
+    interpretTuff("let mut x = 1; if (true) 1 else { x = true; 2 }"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign a boolean to 'x', which holds a number",
+      where: 34,
+      why: "A variable keeps the type of the value it holds.",
+      fix: "Assign a value of the same type, or declare a new variable.",
+    },
+  });
+});
+
 test('interpretTuff("if (true) 2 else (true + 1)") => error', () => {
   expect(interpretTuff("if (true) 2 else (true + 1)")).toEqual({
     ok: false,
