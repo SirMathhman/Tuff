@@ -66,3 +66,17 @@ test('interpretTuff("let z = 1; let x = { &z }; *x + 1") => 2', () => {
     value: 2,
   });
 });
+
+test('interpretTuff("let mut x = 0; let y = &mut x; let z = &mut x;") => error', () => {
+  expect(
+    interpretTuff("let mut x = 0; let y = &mut x; let z = &mut x;"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "'x' is already referenced in a way that conflicts with this reference",
+      where: 44,
+      why: "A '&mut' reference cannot coexist with any other reference to the same variable.",
+      fix: "End the other reference's block, or use '&' for both references.",
+    },
+  });
+});
