@@ -10,6 +10,8 @@ export enum NodeKind {
   Chain = "Chain",
   /** A block: statements followed by a final expression. */
   Block = "Block",
+  /** A boolean literal, `true` or `false`. */
+  Boolean = "Boolean",
 }
 
 /** The kinds of statement that may appear in a block. */
@@ -38,6 +40,16 @@ export interface LiteralNode {
   kind: NodeKind.Literal;
   /** The literal's value. */
   value: number;
+  /** Where the literal sits in the source. */
+  span: Span;
+}
+
+/** A boolean literal. */
+export interface BooleanNode {
+  /** Always `NodeKind.Boolean`. */
+  kind: NodeKind.Boolean;
+  /** The literal's value. */
+  value: boolean;
   /** Where the literal sits in the source. */
   span: Span;
 }
@@ -110,4 +122,4 @@ export interface BlockNode {
 }
 
 /** Any expression node. */
-export type Expr = LiteralNode | NameNode | ChainNode | BlockNode;
+export type Expr = LiteralNode | BooleanNode | NameNode | ChainNode | BlockNode;

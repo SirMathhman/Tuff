@@ -4,6 +4,7 @@ import {
   StatementKind,
   type AssignStatement,
   type BlockNode,
+  type BooleanNode,
   type ChainNode,
   type ChainStep,
   type Expr,
@@ -31,6 +32,7 @@ type Step<T> = Result<Parsed<T>, TuffError>;
 type Parser = (input: Input, pos: number, depth: number) => Step<Expr>;
 
 const MAX_NESTING_DEPTH = 256;
+const RESERVED = new Set<string>(["let", "mut", "true", "false"]);
 const ADDITIVE = new Map<string, Operator>([
   ["+", Operator.Add],
   ["-", Operator.Subtract],
@@ -41,7 +43,7 @@ const MULTIPLICATIVE = new Map<string, Operator>([
 ]);
 
 function isName(text: string): boolean {
-  return /^[A-Za-z]+$/.test(text) && text !== "let" && text !== "mut";
+  return /^[A-Za-z]+$/.test(text) && !RESERVED.has(text);
 }
 
 function parseLet(input: Input, pos: number, depth: number, names: Set<string>, parseExpr: Parser): Step<LetStatement> {
@@ -150,6 +152,10 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
   }
   if (/^\d+$/.test(token.text)) {
     const literal: LiteralNode = { kind: NodeKind.Literal, value: Number(token.text), span: token.span };
+    return ok({ value: literal, next: pos + 1 });
+  }
+  if (token.text === "true" || token.text === "false") {
+    const literal: BooleanNode = { kind: NodeKind.Boolean, value: token.text === "true", span: token.span };
     return ok({ value: literal, next: pos + 1 });
   }
   if (isName(token.text)) {

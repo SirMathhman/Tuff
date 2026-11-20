@@ -24,6 +24,8 @@ export enum TuffErrorKind {
   InternalError = "InternalError",
   /** An assignment targets a name that was declared with `let`, not `let mut`. */
   ImmutableAssignment = "ImmutableAssignment",
+  /** A boolean was used as an operand of an arithmetic operator. */
+  BooleanOperand = "BooleanOperand",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -46,7 +48,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.UnknownName>
   | TuffErrorOf<TuffErrorKind.DuplicateName>
   | TuffErrorOf<TuffErrorKind.InternalError>
-  | TuffErrorOf<TuffErrorKind.ImmutableAssignment>;
+  | TuffErrorOf<TuffErrorKind.ImmutableAssignment>
+  | TuffErrorOf<TuffErrorKind.BooleanOperand>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -125,6 +128,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Assignment to an immutable binding",
     why: "This name was declared with let, so its value cannot change after it is bound.",
     fix: "Declare the binding with let mut, or bind a new name with let for the new value.",
+  },
+  [TuffErrorKind.BooleanOperand]: {
+    what: "Boolean used as a number",
+    why: "Arithmetic operators accept only numbers. true and false are booleans, not numbers.",
+    fix: "Replace the boolean operand with a number.",
   },
 };
 

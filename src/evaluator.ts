@@ -12,7 +12,10 @@ import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { NameRefs } from "./scope.ts";
 
-type OperatorError = TuffErrorKind.DivisionByZero | TuffErrorKind.NumericOverflow;
+/** A runtime value: a number, or a boolean. */
+type Value = number | boolean;
+
+type OperatorError = TuffErrorKind.DivisionByZero | TuffErrorKind.NumericOverflow | TuffErrorKind.BooleanOperand;
 type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
 
 /** The state of one evaluation: the resolver's name bindings and the values of the open blocks. */
@@ -20,7 +23,7 @@ interface Env {
   /** The binding of every name use, from the resolver. */
   refs: NameRefs;
   /** Values of the open blocks, outermost first; each block's values are in binding order. */
-  frames: number[][];
+  frames: Value[][];
 }
 
 function finite(n: number): Result<number, TuffErrorKind.NumericOverflow> {
@@ -35,23 +38,41 @@ const OPERATORS: Record<Operator, BinaryOp> = {
 };
 
 /**
+ * Applies an arithmetic operator. Both operands must be numbers.
+ *
+ * @param operator - The operator to apply.
+ * @param a - The left operand.
+ * @param b - The right operand.
+ * @returns The result, or an error if an operand is a boolean or the arithmetic fails.
+ */
+function applyOperator(operator: Operator, a: Value, b: Value): Result<number, OperatorError> {
+  if (typeof a !== "number" || typeof b !== "number") return err(TuffErrorKind.BooleanOperand);
+  return OPERATORS[operator](a, b);
+}
+
+/**
  * Folds the AST to a value. Every name was bound by resolver.ts before this runs.
  *
  * @param expr - The expression to evaluate.
  * @param refs - The binding of every name use, from `resolve`.
- * @returns The computed number, or an arithmetic error at the operator that caused it.
+ * @returns The computed number (a boolean result is 1 for `true` and 0 for `false`), or an error at the operator that caused it.
  */
 export function evaluate(expr: Expr, refs: NameRefs): Result<number, TuffError> {
-  return evaluateIn(expr, { refs, frames: [] });
+  const result = evaluateIn(expr, { refs, frames: [] });
+  if (!result.ok) return result;
+  if (typeof result.value === "number") return ok(result.value);
+  return ok(result.value ? 1 : 0);
 }
 
-function evaluateIn(expr: Expr, env: Env): Result<number, TuffError> {
+function evaluateIn(expr: Expr, env: Env): Result<Value, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal: {
       const checked = finite(expr.value);
       if (!checked.ok) return err({ kind: checked.error, span: expr.span });
       return ok(checked.value);
     }
+    case NodeKind.Boolean:
+      return ok(expr.value);
     case NodeKind.Name:
       return evaluateName(expr, env);
     case NodeKind.Chain:
@@ -61,7 +82,7 @@ function evaluateIn(expr: Expr, env: Env): Result<number, TuffError> {
   }
 }
 
-function evaluateName(name: NameNode, env: Env): Result<number, TuffError> {
+function evaluateName(name: NameNode, env: Env): Result<Value, TuffError> {
   const ref = env.refs.get(name);
   const frame = ref === undefined ? undefined : env.frames[env.frames.length - 1 - ref.depth];
   const value = ref === undefined ? undefined : frame?.[ref.index];
@@ -70,29 +91,29 @@ function evaluateName(name: NameNode, env: Env): Result<number, TuffError> {
   return ok(value);
 }
 
-function evaluateChain(chain: ChainNode, env: Env): Result<number, TuffError> {
+function evaluateChain(chain: ChainNode, env: Env): Result<Value, TuffError> {
   const first = evaluateIn(chain.first, env);
   if (!first.ok) return first;
   let value = first.value;
   for (const step of chain.steps) {
     const right = evaluateIn(step.operand, env);
     if (!right.ok) return right;
-    const applied = OPERATORS[step.operator](value, right.value);
+    const applied = applyOperator(step.operator, value, right.value);
     if (!applied.ok) return err({ kind: applied.error, span: step.operatorSpan });
     value = applied.value;
   }
   return ok(value);
 }
 
-function evaluateBlock(block: BlockNode, env: Env): Result<number, TuffError> {
-  const frame: number[] = [];
+function evaluateBlock(block: BlockNode, env: Env): Result<Value, TuffError> {
+  const frame: Value[] = [];
   env.frames.push(frame);
   const result = evaluateBlockBody(block, env, frame);
   env.frames.pop();
   return result;
 }
 
-function evaluateBlockBody(block: BlockNode, env: Env, frame: number[]): Result<number, TuffError> {
+function evaluateBlockBody(block: BlockNode, env: Env, frame: Value[]): Result<Value, TuffError> {
   for (const statement of block.statements) {
     if (statement.kind === StatementKind.Let) {
       const value = evaluateIn(statement.value, env);

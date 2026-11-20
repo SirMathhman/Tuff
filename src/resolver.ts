@@ -21,6 +21,7 @@ export function resolve(program: BlockNode): Result<NameRefs, TuffError> {
 function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:
+    case NodeKind.Boolean:
       return ok(undefined);
     case NodeKind.Name: {
       const found = findName(blocks, expr.name);
