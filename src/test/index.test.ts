@@ -357,3 +357,10 @@ test('interpretTuff("let mut counter = 0; fn increment() => { counter += 1; } in
     ),
   ).toEqual({ ok: true, value: 1 });
 });
+
+test('interpretTuff("fn a() => b(); fn b() => 1; a()") => 1', () => {
+  expect(interpretTuff("fn a() => b(); fn b() => 1; a()")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

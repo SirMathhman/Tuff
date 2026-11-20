@@ -690,6 +690,21 @@ export function notAFunction(where: number, name: string): Failure<TuffError> {
 }
 
 /**
+ * Reports a program that runs more parse steps than the limit allows.
+ *
+ * @param where - the offset where the limit was reached.
+ * @returns a failure describing the excess work.
+ */
+export function tooMuchWork(where: number): Failure<TuffError> {
+  return fail(
+    "Program does too much work",
+    where,
+    "Calls to earlier functions repeat the work of their bodies, so the work can grow very large.",
+    "Remove repeated calls to earlier functions.",
+  );
+}
+
+/**
  * Reports calls nested too deeply, which happens when a function calls itself without end.
  *
  * @param where - the offset of the call that exceeded the limit.

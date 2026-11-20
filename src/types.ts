@@ -175,8 +175,54 @@ export interface FuncDef {
   start: number;
   /** Offset of the ';' that ends the body. */
   end: number;
-  /** The scopes visible at the declaration, innermost last. */
+  /** The scopes visible at the declaration, innermost last, as they were then. */
   scopes: Scope[];
+  /** The same scopes, live, so functions declared later in them are found. */
+  live: Scope[];
+  /** The order in which the function was declared. */
+  seq: number;
+}
+
+/**
+ * The saved parser flags of a caller, restored when a check or call finishes.
+ */
+export interface Resume {
+  /** Whether the next token must be an operand. */
+  expectOperand: boolean;
+  /** Whether the parser was at a statement start. */
+  atStatementStart: boolean;
+  /** Whether the last item was a statement. */
+  lastStatementEnded: boolean;
+  /** Whether the last statement was an assignment. */
+  lastAssign: boolean;
+  /** Whether the last top-level statement was a let or assignment. */
+  afterLet: boolean;
+}
+
+/**
+ * A function body whose check waits until its block ends.
+ */
+export interface PendingCheck {
+  /** The scope stack the function was declared in. */
+  owner: Scope[];
+  /** The depth of that stack at the declaration. */
+  depth: number;
+  /** The function to check. */
+  func: FuncDef;
+  /** Offset of the function's name. */
+  where: number;
+}
+
+/**
+ * What a call entry stands for: an expression, a statement, or a deferred check.
+ */
+export enum CallMode {
+  /** A call used as a value. */
+  Expression = "expression",
+  /** A call that starts a statement, so a following ';' discards its value. */
+  Statement = "statement",
+  /** A deferred check of a declaration's body, whose value is discarded. */
+  Check = "check",
 }
 
 /**
@@ -197,10 +243,12 @@ export interface CallEntry {
   scopes: Scope[];
   /** The caller's bracket depth, restored when the call finishes. */
   depth: number;
-  /** Whether this checks a declaration's body (its value is discarded) rather than a call. */
-  check: boolean;
-  /** Whether the call starts a statement, so a following ';' discards its value. */
-  statement: boolean;
+  /** The value-stack height when the call started; the body's value sits above it. */
+  base: number;
+  /** What this entry stands for. */
+  mode: CallMode;
+  /** The caller's flags, restored when a check or call finishes. */
+  resume: Resume;
 }
 
 /**
@@ -242,4 +290,16 @@ export interface ParserState {
   expectOperand: boolean;
   /** Statement-level flags. */
   flags: StatementFlags;
+  /** Function declarations so far, and the checks still waiting for their block to end. */
+  functions: FunctionRegistry;
+}
+
+/**
+ * Function declarations seen so far, and the checks not yet run.
+ */
+export interface FunctionRegistry {
+  /** How many functions have been declared. */
+  declared: number;
+  /** Function bodies whose checks wait for their block to end. */
+  pending: PendingCheck[];
 }

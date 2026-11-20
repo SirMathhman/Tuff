@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()` (a call), a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function, checked at declaration (lenient) and parsed at each call in its declaration's scopes. A braced body needs no `;`; if it ends in an assignment, the call is 0. A statement-start call may end with `;`, discarding its value. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()` (a call), a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes, and the body is checked (lenient) when its block ends, then parsed at each call. A braced body needs no `;`; if it ends in an assignment, the call is 0. A statement-start call may end with `;`, discarding its value. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest and cannot be chained.
 
 ### Statements and scope
 
@@ -42,7 +42,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Implementation
 
-`interpretTuff` is a single loop with explicit stacks and no recursion.
+`interpretTuff` is a single loop with explicit stacks and no recursion. Each step first runs `finishCalls`, which completes every finished call, so a return lands at once.
 
 #### Stacks
 
@@ -66,13 +66,9 @@ Functions are capped at 100 lines, files at 500, and names need two characters. 
 
 Every parse step mutates one `ParserState`, so any step can touch any field.
 
-### Call completion
-
-`finishCall` runs once per loop step, so a call returning onto the end of an outer body is seen a step late: `fn a() => 1; fn b() => a(); b()` fails with a stray ';'.
-
 ### Call fan-out
 
-Depth is capped at 100, but total work is not. A body calling an earlier function twice doubles the work per level, so `n` levels cost about 2^n body parses.
+Depth is capped at 100, but total work is not. A body calling an earlier function twice doubles the work per level, so `n` levels cost about 2^n body parses (22 levels take about 13 s).
 
 ### Failure detection
 
@@ -94,7 +90,7 @@ A live `&mut` blocks reads and writes of its owner; any live reference blocks wr
 
 ### Controls
 
-Explicit stacks mean nesting costs memory, not JavaScript frames; open calls are capped at 100. Future I/O goes behind a capability parameter.
+Explicit stacks mean nesting costs memory, not JavaScript frames; open calls are capped at 100, and a program takes at most 200,000 steps. Future I/O goes behind a capability parameter.
 
 ### Gaps
 

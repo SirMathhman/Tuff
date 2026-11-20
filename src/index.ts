@@ -1,10 +1,14 @@
 import type { Result, TuffError } from "./errors";
+import { tooMuchWork } from "./errors";
 import { reduceOperators } from "./operations";
 import type { ParserState } from "./types";
 import { Step } from "./types";
 import { stepOperand } from "./parse/operands";
 import { stepOperator } from "./parse/operators";
-import { finishCalls } from "./parse/calls";
+import { finishCalls, startDeferredCheck } from "./parse/calls";
+
+// The most parse steps one program may take, so that repeated calls cannot run forever.
+const MAX_STEPS = 200000;
 
 /**
  * Evaluates a Tuff program: `let NAME = value;` statements followed by an
@@ -29,6 +33,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     depth: 0,
     skipDepth: 0,
     expectOperand: true,
+    functions: { declared: 0, pending: [] },
     flags: {
       atStatementStart: true,
       afterLet: false,
@@ -36,9 +41,13 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       lastAssign: false,
     },
   };
+  let steps = 0;
   for (;;) {
+    steps++;
+    if (steps > MAX_STEPS) return tooMuchWork(state.pos);
     const failure = finishCalls(state);
     if (failure !== undefined) return failure;
+    if (startDeferredCheck(state)) continue;
     const outcome = state.expectOperand
       ? stepOperand(state)
       : stepOperator(state);
