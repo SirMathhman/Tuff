@@ -1,6 +1,8 @@
 export interface TuffError {
-  kind: "InvalidSyntax";
-  source: string;
+  what: string;
+  where: number;
+  why: string;
+  fix: string;
 }
 
 export interface Success<T> {
@@ -23,37 +25,67 @@ function isSpace(c: string): boolean {
   return c.length === 1 && c.trim() === "";
 }
 
-// Grammar: [sign] digits ( ws* ("+" | "-") ws* [sign] digits )*, where a sign
-// must touch its digits and the whole source is trimmed first.
-export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  const s = tuffSource.trim();
-  const invalid: Failure<TuffError> = {
+function skipSpaces(source: string, pos: number): number {
+  let i = pos;
+  while (isSpace(source.charAt(i))) i++;
+  return i;
+}
+
+function describe(c: string): string {
+  if (c === "") return "the end of the input";
+  if (isSpace(c)) return "whitespace";
+  return `'${c}'`;
+}
+
+function expectedNumber(source: string, where: number): Failure<TuffError> {
+  return {
     ok: false,
-    error: { kind: "InvalidSyntax", source: tuffSource },
+    error: {
+      what: `Expected a number but found ${describe(source.charAt(where))}`,
+      where,
+      why: "Every '+' or '-' must be followed by an integer, and an expression must start with one.",
+      fix: "Put an integer at this position, or remove the operator before it.",
+    },
   };
-  let pos = 0;
+}
+
+function expectedOperator(source: string, where: number): Failure<TuffError> {
+  return {
+    ok: false,
+    error: {
+      what: `Expected '+' or '-' but found ${describe(source.charAt(where))}`,
+      where,
+      why: "Two numbers can only be combined with '+' or '-'; any other character cannot follow a number.",
+      fix: "Insert '+' or '-' between the numbers, or remove the extra character.",
+    },
+  };
+}
+
+// Grammar: [sign] digits ( ws* ("+" | "-") ws* [sign] digits )*, where a sign
+// must touch its digits. Offsets in errors refer to the unmodified source.
+export function interpretTuff(tuffSource: string): Result<number, TuffError> {
+  let pos = skipSpaces(tuffSource, 0);
   let total = 0;
   let termSign = 1; // sign from the binary operator before the next term
   for (;;) {
     let sign = termSign;
-    const c = s.charAt(pos);
+    const c = tuffSource.charAt(pos);
     if (c === "+" || c === "-") {
       if (c === "-") sign = -sign;
       pos++;
     }
 
     const start = pos;
-    while (isDigit(s.charAt(pos))) pos++;
-    if (pos === start) return invalid;
-    total += sign * parseInt(s.slice(start, pos), 10);
+    while (isDigit(tuffSource.charAt(pos))) pos++;
+    if (pos === start) return expectedNumber(tuffSource, pos);
+    total += sign * parseInt(tuffSource.slice(start, pos), 10);
 
-    while (isSpace(s.charAt(pos))) pos++;
-    if (pos === s.length) return { ok: true, value: total };
+    pos = skipSpaces(tuffSource, pos);
+    if (pos === tuffSource.length) return { ok: true, value: total };
 
-    const op = s.charAt(pos);
-    if (op !== "+" && op !== "-") return invalid;
+    const op = tuffSource.charAt(pos);
+    if (op !== "+" && op !== "-") return expectedOperator(tuffSource, pos);
     termSign = op === "-" ? -1 : 1;
-    pos++;
-    while (isSpace(s.charAt(pos))) pos++;
+    pos = skipSpaces(tuffSource, pos + 1);
   }
 }
