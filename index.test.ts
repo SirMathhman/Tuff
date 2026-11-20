@@ -84,6 +84,10 @@ test('interpretTuff("2 * 3 + 4") => 10', () => {
   expect(interpretTuff("2 * 3 + 4")).toEqual({ ok: true, value: 10 });
 });
 
+test('interpretTuff("2 + 3 * 4") => 14', () => {
+  expect(interpretTuff("2 + 3 * 4")).toEqual({ ok: true, value: 14 });
+});
+
 test('interpretTuff("1 - -2") => 3', () => {
   expect(interpretTuff("1 - -2")).toEqual({ ok: true, value: 3 });
 });
