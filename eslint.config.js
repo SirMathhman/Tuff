@@ -15,6 +15,7 @@ export default tseslint.config(
       "no-implied-eval": "error",
       "no-new-func": "error",
       "no-nested-ternary": "error",
+      "id-length": ["error", { min: 2 }],
       "max-lines": ["error", { max: 1000, skipComments: true, skipBlankLines: true }],
       "no-restricted-syntax": [
         "error",
@@ -30,6 +31,11 @@ export default tseslint.config(
           selector:
             "Program > :matches(FunctionDeclaration, ExportNamedDeclaration:has(> FunctionDeclaration)) ~ :matches(TSInterfaceDeclaration, TSTypeAliasDeclaration, ExportNamedDeclaration:has(> TSInterfaceDeclaration), ExportNamedDeclaration:has(> TSTypeAliasDeclaration))",
           message: "Declare types and interfaces above the functions that use them.",
+        },
+        {
+          selector:
+            ":matches(FunctionDeclaration, FunctionExpression, ArrowFunctionExpression) > Identifier > TSTypeAnnotation > TSUnionType > TSUndefinedKeyword",
+          message: "Do not use | undefined in parameter types; make the parameter optional or pass a value.",
         },
         {
           selector: "TSInterfaceBody > TSPropertySignature:has(TSUndefinedKeyword)",

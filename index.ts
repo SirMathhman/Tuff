@@ -320,11 +320,11 @@ function parseTerm(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
 function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
-  const c = peek(text, cursor);
-  if (c === "{") {
+  const next = peek(text, cursor);
+  if (next === "{") {
     return parseBlock(text, cursor);
   }
-  if (c === "(") {
+  if (next === "(") {
     cursor.pos++;
     const inner = parseExpression(text, cursor);
     if (!inner.ok) {
@@ -336,10 +336,10 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     cursor.pos++;
     return inner;
   }
-  if (c === "&") {
+  if (next === "&") {
     return parseReference(text, cursor);
   }
-  if (c === "*") {
+  if (next === "*") {
     return parseDereference(text, cursor);
   }
   const name = peekName(text, cursor);
@@ -358,7 +358,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     }
     return ok(binding.value);
   }
-  if (!/\d/.test(c)) {
+  if (!/\d/.test(next)) {
     return err({ offset: cursor.pos, expected: `a number, a variable, "(" or "{"` });
   }
   const start = cursor.pos;
@@ -498,19 +498,19 @@ function isDereferenceAssignment(text: string, start: number): boolean {
     return false;
   }
   let depth = 0;
-  for (let i = start + 1; i < text.length; i++) {
-    const c = text.charAt(i);
-    if (c === "(" || c === "{") {
+  for (let index = start + 1; index < text.length; index++) {
+    const character = text.charAt(index);
+    if (character === "(" || character === "{") {
       depth++;
-    } else if (c === ")" || c === "}") {
+    } else if (character === ")" || character === "}") {
       if (depth === 0) {
         return false;
       }
       depth--;
-    } else if (depth === 0 && c === ";") {
+    } else if (depth === 0 && character === ";") {
       return false;
-    } else if (depth === 0 && c === "=") {
-      return text.charAt(i + 1) !== "=";
+    } else if (depth === 0 && character === "=") {
+      return text.charAt(index + 1) !== "=";
     }
   }
   return false;
@@ -1120,9 +1120,9 @@ function peekName(text: string, cursor: Cursor): string {
  * @param name - The variable name to look up.
  * @returns The binding of the nearest declaration of the name, or undefined if none is in scope.
  */
-function lookup(scope: Scope | undefined, name: string): Binding | undefined {
-  for (let s = scope; s !== undefined; s = s.parent) {
-    const binding = s.vars.get(name);
+function lookup(scope: Scope, name: string): Binding | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const binding = current.vars.get(name);
     if (binding !== undefined) {
       return binding;
     }
@@ -1186,8 +1186,8 @@ function describeUnsupported(tuffSource: string, problem: Problem): string {
 function locate(text: string, offset: number): Location {
   let line = 1;
   let column = 1;
-  for (let i = 0; i < offset && i < text.length; i++) {
-    if (text.charAt(i) === "\n") {
+  for (let index = 0; index < offset && index < text.length; index++) {
+    if (text.charAt(index) === "\n") {
       line++;
       column = 1;
     } else {
