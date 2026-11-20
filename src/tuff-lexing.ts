@@ -157,10 +157,7 @@ export function peekCompoundOperator(text: string, cursor: Position, name: strin
  */
 export function describeUnsupported(tuffSource: string, problem: Problem): string {
   const { line, column } = locate(tuffSource, problem.offset);
-  const found =
-    problem.offset < tuffSource.length
-      ? `"${tuffSource.charAt(problem.offset)}"`
-      : "end of input";
+  const found = problem.offset < tuffSource.length ? `"${tuffSource.charAt(problem.offset)}"` : "end of input";
   return (
     `What: unsupported Tuff source. ` +
     `Where: line ${line}, column ${column}, found ${found} where ${problem.expected} was expected. ` +
@@ -199,7 +196,11 @@ export function locate(text: string, offset: number): Location {
  * @param isTarget - Returns true for the character sought.
  * @returns The offset of the first match, or -1.
  */
-export function findTopLevel(text: string, start: number, isTarget: (character: string, index: number) => boolean): number {
+export function findTopLevel(
+  text: string,
+  start: number,
+  isTarget: (character: string, index: number) => boolean,
+): number {
   let depth = 0;
   for (let index = start; index < text.length; index++) {
     const character = text.charAt(index);
@@ -217,4 +218,3 @@ export function findTopLevel(text: string, start: number, isTarget: (character: 
   }
   return -1;
 }
-

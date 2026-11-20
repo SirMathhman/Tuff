@@ -5,12 +5,15 @@
   "private": true,
   "scripts": {
     "lint": "eslint . && npm run cpd",
-    "cpd": "tsc -p tsconfig.cpd.json && pmd cpd --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals --dir node_modules/.cpd"
+    "cpd": "tsc -p tsconfig.cpd.json && pmd cpd --language ecmascript --minimum-tokens 50 --ignore-identifiers --ignore-literals --dir node_modules/.cpd",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/bun": "latest",
     "eslint": "^10.15.0",
     "eslint-plugin-jsdoc": "^65.5.0",
+    "prettier": "^3.10.1",
     "ts-morph": "^28.0.0",
     "typescript-eslint": "^8.73.0"
   },

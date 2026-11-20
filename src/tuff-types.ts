@@ -55,19 +55,19 @@ export interface Scope {
    * Nesting depth of this scope; the program's scope is 0.
    */
   readonly depth: number;
-    /** Functions declared directly in this scope. */
-    readonly functions: Map<string, FunctionDef>;
+  /** Functions declared directly in this scope. */
+  readonly functions: Map<string, FunctionDef>;
 }
 /** A function declared with "fn". Its body is re-parsed from text on each call. */
 export interface FunctionDef {
-    /** Parameter names, in order. */
-    readonly paramNames: readonly string[];
-    /** Offset where the body expression starts. */
-    readonly bodyStart: number;
-    /** Offset of the ";" that ends the body. */
-    readonly bodyEnd: number;
-    /** The scope the function was declared in. */
-    readonly scope: Scope;
+  /** Parameter names, in order. */
+  readonly paramNames: readonly string[];
+  /** Offset where the body expression starts. */
+  readonly bodyStart: number;
+  /** Offset of the ";" that ends the body. */
+  readonly bodyEnd: number;
+  /** The scope the function was declared in. */
+  readonly scope: Scope;
 }
 /**
  * Mutable read position shared by the parsing functions.
@@ -93,8 +93,8 @@ export interface Cursor {
    * Set when a "break" has run in the current loop iteration; later statements then take no effect.
    */
   exit?: LoopExit;
-    /** Number of function calls currently being evaluated. */
-    callDepth: number;
+  /** Number of function calls currently being evaluated. */
+  callDepth: number;
 }
 /**
  * The value a "break" produced, which ends the enclosing loop.

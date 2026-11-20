@@ -56,7 +56,7 @@ export function newScope(parent?: Scope): Scope {
  * @returns The offset of the ending ";", or -1.
  */
 export function findFunctionBodyEnd(text: string, start: number): number {
-    return findTopLevel(text, start, (character) => character === ";");
+  return findTopLevel(text, start, (character) => character === ";");
 }
 /**
  * Reports whether a value is a reference to a variable declared deeper than the given depth,

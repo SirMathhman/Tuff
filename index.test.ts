@@ -232,7 +232,10 @@ test("interpretTuff: for loop with a single-statement body", () => {
 });
 
 test("interpretTuff: for loop body that never runs", () => {
-  expect(interpretTuff("let mut s = 0; for (let mut i = 5; i < 3; i += 1; ) s += 1; s")).toEqual({ ok: true, value: 0 });
+  expect(interpretTuff("let mut s = 0; for (let mut i = 5; i < 3; i += 1; ) s += 1; s")).toEqual({
+    ok: true,
+    value: 0,
+  });
 });
 
 test("interpretTuff rejects a for loop variable used after the loop", () => {
@@ -299,7 +302,9 @@ test("interpretTuff: match picks the first equal case", () => {
 });
 
 test("interpretTuff: match runs only the chosen arm's effects", () => {
-  expect(interpretTuff("let mut x = 0; let y = match (2) { case 1 => { x = 5; 1 }; case 2 => { x = 9; 2 }; }; x")).toEqual({
+  expect(
+    interpretTuff("let mut x = 0; let y = match (2) { case 1 => { x = 5; 1 }; case 2 => { x = 9; 2 }; }; x"),
+  ).toEqual({
     ok: true,
     value: 9,
   });
@@ -369,7 +374,9 @@ test("interpretTuff('1 +') reports what, where, why, and the fix", () => {
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.error).toContain("What: unsupported Tuff source");
-  expect(result.error).toContain('Where: line 1, column 4, found end of input where a number, a variable, "(" or "{" was expected');
+  expect(result.error).toContain(
+    'Where: line 1, column 4, found end of input where a number, a variable, "(" or "{" was expected',
+  );
   expect(result.error).toContain("Why: ");
   expect(result.error).toContain('Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3"');
 });
@@ -385,5 +392,7 @@ test("interpretTuff('1 x 2') points at the offending character", () => {
   const result = interpretTuff("1 x 2");
   expect(result.ok).toBe(false);
   if (result.ok) return;
-  expect(result.error).toContain('Where: line 1, column 3, found "x" where "+", "-", "*", "==" or end of input was expected');
+  expect(result.error).toContain(
+    'Where: line 1, column 3, found "x" where "+", "-", "*", "==" or end of input was expected',
+  );
 });

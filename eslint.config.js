@@ -59,7 +59,13 @@ export default tseslint.config(
         {
           publicOnly: true,
           require: { FunctionDeclaration: true },
-          contexts: ["TSInterfaceDeclaration", "TSTypeAliasDeclaration", "TSEnumDeclaration", "TSPropertySignature", "TSEnumMember"],
+          contexts: [
+            "TSInterfaceDeclaration",
+            "TSTypeAliasDeclaration",
+            "TSEnumDeclaration",
+            "TSPropertySignature",
+            "TSEnumMember",
+          ],
         },
       ],
       "jsdoc/require-param": "error",

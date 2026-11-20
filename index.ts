@@ -1,7 +1,34 @@
 import { err, ok, type Result } from "./src/result";
-import { describeUnsupported, peek, peekName, peekStart, peekOperator, peekAfterName, peekCompoundOperator, skipSpaces, type Problem, findTopLevel } from "./src/tuff-lexing";
-import { type Value, type Binding, type FunctionDef, type Cursor, type NamedVariable, type StatementStep } from "./src/tuff-types";
-import { lookup, lookupFunction, newScope, findFunctionBodyEnd, escapes, kindOf, isSuppressed, takeExit } from "./src/tuff-scope";
+import {
+  describeUnsupported,
+  peek,
+  peekName,
+  peekStart,
+  peekOperator,
+  peekAfterName,
+  peekCompoundOperator,
+  skipSpaces,
+  type Problem,
+  findTopLevel,
+} from "./src/tuff-lexing";
+import {
+  type Value,
+  type Binding,
+  type FunctionDef,
+  type Cursor,
+  type NamedVariable,
+  type StatementStep,
+} from "./src/tuff-types";
+import {
+  lookup,
+  lookupFunction,
+  newScope,
+  findFunctionBodyEnd,
+  escapes,
+  kindOf,
+  isSuppressed,
+  takeExit,
+} from "./src/tuff-scope";
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -21,8 +48,8 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "for",
   "loop",
   "break",
-        "fn"
-    ]);
+  "fn",
+]);
 
 /**
  * Message for a value that would make a reference outlive the variable it points to.
@@ -83,8 +110,8 @@ function parseProgram(text: string): Result<number | boolean, Problem> {
     scope: newScope(undefined),
     dead: false,
     breakable: false,
-      callDepth: 0
-};
+    callDepth: 0,
+  };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -234,15 +261,15 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       return parseMatch(text, cursor, start);
     }
     if (name === "loop") {
-            return parseLoop(text, cursor, start);
-          }
-        if (peek(text, cursor) === "(") {
-          const fn = lookupFunction(cursor.scope, name);
-          if (fn === undefined) {
-            return err({ offset: start, expected: `a function in scope (no "${name}" is defined)` });
-          }
-          return parseCall(text, cursor, name, start, fn);
-        }
+      return parseLoop(text, cursor, start);
+    }
+    if (peek(text, cursor) === "(") {
+      const fn = lookupFunction(cursor.scope, name);
+      if (fn === undefined) {
+        return err({ offset: start, expected: `a function in scope (no "${name}" is defined)` });
+      }
+      return parseCall(text, cursor, name, start, fn);
+    }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
@@ -372,14 +399,17 @@ function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns True if the statement is "*target = ...".
  */
 function isDereferenceAssignment(text: string, start: number): boolean {
-    if (text.charAt(start) !== "*") {
-      return false;
-    }
-    const end = findTopLevel(text, start + 1, (character, position) =>
+  if (text.charAt(start) !== "*") {
+    return false;
+  }
+  const end = findTopLevel(
+    text,
+    start + 1,
+    (character, position) =>
       character === ";" ||
-        (character === "=" && text.charAt(position + 1) !== "=" && text.charAt(position - 1) !== "="),
-    );
-    return end >= 0 && text.charAt(end) === "=";
+      (character === "=" && text.charAt(position + 1) !== "=" && text.charAt(position - 1) !== "="),
+  );
+  return end >= 0 && text.charAt(end) === "=";
 }
 
 /**
@@ -565,11 +595,11 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
     return { matched: true, problem: inBreakContext(cursor, false, () => parseFor(text, cursor)) };
   }
   if (name === "break") {
-        return { matched: true, problem: parseBreak(text, cursor) };
-      }
-      if (name === "fn" && allowDeclaration) {
-        return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
-      }
+    return { matched: true, problem: parseBreak(text, cursor) };
+  }
+  if (name === "fn" && allowDeclaration) {
+    return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
+  }
   return NOT_A_STATEMENT;
 }
 
@@ -1316,8 +1346,8 @@ function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undef
   }
   cursor.pos = bodyEnd + 1;
   const { scope } = cursor;
-      const { functions } = scope;
-      functions.set(name, { paramNames, bodyStart, bodyEnd, scope });
+  const { functions } = scope;
+  functions.set(name, { paramNames, bodyStart, bodyEnd, scope });
   return undefined;
 }
 
@@ -1351,9 +1381,9 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   }
   cursor.pos++;
   const { paramNames, scope: definingScope } = fn;
-      if (args.length !== paramNames.length) {
-        return err({ offset: start, expected: `${paramNames.length} argument(s) for "${name}"` });
-      }
+  if (args.length !== paramNames.length) {
+    return err({ offset: start, expected: `${paramNames.length} argument(s) for "${name}"` });
+  }
   if (cursor.callDepth >= MAX_CALL_DEPTH) {
     return err({ offset: start, expected: `a call nested within ${MAX_CALL_DEPTH} levels` });
   }
@@ -1361,12 +1391,12 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   const savedScope = cursor.scope;
   const callScope = newScope(definingScope);
   const { vars } = callScope;
-      args.forEach((value, index) => {
-        const paramName = paramNames[index];
-        if (paramName !== undefined) {
-          vars.set(paramName, { value, mutable: false, depth: callScope.depth });
-        }
-      });
+  args.forEach((value, index) => {
+    const paramName = paramNames[index];
+    if (paramName !== undefined) {
+      vars.set(paramName, { value, mutable: false, depth: callScope.depth });
+    }
+  });
   cursor.scope = callScope;
   cursor.pos = fn.bodyStart;
   cursor.callDepth++;
