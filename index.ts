@@ -15,6 +15,7 @@ import {
   type Value,
   type FunctionDef,
   type HostValue,
+  type ModuleLoader,
   type Cursor,
   type NamedVariable,
   type StatementStep,
@@ -38,6 +39,7 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
+import { parseExportDeclaration, parseModuleMember } from "./src/parse/imports";
 import { callHostFunction } from "./src/host";
 import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
@@ -49,14 +51,17 @@ import { parseStructDeclaration, parseStructLiteral } from "./src/parse/structs"
  * Interprets a Tuff program and returns its result.
  *
  * @param tuffSource - The Tuff source text to interpret.
+ * @param hostValues - Values and functions the host supplies, by name.
+ * @param modules - Loads imported modules by name.
  * @param hostValues - Values and functions the host supplies, by name, for "in let" and "in fn" declarations.
  * @returns An Ok result with the numeric result of the program, or an Err result describing what is wrong, where, why, and how to fix it.
  */
 export function interpretTuff(
   tuffSource: string,
   hostValues: ReadonlyMap<string, HostValue> = new Map(),
+  modules: ModuleLoader = () => undefined,
 ): Result<number, string> {
-  const result = parseProgram(tuffSource, hostValues);
+  const result = parseProgram(tuffSource, hostValues, modules);
   if (result.ok) {
     const value = result.value;
     if (typeof value === "boolean") {
@@ -96,17 +101,15 @@ export function interpretTuff(
  *
  * @param text - The source to parse.
  * @param hostValues - Values and functions the host supplies, by name.
+ * @param modules - Loads imported modules by name.
  * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
-function parseProgram(text: string, hostValues: ReadonlyMap<string, HostValue>): Result<number | boolean, Problem> {
-  const cursor: Cursor = {
-    pos: 0,
-    scope: newScope(undefined),
-    dead: false,
-    breakable: false,
-    callDepth: 0,
-    hostValues,
-  };
+function parseProgram(
+  text: string,
+  hostValues: ReadonlyMap<string, HostValue>,
+  modules: ModuleLoader,
+): Result<number | boolean, Problem> {
+  const cursor = newCursor(hostValues, modules);
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -273,6 +276,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
+      if (peek(text, cursor) === ".") {
+        return parseModuleMember(text, cursor, start, name);
+      }
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
     }
     return parsePostfix(text, cursor, start, binding.value, parseExpression);
@@ -555,6 +561,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "out" && allowDeclaration) {
+    return { matched: true, problem: parseExportDeclaration(text, cursor, parseDeclaration) };
   }
   if (name === "in" && allowDeclaration) {
     cursor.pos += "in".length;
@@ -1346,4 +1355,45 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err(resultProblem);
   }
   return ok(body.value);
+}
+
+/**
+ * Creates the parse state for a source text, with an empty scope and no exports yet.
+ *
+ * @param hostValues - Values and functions the host supplies.
+ * @param modules - Loads imported modules by name.
+ * @returns A fresh cursor at the start of the text.
+ */
+function newCursor(hostValues: ReadonlyMap<string, HostValue>, modules: ModuleLoader): Cursor {
+  return {
+    pos: 0,
+    scope: newScope(undefined),
+    dead: false,
+    breakable: false,
+    callDepth: 0,
+    hostValues,
+    modules,
+    exported: new Map(),
+  };
+}
+
+/**
+ * Interprets a module: its declarations and statements, with no final expression. Returns the
+ * values it exports with "out let".
+ *
+ * @param source - The module's source text.
+ * @param modules - Loads the modules this one imports by name.
+ * @returns An Ok result with the exported values, or an Err result describing the first problem.
+ */
+export function interpretModule(source: string, modules: ModuleLoader): Result<ReadonlyMap<string, Value>, string> {
+  const cursor = newCursor(new Map(), modules);
+  const problem = parseStatements(source, cursor);
+  if (problem !== undefined) {
+    return err(describeUnsupported(source, problem));
+  }
+  skipSpaces(source, cursor);
+  if (cursor.pos < source.length) {
+    return err(describeUnsupported(source, { offset: cursor.pos, expected: "a declaration or the end of the module" }));
+  }
+  return ok(cursor.exported);
 }

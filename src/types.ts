@@ -2,6 +2,7 @@
  * Types shared by the Tuff parser: values, bindings, scopes, and parse state.
  */
 import type { Problem } from "./parse/lexing";
+import { type Result } from "./result";
 
 /**
  * A value of a Tuff expression: a number, a boolean from "true" or "false", a reference, or an array.
@@ -151,7 +152,13 @@ export interface Cursor {
   callDepth: number;
   /** The functions the host supplies, keyed by name. */
   readonly hostValues: ReadonlyMap<string, HostValue>;
+  /** Loads an imported module by name; undefined if no module has that name. */
+  readonly modules: ModuleLoader;
+  /** The values this module exports with "out let", keyed by name. */
+  readonly exported: Map<string, Value>;
 }
+/** Finds a module by name and returns the values it exports, or an error if it fails to load. */
+export type ModuleLoader = (name: string) => Result<ReadonlyMap<string, Value>, string> | undefined;
 /**
  * The value a "break" produced, which ends the enclosing loop.
  */

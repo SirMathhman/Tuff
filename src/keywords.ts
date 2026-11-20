@@ -19,4 +19,5 @@ export const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "type",
   "struct",
   "in",
+  "out",
 ]);
