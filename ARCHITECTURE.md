@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
@@ -18,7 +18,7 @@ A block's value is its final expression, so it cannot end with a statement. A pr
 
 ### Lenient branches
 
-The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, type mismatches, signs on booleans) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, division by zero) are reported.
+The unchosen branch of an `if` is parsed for syntax only. Value errors there (boolean operands, signs on booleans, non-boolean conditions, assignment type mismatches) are suppressed, and assignments have no effect. Static errors (syntax, undefined names, non-`let mut` assignment, division by zero) are reported.
 
 ### Results and errors
 
@@ -29,22 +29,20 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 #### Arithmetic and grouping
 
 - `interpretTuff("2 + 3 * 4")` returns `{ ok: true, value: 14 }`.
-- `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
 
 #### Conditionals
 
 - `interpretTuff("if (1 < 2) 7 else x")` returns `{ ok: true, value: 7 }`.
-- `interpretTuff("if (1) 7 else 8")` returns an error at offset 5: the condition is not a boolean.
 
 #### Errors
 
 - `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, a variable, '(', or '{' but found the end of the input`.
 - `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Name 'x' is not defined`.
+- `interpretTuff("7 / 0")` returns an error at offset 2: `what` is `Division by zero`.
 
 #### Statements
 
-- `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
 - `interpretTuff("let mut x = 0; x = 1; x")` returns `{ ok: true, value: 1 }`.
 - `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression.
 
@@ -72,7 +70,7 @@ Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, cu
 
 #### Stacks
 
-A value stack holds integers and booleans. An operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes form a stack of maps, searched innermost first. A skip counter counts unchosen branches, and lenient behavior applies while it is above zero.
+The value stack holds integers and booleans. The operator stack holds pending operators, open brackets, bindings, and `if` entries. Scopes are a stack of maps, searched innermost first. A skip counter counts unchosen branches; lenient behavior applies while it is above zero.
 
 #### Precedence
 
@@ -118,15 +116,11 @@ Every parse step mutates one `ParserState`, so any step can touch any field, and
 
 ### Lenient flag threading
 
-A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors are never passed through it.
+A `lenient` flag reaches every reduction and sign call. Value errors pass through `valueError`, which drops them in unchosen branches; static errors are never passed through it. The assignment type check in `closeBinding` goes through `valueError` too.
 
 ### Numeric precision
 
-Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently. `9007199254740993 + 0` gives `9007199254740992` with `ok: true`.
-
-### Overflow and infinity
-
-The sum can exceed the double range without any `TuffError`. A 400-digit literal gives `Infinity` with `ok: true`.
+Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently: `9007199254740993 + 0` gives `9007199254740992`. Results can overflow to `Infinity` with no `TuffError`, and `1 / -2` gives `-0`, which the REPL prints.
 
 ## Security Concerns
 
@@ -140,7 +134,7 @@ Explicit stacks mean nesting costs memory, not call frames. Future I/O must go b
 
 ### Gaps
 
-The REPL reads each stdin line with no length limit, and no maximum source length is enforced. No maximum nesting depth is enforced, so deeply nested input can use a lot of memory.
+The REPL reads each stdin line with no length limit. No maximum source length or nesting depth is enforced, so deep input can use a lot of memory.
 
 ## Future Work
 
@@ -150,15 +144,15 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Parse tree
 
-Build an AST in a parse module, then evaluate it in a separate module. Lenient branches become an evaluator concern, so the parser only reports syntax errors.
+Build an AST in a parse module, then evaluate it separately. Lenient branches become an evaluator concern.
 
 ### Error classes
 
-Not yet done: tag each error as static or value when constructed, so that the gate is driven by the error itself.
+Value errors go through `valueError`; static errors do not. Not yet done: tag each `TuffError` as static or value at construction, so the error itself drives the gate.
 
 ### Numbers and output
 
-Replace `number` with `bigint` or a decimal type, so arithmetic is exact. Report line and column in `where`, not just the offset.
+Replace `number` with `bigint` or a decimal type. Report line and column in `where`.
 
 ## Performance
 

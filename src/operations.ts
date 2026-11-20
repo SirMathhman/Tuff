@@ -53,7 +53,7 @@ function apply(left: number, op: Operator, right: number): Value {
  * @param fallback - the value used in place of the error when lenient.
  * @returns the fallback when lenient, or the failure.
  */
-export function valueError<T extends Value>(
+export function valueError<T extends Value | undefined>(
   lenient: boolean,
   failure: Failure<TuffError>,
   fallback: T,

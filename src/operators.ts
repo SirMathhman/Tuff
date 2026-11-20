@@ -118,17 +118,20 @@ function closeBinding(
   const value = values.pop() ?? 0;
   if (binding.assign) {
     const cell = lookupCell(scopes, binding.name);
-    if (cell !== undefined && !lenient) {
-      if (typeof cell.value !== typeof value) {
-        return typeMismatch(
+    if (cell !== undefined && typeof cell.value !== typeof value) {
+      const failure = valueError(
+        lenient,
+        typeMismatch(
           binding.where,
           binding.name,
           typeof cell.value,
           typeof value,
-        );
-      }
-      cell.value = value;
+        ),
+        undefined,
+      );
+      if (typeof failure === "object") return failure;
     }
+    if (cell !== undefined && !lenient) cell.value = value;
   } else {
     const cell = { value, mutable: binding.mutable };
     const scope = scopes[scopes.length - 1];
