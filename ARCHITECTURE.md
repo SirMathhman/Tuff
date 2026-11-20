@@ -29,6 +29,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Source files
 
 - `src/scanner.ts`: character classes, token readers, bracket matching, and `Operator`.
+- `src/code.ts`: compiled expressions, not yet used by `interpretTuff`.
 - `src/errors/`: `core.ts` (types), and constructors by family, re-exported by `index.ts`.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
@@ -104,7 +105,7 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Parse once
 
-The next target: parse each function and loop body once into an AST and evaluate it per call or pass, so calls stop multiplying parse work. Lenient branches become an evaluator concern.
+The next target: compile function and loop bodies once, so calls stop multiplying parse work. `src/code.ts` covers expressions so far.
 
 ### Call limits
 
