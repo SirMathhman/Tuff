@@ -7,6 +7,7 @@ import {
   type BlockNode,
   type BlockStatement,
   type BooleanNode,
+  type IfStatement,
   type BorrowNode,
   type ChainNode,
   type ChainStep,
@@ -132,18 +133,38 @@ const CONTINUATIONS = new Set<string>(["+", "-", "*", "/"]);
  * Finds the index of the `}` that closes the `{` at `open`.
  *
  * @param tokens - The tokens being parsed.
- * @param open - The index of an opening `{`.
- * @returns The index of its closing `}`, or `undefined` if it is not closed.
+ * @param open - The index of an opening token.
+ * @param openText - The text of the opening token, such as `{`.
+ * @param closeText - The text of the matching closing token, such as `}`.
+ * @returns The index of the matching closing token, or `undefined` if it is not closed.
  */
-function matchingBrace(tokens: Token[], open: number): number | undefined {
+function matchingCloser(tokens: Token[], open: number, openText: string, closeText: string): number | undefined {
   let level = 0;
   for (let index = open; index < tokens.length; index++) {
     const text = tokens[index]?.text;
-    if (text === "{") level++;
-    if (text === "}") level--;
+    if (text === openText) level++;
+    if (text === closeText) level--;
     if (level === 0) return index;
   }
   return undefined;
+}
+
+/**
+ * Finds the index just past an `if (...) { ... } else { ... }` that starts at `pos`, without parsing it.
+ *
+ * @param tokens - The tokens being parsed.
+ * @param pos - The index of the `if` token.
+ * @returns The index after the else block's `}`, or `undefined` if the tokens do not have that shape.
+ */
+function ifStatementEnd(tokens: Token[], pos: number): number | undefined {
+  if (tokens[pos + 1]?.text !== "(") return undefined;
+  const closeParen = matchingCloser(tokens, pos + 1, "(", ")");
+  if (closeParen === undefined || tokens[closeParen + 1]?.text !== "{") return undefined;
+  const thenClose = matchingCloser(tokens, closeParen + 1, "{", "}");
+  if (thenClose === undefined || tokens[thenClose + 1]?.text !== "else") return undefined;
+  if (tokens[thenClose + 2]?.text !== "{") return undefined;
+  const elseClose = matchingCloser(tokens, thenClose + 2, "{", "}");
+  return elseClose === undefined ? undefined : elseClose + 1;
 }
 
 /**
@@ -164,7 +185,7 @@ function parseBraceStatement(
   parseExpr: Parser,
   closer: string | undefined,
 ): Step<BlockStatement> | undefined {
-  const close = matchingBrace(input.tokens, pos);
+  const close = matchingCloser(input.tokens, pos, "{", "}");
   if (close === undefined) return undefined;
   const after = input.tokens[close + 1];
   if (after === undefined || after.text === closer || CONTINUATIONS.has(after.text)) return undefined;
@@ -179,6 +200,71 @@ function parseBraceStatement(
   }
   const statement: BlockStatement = { kind: StatementKind.Block, block: inner.value.value };
   return ok({ value: statement, next: inner.value.next + 1 });
+}
+
+/**
+ * Parses a braced block that is a branch of an `if` statement: it must have statements and no final expression.
+ *
+ * @param input - The tokens being parsed.
+ * @param open - The index of the block's `{`.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the block's contents.
+ * @returns The block, or the first error found.
+ */
+function parseStatementBlock(input: Input, open: number, depth: number, parseExpr: Parser): Step<BlockNode> {
+  const block = parseBlock(input, open + 1, depth + 1, parseExpr, "}");
+  if (!block.ok) return block;
+  const close = input.tokens[block.value.next];
+  if (block.value.value.result !== undefined) {
+    return err({ kind: TuffErrorKind.UnexpectedToken, span: close?.span ?? input.end });
+  }
+  if (block.value.value.statements.length === 0) {
+    return err({ kind: TuffErrorKind.UnexpectedToken, span: close?.span ?? input.end });
+  }
+  return block;
+}
+
+/**
+ * Parses an `if` used as a statement. It is a statement when the token after its `else` block starts a new
+ * statement rather than continuing an expression or closing the enclosing block.
+ *
+ * @param input - The tokens being parsed.
+ * @param pos - The index of the `if` token.
+ * @param depth - The current nesting depth.
+ * @param parseExpr - The expression parser for the condition.
+ * @param closer - The token that closes the enclosing block, if any.
+ * @returns The statement, an error, or `undefined` if the `if` is an expression instead.
+ */
+function parseIfStatement(
+  input: Input,
+  pos: number,
+  depth: number,
+  parseExpr: Parser,
+  closer: string | undefined,
+): Step<IfStatement> | undefined {
+  const end = ifStatementEnd(input.tokens, pos);
+  if (end === undefined) return undefined;
+  const after = input.tokens[end];
+  if (after === undefined || after.text === closer || CONTINUATIONS.has(after.text)) return undefined;
+  const ifToken = input.tokens[pos];
+  if (ifToken === undefined) return undefined;
+  if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: ifToken.span });
+  const condition = parseExpr(input, pos + 2, depth + 1);
+  if (!condition.ok) return condition;
+  const closeParen = input.tokens[condition.value.next];
+  if (closeParen?.text !== ")")
+    return err({ kind: TuffErrorKind.ExpectedClosingParen, span: closeParen?.span ?? input.end });
+  const thenBlock = parseStatementBlock(input, condition.value.next + 1, depth, parseExpr);
+  if (!thenBlock.ok) return thenBlock;
+  const elseBlock = parseStatementBlock(input, thenBlock.value.next + 2, depth, parseExpr);
+  if (!elseBlock.ok) return elseBlock;
+  const statement: IfStatement = {
+    kind: StatementKind.If,
+    condition: condition.value.value,
+    thenBlock: thenBlock.value.value,
+    elseBlock: elseBlock.value.value,
+  };
+  return ok({ value: statement, next: elseBlock.value.next + 1 });
 }
 
 function parseBlock(
@@ -207,6 +293,15 @@ function parseBlock(
       statements.push(statement.value.value);
       cursor = statement.value.next;
       continue;
+    }
+    if (token.text === "if") {
+      const statement = parseIfStatement(input, cursor, depth, parseExpr, closer);
+      if (statement !== undefined) {
+        if (!statement.ok) return statement;
+        statements.push(statement.value.value);
+        cursor = statement.value.next;
+        continue;
+      }
     }
     if (token.text === "{") {
       const statement = parseBraceStatement(input, cursor, depth, parseExpr, closer);

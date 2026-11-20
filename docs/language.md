@@ -44,7 +44,7 @@ Examples:
 - `let mut n = 1; n = n * 5; n` is 5.
 - `let mut x = 0; { x = 1; 0 } + x` is 1: an inner block can change an outer `let mut` binding.
 
-A braced block used as a value must end in an expression: `{ }` and `{ let x = 0; }` are errors. Between statements, a braced block may end in a statement, such as `{ x = 1; }`; it needs no `;`, and its value is discarded. A braced block that ends its block or source with no final expression is an error. A source with statements but no final expression evaluates to 0. An empty source is an error.
+A braced block used as a value must end in an expression: `{ }` and `{ let x = 0; }` are errors. Between statements, a braced block may end in a statement, such as `{ x = 1; }`; it needs no `;`, and its value is discarded. A braced block that ends its block or source with no final expression is an error. An `if` between statements may also be a statement: `if (c) { x = 1; } else { x = 2; }` runs one branch, needs no `;`, and its branches must be statement blocks with no final expression. A source with statements but no final expression evaluates to 0. An empty source is an error.
 
 ## References
 

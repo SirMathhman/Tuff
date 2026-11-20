@@ -11,7 +11,7 @@ import {
   type Expr,
   type NameNode,
 } from "./ast.ts";
-import { evaluateIf, evaluateMatch } from "./eval/branch.ts";
+import { evaluateIf, evaluateIfStatement, evaluateMatch } from "./eval/branch.ts";
 import type { Env } from "./eval/env.ts";
 import { spanOf } from "./eval/span-of.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
@@ -172,6 +172,11 @@ function evaluateBlockBody(block: BlockNode, env: Env, frame: Frame<Value>): Res
     }
     if (statement.kind === StatementKind.Block) {
       const ran = evaluateIn(statement.block, env);
+      if (!ran.ok) return ran;
+      continue;
+    }
+    if (statement.kind === StatementKind.If) {
+      const ran = evaluateIfStatement(statement, env, evaluateIn);
       if (!ran.ok) return ran;
       continue;
     }

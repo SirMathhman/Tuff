@@ -497,3 +497,14 @@ test('evaluateTuff("let x = 1; { let y = x; }") is an UnexpectedToken error at t
     error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 24, end: 25 } },
   });
 });
+
+test('evaluateTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x") => 1', () => {
+  expect(evaluateTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toEqual({ ok: true, value: 1 });
+});
+
+test("an if statement branch with a final expression is an UnexpectedToken error at its closing brace", () => {
+  expect(evaluateTuff("let mut x = 0; if (true) { 1 } else { x = 2; } x")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 29, end: 30 } },
+  });
+});

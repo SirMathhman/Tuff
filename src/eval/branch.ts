@@ -1,4 +1,4 @@
-import type { Expr, IfNode, MatchNode } from "../ast.ts";
+import type { Expr, IfNode, IfStatement, MatchNode } from "../ast.ts";
 import { TuffErrorKind, type TuffError } from "../errors.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { Frame } from "../scope.ts";
@@ -30,6 +30,27 @@ export function evaluateIf(node: IfNode, env: Env, evaluate: Evaluate): Result<V
   if (!thenResult.ok) return thenResult;
   if (!elseResult.ok) return elseResult;
   return condition.value ? thenResult : elseResult;
+}
+
+/**
+ * Runs an `if` statement: both branches run, the condition selects which one's writes are kept, and no value is produced.
+ *
+ * @param node - The `if` statement.
+ * @param env - The current evaluation state.
+ * @param evaluate - Evaluates a sub-expression.
+ * @returns Nothing on success, or the first error from the condition or a branch.
+ */
+export function evaluateIfStatement(node: IfStatement, env: Env, evaluate: Evaluate): Result<undefined, TuffError> {
+  const condition = evaluate(node.condition, env);
+  if (!condition.ok) return condition;
+  if (typeof condition.value !== "boolean") {
+    return err({ kind: TuffErrorKind.NotABoolean, span: spanOf(node.condition) });
+  }
+  const thenResult = evaluateBranch(node.thenBlock, env, condition.value, evaluate);
+  const elseResult = evaluateBranch(node.elseBlock, env, !condition.value, evaluate);
+  if (!thenResult.ok) return thenResult;
+  if (!elseResult.ok) return elseResult;
+  return ok(undefined);
 }
 
 /**

@@ -32,6 +32,8 @@ export enum StatementKind {
   AssignThrough = "AssignThrough",
   /** A braced block used as a statement. Its value is discarded. */
   Block = "Block",
+  /** A conditional used as a statement, whose branches are braced blocks with no final expression. */
+  If = "If",
 }
 
 /** The binary operators. */
@@ -162,8 +164,20 @@ export interface BlockStatement {
   block: BlockNode;
 }
 
+/** A conditional used as a statement. Both branches are statement blocks; the value is discarded. */
+export interface IfStatement {
+  /** Always `StatementKind.If`. */
+  kind: StatementKind.If;
+  /** The condition, which must evaluate to a boolean. */
+  condition: Expr;
+  /** The block run when the condition is `true`. */
+  thenBlock: BlockNode;
+  /** The block run when the condition is `false`. */
+  elseBlock: BlockNode;
+}
+
 /** A statement inside a block. */
-export type Statement = LetStatement | AssignStatement | AssignThroughStatement | BlockStatement;
+export type Statement = LetStatement | AssignStatement | AssignThroughStatement | BlockStatement | IfStatement;
 
 /** Zero or more statements followed by one final expression. */
 export interface BlockNode {
