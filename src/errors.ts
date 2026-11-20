@@ -28,6 +28,12 @@ export enum TuffErrorKind {
   BooleanOperand = "BooleanOperand",
   /** An assignment gives a binding a value of a different kind than the binding's initial value. */
   TypeMismatch = "TypeMismatch",
+  /** A `*` or a write through `*` was applied to a value that is not a reference. */
+  NotAReference = "NotAReference",
+  /** A reference was used as an arithmetic operand; it must be dereferenced first. */
+  ReferenceAsValue = "ReferenceAsValue",
+  /** A reference would outlive the block that declares the binding it points to. */
+  ReferenceEscapes = "ReferenceEscapes",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -52,7 +58,10 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.InternalError>
   | TuffErrorOf<TuffErrorKind.ImmutableAssignment>
   | TuffErrorOf<TuffErrorKind.BooleanOperand>
-  | TuffErrorOf<TuffErrorKind.TypeMismatch>;
+  | TuffErrorOf<TuffErrorKind.TypeMismatch>
+  | TuffErrorOf<TuffErrorKind.NotAReference>
+  | TuffErrorOf<TuffErrorKind.ReferenceAsValue>
+  | TuffErrorOf<TuffErrorKind.ReferenceEscapes>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -141,6 +150,21 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Type mismatch in assignment",
     why: "A binding keeps the kind of its initial value: a number stays a number, and a boolean stays a boolean.",
     fix: "Assign a value of the same kind as the binding's initial value, or declare a new name with let.",
+  },
+  [TuffErrorKind.NotAReference]: {
+    what: "Not a reference",
+    why: "Only a reference can be dereferenced with * or written through with *. This binding holds a number or a boolean.",
+    fix: "Borrow the binding with & or &mut and use the reference, or remove the *.",
+  },
+  [TuffErrorKind.ReferenceAsValue]: {
+    what: "Reference used as a value",
+    why: "Arithmetic operators need numbers, and a reference is a pointer to a binding, not a number.",
+    fix: "Dereference the reference with * to get the value it points to.",
+  },
+  [TuffErrorKind.ReferenceEscapes]: {
+    what: "Reference outlives its binding",
+    why: "A reference may not leave the block that declares the binding it points to, because that binding ends with its block.",
+    fix: "Use the value inside the block, or bind the value with let instead of keeping a reference to it.",
   },
 };
 

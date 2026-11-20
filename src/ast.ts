@@ -12,6 +12,10 @@ export enum NodeKind {
   Block = "Block",
   /** A boolean literal, `true` or `false`. */
   Boolean = "Boolean",
+  /** A borrow, `&x` or `&mut x`, that produces a reference to a binding. */
+  Borrow = "Borrow",
+  /** A dereference, `*x`, that reads the value a reference points to. */
+  Deref = "Deref",
 }
 
 /** The kinds of statement that may appear in a block. */
@@ -20,6 +24,8 @@ export enum StatementKind {
   Let = "Let",
   /** An assignment that changes a `let mut` binding. */
   Assign = "Assign",
+  /** An assignment through a mutable reference, `*x = value;`. */
+  AssignThrough = "AssignThrough",
 }
 
 /** The binary operators. */
@@ -51,6 +57,28 @@ export interface BooleanNode {
   /** The literal's value. */
   value: boolean;
   /** Where the literal sits in the source. */
+  span: Span;
+}
+
+/** A borrow of a binding: `&x` (shared) or `&mut x` (mutable). */
+export interface BorrowNode {
+  /** Always `NodeKind.Borrow`. */
+  kind: NodeKind.Borrow;
+  /** Whether the borrow is mutable (`&mut`). */
+  mutable: boolean;
+  /** The borrowed name, located in the source. */
+  target: NameNode;
+  /** Where the `&` sits in the source. */
+  span: Span;
+}
+
+/** A dereference of a reference: `*x`. */
+export interface DerefNode {
+  /** Always `NodeKind.Deref`. */
+  kind: NodeKind.Deref;
+  /** The name whose reference is read, located in the source. */
+  target: NameNode;
+  /** Where the `*` sits in the source. */
   span: Span;
 }
 
@@ -108,8 +136,20 @@ export interface AssignStatement {
   value: Expr;
 }
 
+/** An assignment through a reference, `*x = value;`. */
+export interface AssignThroughStatement {
+  /** Always `StatementKind.AssignThrough`. */
+  kind: StatementKind.AssignThrough;
+  /** Where the `*` sits in the source. */
+  span: Span;
+  /** The name of the reference being written through, located in the source. */
+  target: NameNode;
+  /** The new value. */
+  value: Expr;
+}
+
 /** A statement inside a block. */
-export type Statement = LetStatement | AssignStatement;
+export type Statement = LetStatement | AssignStatement | AssignThroughStatement;
 
 /** Zero or more statements followed by one final expression. */
 export interface BlockNode {
@@ -122,4 +162,4 @@ export interface BlockNode {
 }
 
 /** Any expression node. */
-export type Expr = LiteralNode | BooleanNode | NameNode | ChainNode | BlockNode;
+export type Expr = LiteralNode | BooleanNode | NameNode | BorrowNode | DerefNode | ChainNode | BlockNode;

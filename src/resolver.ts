@@ -1,7 +1,7 @@
-import { NodeKind, StatementKind, type BlockNode, type ChainNode, type Expr } from "./ast.ts";
+import { NodeKind, StatementKind, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
-import { findName, type NameRefs, type NameTable } from "./scope.ts";
+import { findName, type Found, type NameRefs, type NameTable } from "./scope.ts";
 
 /**
  * Binds every name use to its binding and checks that names are bound and assignments are allowed.
@@ -18,15 +18,42 @@ export function resolve(program: BlockNode): Result<NameRefs, TuffError> {
   return ok(refs);
 }
 
+/**
+ * Binds one name use to its binding and records it.
+ *
+ * @param name - The name use.
+ * @param blocks - The open blocks' name tables, outermost first.
+ * @param refs - The table of name bindings being built.
+ * @returns The binding found, or an `UnknownName` error at the name.
+ */
+function lookupUse(name: NameNode, blocks: NameTable[], refs: NameRefs): Result<Found, TuffError> {
+  const found = findName(blocks, name.name);
+  if (found === undefined) return err({ kind: TuffErrorKind.UnknownName, span: name.span });
+  refs.set(name, found.ref);
+  return ok(found);
+}
+
 function resolveExpr(expr: Expr, blocks: NameTable[], refs: NameRefs): Result<undefined, TuffError> {
   switch (expr.kind) {
     case NodeKind.Literal:
     case NodeKind.Boolean:
       return ok(undefined);
     case NodeKind.Name: {
-      const found = findName(blocks, expr.name);
-      if (found === undefined) return err({ kind: TuffErrorKind.UnknownName, span: expr.span });
-      refs.set(expr, found.ref);
+      const found = lookupUse(expr, blocks, refs);
+      if (!found.ok) return found;
+      return ok(undefined);
+    }
+    case NodeKind.Borrow: {
+      const found = lookupUse(expr.target, blocks, refs);
+      if (!found.ok) return found;
+      if (expr.mutable && !found.value.mutable) {
+        return err({ kind: TuffErrorKind.ImmutableAssignment, span: expr.target.span });
+      }
+      return ok(undefined);
+    }
+    case NodeKind.Deref: {
+      const found = lookupUse(expr.target, blocks, refs);
+      if (!found.ok) return found;
       return ok(undefined);
     }
     case NodeKind.Chain:
@@ -67,6 +94,13 @@ function resolveBlockBody(
       if (!value.ok) return value;
       names.set(statement.name, { index: letCount, mutable: statement.mutable });
       letCount++;
+      continue;
+    }
+    if (statement.kind === StatementKind.AssignThrough) {
+      const target = lookupUse(statement.target, blocks, refs);
+      if (!target.ok) return target;
+      const value = resolveExpr(statement.value, blocks, refs);
+      if (!value.ok) return value;
       continue;
     }
     const target = findName(blocks, statement.target.name);

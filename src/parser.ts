@@ -3,7 +3,10 @@ import {
   Operator,
   StatementKind,
   type AssignStatement,
+  type AssignThroughStatement,
   type BlockNode,
+  type BorrowNode,
+  type DerefNode,
   type BooleanNode,
   type ChainNode,
   type ChainStep,
@@ -87,6 +90,25 @@ function parseAssign(input: Input, pos: number, depth: number, parseExpr: Parser
   return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
+function parseAssignThrough(input: Input, pos: number, depth: number, parseExpr: Parser): Step<AssignThroughStatement> {
+  const star = input.tokens[pos];
+  const nameToken = input.tokens[pos + 1];
+  if (star === undefined || nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  const rhs = parseExpr(input, pos + 3, depth);
+  if (!rhs.ok) return rhs;
+  const semicolon = input.tokens[rhs.value.next];
+  if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
+  const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
+  const statement: AssignThroughStatement = {
+    kind: StatementKind.AssignThrough,
+    span: star.span,
+    target,
+    value: rhs.value.value,
+  };
+  return ok({ value: statement, next: rhs.value.next + 1 });
+}
+
 function parseBlock(
   input: Input,
   pos: number,
@@ -112,6 +134,13 @@ function parseBlock(
     }
     if (token.text === "let") {
       const statement = parseLet(input, cursor, depth, names, parseExpr);
+      if (!statement.ok) return statement;
+      statements.push(statement.value.value);
+      cursor = statement.value.next;
+      continue;
+    }
+    if (token.text === "*" && isName(input.tokens[cursor + 1]?.text ?? "") && input.tokens[cursor + 2]?.text === "=") {
+      const statement = parseAssignThrough(input, cursor, depth, parseExpr);
       if (!statement.ok) return statement;
       statements.push(statement.value.value);
       cursor = statement.value.next;
@@ -149,6 +178,23 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
       return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });
     }
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
+  }
+  if (token.text === "&") {
+    const mutable = input.tokens[pos + 1]?.text === "mut";
+    const nameToken = input.tokens[pos + (mutable ? 2 : 1)];
+    if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
+    const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
+    const borrow: BorrowNode = { kind: NodeKind.Borrow, mutable, target, span: token.span };
+    return ok({ value: borrow, next: pos + (mutable ? 3 : 2) });
+  }
+  if (token.text === "*") {
+    const nameToken = input.tokens[pos + 1];
+    if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+    if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
+    const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
+    const deref: DerefNode = { kind: NodeKind.Deref, target, span: token.span };
+    return ok({ value: deref, next: pos + 2 });
   }
   if (/^\d+$/.test(token.text)) {
     const literal: LiteralNode = { kind: NodeKind.Literal, value: Number(token.text), span: token.span };
