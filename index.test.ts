@@ -204,6 +204,27 @@ test("interpretTuff rejects a compound assignment to an immutable or non-numeric
   expect(interpretTuff("let mut b = true; b += 1; b").ok).toBe(false);
 });
 
+test("interpretTuff('let mut x = 0; while (x < 4) { x += 1; } x') => 4", () => {
+  expect(interpretTuff("let mut x = 0; while (x < 4) { x += 1; } x")).toEqual({ ok: true, value: 4 });
+});
+
+test("interpretTuff: '<' comparison", () => {
+  expect(interpretTuff("1 < 2")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("2 < 1")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff: while loop that never runs its body", () => {
+  expect(interpretTuff("let mut x = 0; while (false) x += 1; x")).toEqual({ ok: true, value: 0 });
+});
+
+test("interpretTuff rejects a while condition that is not a boolean", () => {
+  expect(interpretTuff("let mut x = 0; while (1) x += 1; x").ok).toBe(false);
+});
+
+test("interpretTuff rejects a while loop that does not end", () => {
+  expect(interpretTuff("let mut x = 0; while (true) x += 1; x").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

@@ -39,7 +39,7 @@ interface Reference {
  * Words with a fixed meaning that cannot be used as variable names.
  * "true" evaluates to 1 and "false" to 0.
  */
-const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false", "if", "else"]);
+const RESERVED_WORDS: ReadonlySet<string> = new Set(["let", "mut", "true", "false", "if", "else", "while"]);
 
 /**
  * Message for a value that would make a reference outlive the variable it points to.
@@ -190,7 +190,8 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *               | name ("+=" | "-=" | "*=") expression ";"   (numeric variables declared with "let mut")
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
- *   expression := sum ("==" sum)*
+ *               | "while" "(" expression ")" statement   (re-run until the condition is false, up to a limit)
+ *   expression := sum (("==" | "<") sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
  *   factor     := number | "true" | "false" | name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
@@ -238,19 +239,29 @@ function parseExpression(text: string, cursor: Cursor): Result<Value, Problem> {
     return first;
   }
   let value: Value = first.value;
-  while (peekOperator(text, cursor) === "==") {
+  while (true) {
+    const op = peekOperator(text, cursor);
+    if (op === "") {
+      return ok(value);
+    }
     const opOffset = cursor.pos;
-    cursor.pos += 2;
+    cursor.pos += op.length;
     const right = parseSum(text, cursor);
     if (!right.ok) {
       return right;
     }
-    if (typeof value !== typeof right.value) {
-      return err({ offset: opOffset, expected: `a value of the same type as the left side of "=="` });
+    if (op === "==") {
+      if (typeof value !== typeof right.value) {
+        return err({ offset: opOffset, expected: `a value of the same type as the left side of "=="` });
+      }
+      value = value === right.value;
+    } else {
+      if (typeof value !== "number" || typeof right.value !== "number") {
+        return err({ offset: opOffset, expected: `a number on each side of "<"` });
+      }
+      value = value < right.value;
     }
-    value = value === right.value ? 1 : 0;
   }
-  return ok(value);
 }
 
 /**
@@ -406,23 +417,10 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns An Ok result with the chosen branch's value, or an Err result with the first problem found.
  */
 function parseIf(text: string, cursor: Cursor): Result<Value, Problem> {
-  if (peek(text, cursor) !== "(") {
-    return err({ offset: cursor.pos, expected: `"("` });
-  }
-  cursor.pos++;
-  peek(text, cursor);
-  const conditionStart = cursor.pos;
-  const condition = parseExpression(text, cursor);
+  const condition = parseCondition(text, cursor);
   if (!condition.ok) {
     return condition;
   }
-  if (typeof condition.value !== "boolean") {
-    return err({ offset: conditionStart, expected: "a boolean condition" });
-  }
-  if (peek(text, cursor) !== ")") {
-    return err({ offset: cursor.pos, expected: `")"` });
-  }
-  cursor.pos++;
   const outerDead = cursor.dead;
   const thenResult = parseBranch(text, cursor, outerDead || !condition.value);
   if (!thenResult.ok) {
@@ -715,6 +713,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   if (name === "if" && isStatementIf(text, cursor)) {
     return { matched: true, problem: parseStatementIf(text, cursor) };
   }
+  if (name === "while") {
+    return { matched: true, problem: parseWhile(text, cursor) };
+  }
   return NOT_A_STATEMENT;
 }
 
@@ -828,6 +829,50 @@ function dryRunStatementIf(text: string, cursor: Cursor): boolean {
 }
 
 /**
+ * Maximum number of times a while loop may run. A loop that would run longer is reported as an
+ * error rather than hanging.
+ */
+const MAX_LOOP_ITERATIONS = 10000;
+
+/**
+ * Parses "while (condition) statement". Each iteration re-parses the condition and the body
+ * from the same text, so assignments in the body are seen by the next check. The final check
+ * is false, and its body is parsed with effects suppressed.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the loop.
+ * @returns The first problem found, or undefined if the loop parsed.
+ */
+function parseWhile(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "while".length;
+  peek(text, cursor);
+  const headStart = cursor.pos;
+  const outerDead = cursor.dead;
+  let iterations = 0;
+  while (true) {
+    cursor.pos = headStart;
+    const condition = parseCondition(text, cursor);
+    if (!condition.ok) {
+      return condition.error;
+    }
+    const runBody = condition.value && !outerDead;
+    cursor.dead = outerDead || !runBody;
+    const problem = parseBranchStatement(text, cursor);
+    cursor.dead = outerDead;
+    if (problem !== undefined) {
+      return problem;
+    }
+    if (!runBody) {
+      return undefined;
+    }
+    iterations++;
+    if (iterations >= MAX_LOOP_ITERATIONS) {
+      return { offset: headStart, expected: `a loop that ends within ${MAX_LOOP_ITERATIONS} iterations` };
+    }
+  }
+}
+
+/**
  * Parses an "if" statement. Only the branch taken runs; the other is checked and skipped.
  *
  * @param text - The source being parsed.
@@ -836,23 +881,10 @@ function dryRunStatementIf(text: string, cursor: Cursor): boolean {
  */
 function parseStatementIf(text: string, cursor: Cursor): Problem | undefined {
   cursor.pos += "if".length;
-  if (peek(text, cursor) !== "(") {
-    return { offset: cursor.pos, expected: `"("` };
-  }
-  cursor.pos++;
-  peek(text, cursor);
-  const conditionStart = cursor.pos;
-  const condition = parseExpression(text, cursor);
+  const condition = parseCondition(text, cursor);
   if (!condition.ok) {
     return condition.error;
   }
-  if (typeof condition.value !== "boolean") {
-    return { offset: conditionStart, expected: "a boolean condition" };
-  }
-  if (peek(text, cursor) !== ")") {
-    return { offset: cursor.pos, expected: `")"` };
-  }
-  cursor.pos++;
   const outerDead = cursor.dead;
   cursor.dead = outerDead || !condition.value;
   const thenProblem = parseBranchStatement(text, cursor);
@@ -1071,15 +1103,46 @@ function peekAfterName(text: string, cursor: Cursor, name: string): string {
 }
 
 /**
- * Returns the two-character operator at the next significant position, without consuming it.
+ * Returns the comparison operator at the next significant position, without consuming it.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past any whitespace.
- * @returns "==" if it is next, otherwise "".
+ * @returns "==" or "<" if one is next, otherwise "".
  */
 function peekOperator(text: string, cursor: Cursor): string {
   skipSpaces(text, cursor);
-  return text.slice(cursor.pos, cursor.pos + 2) === "==" ? "==" : "";
+  if (text.slice(cursor.pos, cursor.pos + 2) === "==") {
+    return "==";
+  }
+  return text.charAt(cursor.pos) === "<" ? "<" : "";
+}
+
+/**
+ * Parses a parenthesized condition, "(expression)", which must be a boolean.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the condition.
+ * @returns An Ok result with the condition's value, or an Err result with the first problem found.
+ */
+function parseCondition(text: string, cursor: Cursor): Result<boolean, Problem> {
+  if (peek(text, cursor) !== "(") {
+    return err({ offset: cursor.pos, expected: `"("` });
+  }
+  cursor.pos++;
+  peek(text, cursor);
+  const conditionStart = cursor.pos;
+  const condition = parseExpression(text, cursor);
+  if (!condition.ok) {
+    return condition;
+  }
+  if (typeof condition.value !== "boolean") {
+    return err({ offset: conditionStart, expected: "a boolean condition" });
+  }
+  if (peek(text, cursor) !== ")") {
+    return err({ offset: cursor.pos, expected: `")"` });
+  }
+  cursor.pos++;
+  return ok(condition.value);
 }
 
 /**
