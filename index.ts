@@ -39,7 +39,7 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import { parseExportDeclaration, parseModuleMember } from "./src/parse/imports";
+import { parseExportDeclaration, parseModuleMember, parseModuleValue } from "./src/parse/imports";
 import { parseDestructuring } from "./src/parse/destructure";
 import { callHostFunction } from "./src/host";
 import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
@@ -280,7 +280,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       if (peek(text, cursor) === ".") {
         return parseModuleMember(text, cursor, start, name);
       }
-      return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
+      return parseModuleValue(cursor, start, name);
     }
     return parsePostfix(text, cursor, start, binding.value, parseExpression);
   }

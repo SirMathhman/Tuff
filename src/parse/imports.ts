@@ -23,13 +23,9 @@ export function parseModuleMember(
     return err({ offset: cursor.pos, expected: `a name exported by module "${moduleName}"` });
   }
   cursor.pos += member.length;
-  const { modules } = cursor;
-  const loaded = modules(moduleName);
-  if (loaded === undefined) {
-    return err({ offset: start, expected: `a variable or module in scope (no "${moduleName}" is defined)` });
-  }
+  const loaded = loadExports(cursor, start, moduleName);
   if (!loaded.ok) {
-    return err({ offset: start, expected: `module "${moduleName}" to load (${loaded.error})` });
+    return loaded;
   }
   const { value: moduleExports } = loaded;
   const exported = moduleExports.get(member);
@@ -75,4 +71,39 @@ export function parseExportDeclaration(
     exported.set(exportedName, binding.value);
   }
   return undefined;
+}
+
+/**
+ * Yields a module as a value: a struct whose fields are the module's exported values.
+ *
+ * @param cursor - The parse state, which supplies the module loader.
+ * @param start - Offset of the module name, for error reporting.
+ * @param moduleName - The name the source used for the module.
+ * @returns An Ok result with the module value, or an Err result if no module with that name loads.
+ */
+export function parseModuleValue(cursor: Cursor, start: number, moduleName: string): Result<Value, Problem> {
+  const loaded = loadExports(cursor, start, moduleName);
+  if (!loaded.ok) {
+    return loaded;
+  }
+  return ok({ structName: moduleName, fields: loaded.value });
+}
+
+/**
+ * Loads a module by name and returns its exported values, or explains why it cannot be used.
+ *
+ * @param cursor - The parse state, which supplies the module loader.
+ * @param start - Offset of the module name, for error reporting.
+ * @param moduleName - The name the source used for the module.
+ * @returns An Ok result with the exported values, or an Err result with the first problem found.
+ */
+function loadExports(cursor: Cursor, start: number, moduleName: string): Result<ReadonlyMap<string, Value>, Problem> {
+  const loaded = cursor.modules(moduleName);
+  if (loaded === undefined) {
+    return err({ offset: start, expected: `a variable or module in scope (no "${moduleName}" is defined)` });
+  }
+  if (!loaded.ok) {
+    return err({ offset: start, expected: `module "${moduleName}" to load (${loaded.error})` });
+  }
+  return ok(loaded.value);
 }
