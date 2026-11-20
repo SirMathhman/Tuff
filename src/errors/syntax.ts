@@ -1,0 +1,265 @@
+import type { Failure, TuffError } from "./core";
+import { Bracket, closerFor, describe, fail } from "./core";
+
+/**
+ * Reports a missing operand: a number, variable, or opening bracket.
+ * @param source - the program being parsed.
+ * @param where - the offset of the unexpected character.
+ * @returns a failure describing the missing operand.
+ */
+export function expectedNumber(
+  source: string,
+  where: number,
+): Failure<TuffError> {
+  return fail(
+    `Expected a number, a variable, '(', or '{' but found ${describe(source.charAt(where))}`,
+    where,
+    "Every '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
+    "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.",
+  );
+}
+
+/**
+ * Reports a character that cannot follow a term.
+ * @param source - the program being parsed.
+ * @param where - the offset of the unexpected character.
+ * @param grouped - whether the character is inside brackets.
+ * @returns a failure describing the missing operator.
+ */
+export function expectedOperator(
+  source: string,
+  where: number,
+  grouped: boolean,
+): Failure<TuffError> {
+  const found = describe(source.charAt(where));
+  if (grouped) {
+    return fail(
+      `Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found ${found}`,
+      where,
+      "Two terms can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
+      "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.",
+    );
+  }
+  return fail(
+    `Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found ${found}`,
+    where,
+    "Two numbers can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.",
+    "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.",
+  );
+}
+
+/**
+ * Reports input that ends before a bracket is closed.
+ * @param source - the program being parsed.
+ * @param where - the offset where the input ends.
+ * @param bracket - the opening bracket that is still open.
+ * @returns a failure describing the missing closing bracket.
+ */
+export function expectedClose(
+  source: string,
+  where: number,
+  bracket: Bracket,
+): Failure<TuffError> {
+  const closer = closerFor(bracket);
+  const noun = bracket === Bracket.Paren ? "parenthesized" : "braced";
+  return fail(
+    `Expected '${closer}' but found ${describe(source.charAt(where))}`,
+    where,
+    `Every '${bracket}' must be closed by a matching '${closer}'.`,
+    `Add a '${closer}' at the end of the ${noun} expression.`,
+  );
+}
+
+/**
+ * Reports a closing bracket that does not match the innermost opening bracket.
+ * @param source - the program being parsed.
+ * @param where - the offset of the mismatched closing bracket.
+ * @param bracket - the opening bracket that needed closing.
+ * @returns a failure describing the mismatch.
+ */
+export function expectedMismatch(
+  source: string,
+  where: number,
+  bracket: Bracket,
+): Failure<TuffError> {
+  const closer = closerFor(bracket);
+  return fail(
+    `Expected '${closer}' to close '${bracket}' but found ${describe(source.charAt(where))}`,
+    where,
+    "Each opening bracket must be closed by its own kind of bracket: '(' by ')' and '{' by '}'.",
+    `Replace this character with '${closer}', or change the opening bracket.`,
+  );
+}
+
+/**
+ * Reports a `let` name that is not followed by `=`.
+ * @param source - the program being parsed.
+ * @param where - the offset where `=` should appear.
+ * @param name - the name that was declared.
+ * @returns a failure describing the missing `=`.
+ */
+export function expectedEquals(
+  source: string,
+  where: number,
+  name: string,
+): Failure<TuffError> {
+  return fail(
+    `Expected '=' after 'let ${name}' but found ${describe(source.charAt(where))}`,
+    where,
+    "A 'let' statement gives its variable a value with '='.",
+    "Insert '=' between the name and its value.",
+  );
+}
+
+/**
+ * Reports a statement that does not end with `;`.
+ * @param source - the program being parsed.
+ * @param where - the offset where `;` should appear.
+ * @param noun - the kind of statement, such as "'let' statement" or "assignment".
+ * @returns a failure describing the missing `;`.
+ */
+export function expectedSemicolon(
+  source: string,
+  where: number,
+  noun: string,
+): Failure<TuffError> {
+  return fail(
+    `Expected ';' but found ${describe(source.charAt(where))}`,
+    where,
+    `Every ${noun} must end with ';'.`,
+    "Add ';' after the value.",
+  );
+}
+
+/**
+ * Reports a `let` that does not start a statement.
+ * @param where - the offset of the `let`.
+ * @returns a failure describing the misplaced `let`.
+ */
+export function letNotAllowed(where: number): Failure<TuffError> {
+  return fail(
+    "'let' is only allowed at the start of a statement",
+    where,
+    "A 'let' statement can only begin the program, a block, or follow a ';', so it cannot be part of a larger expression.",
+    "Move the 'let' statement out of the parentheses or operator, or remove the 'let'.",
+  );
+}
+
+/**
+ * Reports a block whose last item is a statement rather than an expression.
+ *
+ * @param where - the offset of the block's closing brace.
+ * @returns a failure describing the block that ends in a statement.
+ */
+export function blockEndsWithStatement(where: number): Failure<TuffError> {
+  return fail(
+    "A block must end with an expression, not a statement",
+    where,
+    "The value of a block is its final expression, so a block that ends with a statement has no value.",
+    "Add an expression after the last statement, such as the variable's name.",
+  );
+}
+
+/**
+ * Reports an `if` that is not followed by a parenthesized condition.
+ *
+ * @param source - the program being parsed.
+ * @param where - the offset of the character that should be `(`.
+ * @returns a failure describing the missing parenthesis.
+ */
+export function expectedIfParen(
+  source: string,
+  where: number,
+): Failure<TuffError> {
+  return fail(
+    `Expected '(' after 'if' but found ${describe(source.charAt(where))}`,
+    where,
+    "An 'if' condition is written in parentheses, as in 'if (x < 5)'.",
+    "Write '(' directly after 'if'.",
+  );
+}
+
+/**
+ * Reports an `if` expression with no `else` branch.
+ *
+ * @param source - the program being parsed.
+ * @param where - the offset where `else` should appear.
+ * @returns a failure describing the missing else branch.
+ */
+export function expectedElse(
+  source: string,
+  where: number,
+): Failure<TuffError> {
+  return fail(
+    `Expected 'else' but found ${describe(source.charAt(where))}`,
+    where,
+    "An 'if' expression needs an 'else' branch so that it always has a value.",
+    "Add 'else' followed by a value.",
+  );
+}
+
+/**
+ * Reports `else` written where no `if` is waiting for it.
+ *
+ * @param where - the offset of `else`.
+ * @returns a failure describing the misplaced `else`.
+ */
+export function elseNotAllowed(where: number): Failure<TuffError> {
+  return fail(
+    "'else' must follow the then-branch of an 'if'",
+    where,
+    "'else' only appears between the branches of an 'if' expression.",
+    "Remove 'else', or write an 'if' before it.",
+  );
+}
+
+/**
+ * Reports a comparison written directly after another comparison.
+ *
+ * @param where - the offset of the second comparison operator.
+ * @returns a failure describing the chained comparison.
+ */
+export function chainedComparison(where: number): Failure<TuffError> {
+  return fail(
+    "Comparisons cannot be chained",
+    where,
+    "A comparison produces a boolean, which cannot be compared again in the same expression.",
+    "Remove one of the comparisons, or compare the values in separate statements.",
+  );
+}
+
+/**
+ * Reports a `;` that does not end a `let` or assignment.
+ *
+ * @param where - the offset of the `;`.
+ * @returns a failure describing the stray `;`.
+ */
+export function unexpectedSemicolon(where: number): Failure<TuffError> {
+  return fail(
+    "Unexpected ';' outside a let statement",
+    where,
+    "';' only ends a 'let' statement.",
+    "Remove the ';', or start the statement with 'let name ='.",
+  );
+}
+
+/**
+ * Reports a missing required token in a declaration or call.
+ *
+ * @param source - the program being parsed.
+ * @param where - the offset where the token should appear.
+ * @param text - the expected token.
+ * @returns a failure describing the missing token.
+ */
+export function expectedText(
+  source: string,
+  where: number,
+  text: string,
+): Failure<TuffError> {
+  return fail(
+    `Expected '${text}' but found ${describe(source.charAt(where))}`,
+    where,
+    `'${text}' is required at this position to complete the syntax.`,
+    `Add '${text}' here.`,
+  );
+}

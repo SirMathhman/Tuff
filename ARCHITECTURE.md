@@ -29,7 +29,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 ### Source files
 
 - `src/scanner.ts`: character classes, token readers, bracket matching, and `Operator`.
-- `src/errors.ts`: `TuffError`, `Result`, `Bracket`, and error constructors.
+- `src/errors/`: `core.ts` (types), and constructors by family, re-exported by `index.ts`.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
 - `src/parse/`: `helpers.ts`, `operands.ts` (with `*`), `operators.ts`, `references.ts` (`&`), `calls.ts` (`fn`), `loops.ts` (`while`), `matches.ts` (`match`, `case`), and `arrays.ts` (literals, `[e]`, element assignment).
@@ -38,7 +38,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Dependency direction
 
-`errors.ts` depends on nothing and owns `Bracket`. `scanner.ts` depends on `errors.ts` and owns bracket matching. `types.ts` depends on both. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, `matches.ts`, and `arrays.ts` depend on `helpers.ts` and `operations.ts`, never on each other. `operands.ts` depends on those five, and `operators.ts` depends on `loops.ts`, `matches.ts`, and `arrays.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
+`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors.ts` and owns bracket matching. `types.ts` depends on both. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, `matches.ts`, and `arrays.ts` depend on `helpers.ts` and `operations.ts`, never on each other. `operands.ts` depends on those five, and `operators.ts` depends on `loops.ts`, `matches.ts`, and `arrays.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
@@ -112,7 +112,7 @@ Rename `operations.ts` to `reduce.ts`, which is too close to `operators.ts`. Spl
 
 ### Errors and data
 
-Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` by category; it is near the 500-line limit. Replace `number` with `bigint` or a decimal type; report line and column. Build an AST, then evaluate it, so lenient branches become an evaluator concern.
+Give `TuffError` a kind enum, so tests match kinds rather than message text. Replace `number` with `bigint` or a decimal type; report line and column. Build an AST, then evaluate it, so lenient branches become an evaluator concern.
 
 ## Performance
 
