@@ -432,3 +432,7 @@ test("writes made in the unchosen branch are undone", () => {
 test('evaluateTuff("let mut x = 0; let y = if (true) 2 else { x = 1; 1 }; x") => 0', () => {
   expect(evaluateTuff("let mut x = 0; let y = if (true) 2 else { x = 1; 1 }; x")).toEqual({ ok: true, value: 0 });
 });
+
+test('evaluateTuff("if (false) { let mut x = 1; x = 2; 0 } else 5") => 5', () => {
+  expect(evaluateTuff("if (false) { let mut x = 1; x = 2; 0 } else 5")).toEqual({ ok: true, value: 5 });
+});
