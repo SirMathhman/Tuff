@@ -364,3 +364,17 @@ test('interpretTuff("fn a() => b(); fn b() => 1; a()") => 1', () => {
     value: 1,
   });
 });
+
+test('interpretTuff("fn a() => { let mut k = b(); k = true; } fn b() => 1;") => error', () => {
+  expect(
+    interpretTuff("fn a() => { let mut k = b(); k = true; } fn b() => 1;"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign a boolean to 'k', which holds a number",
+      where: 29,
+      why: "A variable keeps the type of the value it holds.",
+      fix: "Assign a value of the same type, or declare a new variable.",
+    },
+  });
+});
