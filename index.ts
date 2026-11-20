@@ -15,10 +15,20 @@ interface Problem {
 }
 
 /**
- * A value of a Tuff expression: a number, or a boolean from "true" or "false".
+ * A value of a Tuff expression: a number, a boolean from "true" or "false", or a reference.
  * Values of different types are never equal.
  */
-type Value = number | boolean;
+type Value = number | boolean | Reference;
+
+/**
+ * A reference made with "&name". Reading it with "*" gives the target's current value.
+ */
+interface Reference {
+  /**
+   * The variable the reference points to.
+   */
+  readonly target: Binding;
+}
 
 /**
  * Words with a fixed meaning that cannot be used as variable names.
@@ -38,6 +48,10 @@ interface Binding {
    * True if the variable was declared with "let mut" and may be assigned.
    */
   readonly mutable: boolean;
+  /**
+   * Nesting depth of the scope that declares the variable; the program's scope is 0.
+   */
+  readonly depth: number;
 }
 
 /**
@@ -52,6 +66,10 @@ interface Scope {
    * The enclosing scope, or undefined for the program's outermost scope.
    */
   readonly parent: Scope | undefined;
+  /**
+   * Nesting depth of this scope; the program's scope is 0.
+   */
+  readonly depth: number;
 }
 
 /**
@@ -96,20 +114,21 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   expression := sum ("==" sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
- *   factor     := number | "true" | "false" | name | "(" expression ")" | block
+ *   factor     := number | "true" | "false" | name | "&" name | "*" factor | "(" expression ")" | block
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
  * group sub-expressions. "true" and "false" evaluate to 1 and 0, and "==" yields
  * 1 or 0. "let" declares a variable and the final expression
  * is the value; a block's variables are visible only inside that block. Only
- * variables declared with "let mut" may be assigned. Whitespace between tokens
- * is ignored.
+ * variables declared with "let mut" may be assigned. "&name" makes a reference
+ * to a variable and "*" reads through one; a reference may not outlive the
+ * variable it points to. Whitespace between tokens is ignored.
  *
  * @param text - The source to parse.
- * @returns An Ok result with the value, or an Err result with the first problem found.
+ * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
-function parseProgram(text: string): Result<Value, Problem> {
-  const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined } };
+function parseProgram(text: string): Result<number | boolean, Problem> {
+  const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined, depth: 0 } };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -118,7 +137,11 @@ function parseProgram(text: string): Result<Value, Problem> {
   if (cursor.pos < text.length) {
     return err({ offset: cursor.pos, expected: `"+", "-", "*", "==" or end of input` });
   }
-  return value;
+  const result = value.value;
+  if (typeof result === "object") {
+    return err({ offset: cursor.pos, expected: `a number or boolean as the program's result` });
+  }
+  return ok(result);
 }
 
 /**
@@ -233,6 +256,12 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     cursor.pos++;
     return inner;
   }
+  if (c === "&") {
+    return parseReference(text, cursor);
+  }
+  if (c === "*") {
+    return parseDereference(text, cursor);
+  }
   const name = peekName(text, cursor);
   if (name !== "") {
     const start = cursor.pos;
@@ -265,9 +294,10 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
 function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
+  const blockStart = cursor.pos;
   cursor.pos++;
   const outer = cursor.scope;
-  cursor.scope = { vars: new Map(), parent: outer };
+  cursor.scope = { vars: new Map(), parent: outer, depth: outer.depth + 1 };
   const result = parseBlockBody(text, cursor);
   cursor.scope = outer;
   if (!result.ok) {
@@ -277,7 +307,77 @@ function parseBlock(text: string, cursor: Cursor): Result<Value, Problem> {
     return err({ offset: cursor.pos, expected: `"}"` });
   }
   cursor.pos++;
+  if (escapes(result.value, outer.depth)) {
+    return err({ offset: blockStart, expected: `a value that does not refer to a variable declared inside the block` });
+  }
   return result;
+}
+
+/**
+ * Parses "&name", a reference to a variable in scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the reference.
+ * @returns An Ok result with the reference, or an Err result with the first problem found.
+ */
+function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
+  cursor.pos++;
+  const name = peekName(text, cursor);
+  if (name === "") {
+    return err({ offset: cursor.pos, expected: `a variable name after "&"` });
+  }
+  const start = cursor.pos;
+  cursor.pos += name.length;
+  const binding = lookup(cursor.scope, name);
+  if (binding === undefined) {
+    return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
+  }
+  return ok({ target: binding });
+}
+
+/**
+ * Parses "*" followed by a factor that must be a reference, and yields the target's value.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the dereference.
+ * @returns An Ok result with the target's value, or an Err result with the first problem found.
+ */
+function parseDereference(text: string, cursor: Cursor): Result<Value, Problem> {
+  const starOffset = cursor.pos;
+  cursor.pos++;
+  const inner = parseFactor(text, cursor);
+  if (!inner.ok) {
+    return inner;
+  }
+  if (typeof inner.value !== "object") {
+    return err({ offset: starOffset, expected: `a reference after "*"` });
+  }
+  return ok(inner.value.target.value);
+}
+
+/**
+ * Reports whether a value is a reference to a variable declared deeper than the given depth,
+ * so that storing it at that depth would let it outlive its variable.
+ *
+ * @param value - The value being stored or returned.
+ * @param depth - The depth of the scope that will hold the value.
+ * @returns True if the value is a reference that would outlive its target.
+ */
+function escapes(value: Value, depth: number): boolean {
+  return typeof value === "object" && value.target.depth > depth;
+}
+
+/**
+ * Describes the kind of a value for error messages.
+ *
+ * @param value - The value to describe.
+ * @returns "a number", "a boolean", or "a reference".
+ */
+function kindOf(value: Value): string {
+  if (typeof value === "number") {
+    return "a number";
+  }
+  return typeof value === "boolean" ? "a boolean" : "a reference";
 }
 
 /**
@@ -328,15 +428,20 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     return { offset: cursor.pos, expected: `"="` };
   }
   cursor.pos++;
+  peek(text, cursor);
+  const valueStart = cursor.pos;
   const value = parseExpression(text, cursor);
   if (!value.ok) {
     return value.error;
+  }
+  if (escapes(value.value, cursor.scope.depth)) {
+    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
   }
   if (peek(text, cursor) !== ";") {
     return { offset: cursor.pos, expected: `";"` };
   }
   cursor.pos++;
-  cursor.scope.vars.set(name, { value: value.value, mutable });
+  cursor.scope.vars.set(name, { value: value.value, mutable, depth: cursor.scope.depth });
   return undefined;
 }
 
@@ -367,8 +472,10 @@ function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
     return value.error;
   }
   if (typeof value.value !== typeof binding.value) {
-    const kind = typeof binding.value === "number" ? "a number" : "a boolean";
-    return { offset: valueStart, expected: `${kind} to match the type of "${name}"` };
+    return { offset: valueStart, expected: `${kindOf(binding.value)} to match the type of "${name}"` };
+  }
+  if (escapes(value.value, binding.depth)) {
+    return { offset: valueStart, expected: `a value that does not refer to a variable declared inside a deeper block` };
   }
   if (peek(text, cursor) !== ";") {
     return { offset: cursor.pos, expected: `";"` };
@@ -485,7 +592,7 @@ function describeUnsupported(tuffSource: string, problem: Problem): string {
   return (
     `What: unsupported Tuff source. ` +
     `Where: line ${line}, column ${column}, found ${found} where ${problem.expected} was expected. ` +
-    `Why: Tuff currently only evaluates non-negative integer literals, the booleans true (1) and false (0), variables declared with "let" (assignable only when declared with "let mut"), binary "+", "-", and "*", and parentheses or braces for grouping. ` +
+    `Why: Tuff currently only evaluates non-negative integer literals, the booleans true (1) and false (0), variables declared with "let" (assignable only when declared with "let mut"), references with "&name" read back with "*", binary "+", "-", and "*", and parentheses or braces for grouping. ` +
     `Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3" (received ${JSON.stringify(tuffSource)}).`
   );
 }

@@ -83,6 +83,27 @@ test("interpretTuff('true + 1') is an error: arithmetic needs numbers", () => {
   expect(interpretTuff("true + 1").ok).toBe(false);
 });
 
+test("interpretTuff('let x = 1; let y = &x; *y') => 1", () => {
+  expect(interpretTuff("let x = 1; let y = &x; *y")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff reads a reference's current value", () => {
+  expect(interpretTuff("let mut x = 1; let y = &x; x = 2; *y")).toEqual({ ok: true, value: 2 });
+});
+
+test("interpretTuff rejects a reference that outlives its variable", () => {
+  expect(interpretTuff("let y = { let x = 1; &x }; *y").ok).toBe(false);
+  expect(interpretTuff("let mut y = &0; { let x = 1; y = &x; } *y").ok).toBe(false);
+});
+
+test("interpretTuff rejects a program whose result is a reference", () => {
+  expect(interpretTuff("let x = 1; &x").ok).toBe(false);
+});
+
+test("interpretTuff rejects '*' applied to a non-reference", () => {
+  expect(interpretTuff("let x = 1; *x").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });
