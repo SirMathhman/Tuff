@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, a variable, or a parenthesized or braced expression.
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, a boolean (`true` or `false`), a variable, or a parenthesized or braced expression. Booleans cannot be used in arithmetic.
 
 ### Statements and scope
 
@@ -18,7 +18,7 @@ A block's value is its final expression, so it cannot end with a statement. A pr
 
 ### Results and errors
 
-Results are `{ ok: true, value }` or `{ ok: false, error }`. `TuffError` has four parts: `what`, `where` (a zero-based offset), `why`, and `fix`.
+Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has four parts: `what`, `where` (a zero-based offset), `why`, and `fix`.
 
 ### Examples
 
@@ -109,7 +109,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### ESLint rules
 
-ESLint runs the recommended JavaScript and TypeScript rules and the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, and string literal types.
+ESLint runs its recommended rules plus the rules below. Restricted syntax bans regex literals, `RegExp`, `match`/`matchAll`/`search`, object type literals, and string literal types.
 
 #### Recursion
 

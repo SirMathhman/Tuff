@@ -189,13 +189,14 @@ export function expectedVariableName(
 /**
  * Reports a keyword used as a variable name.
  * @param where - the offset of the keyword.
+ * @param name - the keyword that was used.
  * @returns a failure describing the reserved name.
  */
-export function reservedName(where: number): Failure<TuffError> {
+export function reservedName(where: number, name: string): Failure<TuffError> {
   return fail(
-    "'let' is a keyword and cannot be a variable name",
+    `'${name}' is a keyword and cannot be a variable name`,
     where,
-    "'let' starts a declaration, so it cannot also name a variable.",
+    `'${name}' has a fixed meaning, so it cannot also name a variable.`,
     "Choose a different name.",
   );
 }
@@ -268,17 +269,12 @@ export function notMutable(where: number, name: string): Failure<TuffError> {
 }
 
 /**
- * Reports a `;` that does not end a `let` or assignment.
- * @param where - the offset of the `;`.
- * @returns a failure describing the stray `;`.
- */
-export /**
  * Reports a block whose last item is a statement rather than an expression.
  *
  * @param where - the offset of the block's closing brace.
  * @returns a failure describing the block that ends in a statement.
  */
-function blockEndsWithStatement(where: number): Failure<TuffError> {
+export function blockEndsWithStatement(where: number): Failure<TuffError> {
   return fail(
     "A block must end with an expression, not a statement",
     where,
@@ -287,6 +283,39 @@ function blockEndsWithStatement(where: number): Failure<TuffError> {
   );
 }
 
+/**
+ * Reports an arithmetic operator applied to a boolean.
+ *
+ * @param where - the offset of the operator.
+ * @param operator - the operator that received a boolean operand.
+ * @returns a failure describing the boolean operand.
+ */
+export function booleanOperand(
+  where: number,
+  operator: string,
+): Failure<TuffError> {
+  return fail(
+    `Cannot use a boolean with '${operator}'`,
+    where,
+    "Only numbers can be combined with '+', '-', or '*'; a boolean has no arithmetic value.",
+    "Use a number in place of the boolean, or remove the operator.",
+  );
+}
+
+/**
+ * Reports a negative sign applied to a boolean.
+ *
+ * @param where - the offset of the boolean.
+ * @returns a failure describing the signed boolean.
+ */
+export function booleanSign(where: number): Failure<TuffError> {
+  return fail(
+    "Cannot apply a sign to a boolean",
+    where,
+    "A sign can only change the value of a number.",
+    "Remove the sign, or use a number.",
+  );
+}
 /**
  * Reports a `;` that does not end a `let` or assignment.
  *

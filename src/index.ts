@@ -1,6 +1,9 @@
 import type { Failure, Result, TuffError } from "./errors";
 import {
+  blockEndsWithStatement,
   Bracket,
+  booleanOperand,
+  booleanSign,
   closerFor,
   expectedClose,
   expectedEquals,
@@ -9,7 +12,6 @@ import {
   expectedOperator,
   expectedSemicolon,
   expectedVariableName,
-  blockEndsWithStatement,
   letNotAllowed,
   notMutable,
   reservedName,
@@ -34,16 +36,24 @@ enum Step {
   End = "end",
 }
 
+// A value is an integer or a boolean. A boolean has no arithmetic meaning.
+type Value = number | boolean;
+
+// Names with a fixed meaning. They cannot be variable names.
+const RESERVED_NAMES = new Set(["let", "mut", "true", "false"]);
+
 interface OperatorEntry {
   kind: EntryKind.Operator;
   operator: Operator;
+  where: number;
 }
 
-// An open bracket, remembering its kind and the sign written directly before it.
+// An open bracket, remembering its kind, the sign written before it, and its offset.
 interface GroupEntry {
   kind: EntryKind.Group;
   bracket: Bracket;
   sign: number;
+  where: number;
 }
 
 // A `let` or assignment whose value is still being evaluated; ends at ";".
@@ -57,7 +67,7 @@ interface BindingEntry {
 type StackEntry = OperatorEntry | GroupEntry | BindingEntry;
 
 interface Cell {
-  value: number;
+  value: Value;
   mutable: boolean;
 }
 
@@ -66,7 +76,7 @@ type Scope = Map<string, Cell>;
 interface ParserState {
   source: string;
   pos: number;
-  values: number[];
+  values: Value[];
   ops: StackEntry[];
   scopes: Scope[];
   depth: number; // number of open brackets
@@ -133,25 +143,49 @@ function apply(left: number, op: Operator, right: number): number {
   return left * right;
 }
 
-// Pops the newest operator and applies it to the two newest values. The grammar
-// guarantees both operands are present.
-function applyTop(values: number[], ops: StackEntry[]): void {
+// Applies a sign to a value. Only numbers take a sign, so a negative sign on a
+// boolean is a failure.
+function applySign(
+  value: Value,
+  sign: number,
+  where: number,
+): Failure<TuffError> | Value {
+  if (sign === 1) return value;
+  if (typeof value === "boolean") return booleanSign(where);
+  return sign * value;
+}
+
+// Pops the newest operator and applies it to the two newest values. Returns a
+// failure when an operand is a boolean. The grammar guarantees both operands exist.
+function applyTop(
+  values: Value[],
+  ops: StackEntry[],
+): Failure<TuffError> | null {
   const entry = ops.pop();
-  if (entry?.kind !== EntryKind.Operator) return;
+  if (entry?.kind !== EntryKind.Operator) return null;
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
+  if (typeof left === "boolean" || typeof right === "boolean") {
+    return booleanOperand(entry.where, entry.operator);
+  }
   values.push(apply(left, entry.operator, right));
+  return null;
 }
 
 // Applies every pending operator at the top of the stack.
-function reduceOperators(values: number[], ops: StackEntry[]): void {
+function reduceOperators(
+  values: Value[],
+  ops: StackEntry[],
+): Failure<TuffError> | null {
   for (
     let top = ops[ops.length - 1];
     top?.kind === EntryKind.Operator;
     top = ops[ops.length - 1]
   ) {
-    applyTop(values, ops);
+    const failure = applyTop(values, ops);
+    if (failure !== null) return failure;
   }
+  return null;
 }
 
 // The newest open bracket on the stack, or null when none is open.
@@ -183,17 +217,28 @@ function lookupCell(scopes: Scope[], name: string): Cell | undefined {
 
 // Closes the innermost group: applies its operators, then scales the result by
 // the sign written before its opening bracket.
-function closeGroup(values: number[], ops: StackEntry[]): void {
-  reduceOperators(values, ops);
+function closeGroup(
+  values: Value[],
+  ops: StackEntry[],
+): Failure<TuffError> | null {
+  const reduced = reduceOperators(values, ops);
+  if (reduced !== null) return reduced;
   const group = ops.pop();
-  if (group?.kind !== EntryKind.Group) return;
-  values.push(group.sign * (values.pop() ?? 0));
+  if (group?.kind !== EntryKind.Group) return null;
+  const signed = applySign(values.pop() ?? 0, group.sign, group.where);
+  if (typeof signed === "object") return signed;
+  values.push(signed);
+  return null;
 }
 
 // Completes a `let` or assignment: its value is the newest value. A `let` binds
 // in the current scope; an assignment updates the nearest declaration.
-function closeBinding(state: ParserState, binding: BindingEntry): void {
-  reduceOperators(state.values, state.ops);
+function closeBinding(
+  state: ParserState,
+  binding: BindingEntry,
+): Failure<TuffError> | null {
+  const reduced = reduceOperators(state.values, state.ops);
+  if (reduced !== null) return reduced;
   state.ops.pop();
   const value = state.values.pop() ?? 0;
   if (binding.assign) {
@@ -205,9 +250,10 @@ function closeBinding(state: ParserState, binding: BindingEntry): void {
   }
   state.lastStatementEnded = true;
   if (state.depth === 0) state.afterLet = true;
+  return null;
 }
 
-function pushOperand(state: ParserState, value: number, end: number): Step {
+function pushOperand(state: ParserState, value: Value, end: number): Step {
   state.lastStatementEnded = false;
   state.values.push(value);
   state.pos = end;
@@ -217,7 +263,7 @@ function pushOperand(state: ParserState, value: number, end: number): Step {
 }
 
 function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
-  state.ops.push({ kind: EntryKind.Group, bracket, sign });
+  state.ops.push({ kind: EntryKind.Group, bracket, sign, where: state.pos });
   if (bracket === Bracket.Brace) state.scopes.push(new Map());
   state.depth++;
   state.pos++;
@@ -241,7 +287,7 @@ function startLet(
   if (nameEnd === nameStart)
     return expectedVariableName(state.source, nameStart);
   const name = state.source.slice(nameStart, nameEnd);
-  if (name === "let" || name === "mut") return reservedName(nameStart);
+  if (RESERVED_NAMES.has(name)) return reservedName(nameStart, name);
   const equals = skipSpaces(state.source, nameEnd);
   if (state.source.charAt(equals) !== "=") {
     return expectedEquals(state.source, equals, name);
@@ -286,6 +332,11 @@ function operandName(
     if (state.atStatementStart && !signed) return startLet(state, end);
     return letNotAllowed(state.pos);
   }
+  if (name === "true" || name === "false") {
+    const literal = applySign(name === "true", sign, state.pos);
+    if (typeof literal === "object") return literal;
+    return pushOperand(state, literal, end);
+  }
   const equals = skipSpaces(state.source, end);
   if (
     state.atStatementStart &&
@@ -296,7 +347,9 @@ function operandName(
   }
   const cell = lookupCell(state.scopes, name);
   if (cell === undefined) return undefinedName(state.pos, name);
-  return pushOperand(state, sign * cell.value, end);
+  const value = applySign(cell.value, sign, state.pos);
+  if (typeof value === "object") return value;
+  return pushOperand(state, value, end);
 }
 
 function operandNumber(
@@ -312,7 +365,7 @@ function operandNumber(
   );
 }
 
-// Reads an operand: a sign, then a number, a variable, or an opening bracket.
+// Reads an operand: a sign, then a number, a variable, a boolean, or an opening bracket.
 function stepOperand(state: ParserState): Failure<TuffError> | Step {
   state.pos = skipSpaces(state.source, state.pos);
   if (
@@ -348,7 +401,10 @@ function stepOperand(state: ParserState): Failure<TuffError> | Step {
   return operandNumber(state, sign);
 }
 
-function pushOperator(state: ParserState, op: Operator): void {
+function pushOperator(
+  state: ParserState,
+  op: Operator,
+): Failure<TuffError> | null {
   // Left-associative: apply pending operators that bind at least as tightly.
   for (
     let top = state.ops[state.ops.length - 1];
@@ -356,12 +412,14 @@ function pushOperator(state: ParserState, op: Operator): void {
     precedence(top.operator) >= precedence(op);
     top = state.ops[state.ops.length - 1]
   ) {
-    applyTop(state.values, state.ops);
+    const failure = applyTop(state.values, state.ops);
+    if (failure !== null) return failure;
   }
-  state.ops.push({ kind: EntryKind.Operator, operator: op });
+  state.ops.push({ kind: EntryKind.Operator, operator: op, where: state.pos });
   state.pos++;
   state.expectOperand = true;
   state.atStatementStart = false;
+  return null;
 }
 
 function endOfInput(state: ParserState): Failure<TuffError> | Step {
@@ -378,7 +436,8 @@ function endOfInput(state: ParserState): Failure<TuffError> | Step {
 function endStatement(state: ParserState): Failure<TuffError> | Step {
   const open = innermostNonOperator(state.ops);
   if (open?.kind === EntryKind.Binding) {
-    closeBinding(state, open);
+    const failure = closeBinding(state, open);
+    if (failure !== null) return failure;
     state.pos++;
     state.expectOperand = true;
     state.atStatementStart = true;
@@ -402,7 +461,8 @@ function closeBracket(
   if (ch !== closerFor(group.bracket)) {
     return expectedMismatch(state.source, state.pos, group.bracket);
   }
-  closeGroup(state.values, state.ops);
+  const failure = closeGroup(state.values, state.ops);
+  if (failure !== null) return failure;
   if (group.bracket === Bracket.Brace) state.scopes.pop();
   state.depth--;
   state.pos++;
@@ -424,16 +484,17 @@ function stepOperator(state: ParserState): Failure<TuffError> | Step {
     }
     return expectedOperator(state.source, state.pos, state.depth > 0);
   }
-  pushOperator(state, op);
-  return Step.Continue;
+  return pushOperator(state, op) ?? Step.Continue;
 }
 
 /**
  * Evaluates a Tuff program: `let NAME = value;` statements followed by an
- * expression. Integers, variables, `+`, `-`, `*`, signs, parentheses, and braces
- * are supported. Braces open a block scope, and the value of a block is its last
- * expression. Uses explicit stacks, so nesting depth is not limited by the
- * JavaScript call stack. Offsets in errors refer to the unmodified source.
+ * expression. Integers, booleans (`true` and `false`), variables, `+`, `-`, `*`,
+ * signs, parentheses, and braces are supported. A boolean cannot be used in
+ * arithmetic. The final value of a boolean program is 1 or 0. Braces open a block
+ * scope, and the value of a block is its last expression. Uses explicit stacks, so
+ * nesting depth is not limited by the JavaScript call stack. Offsets in errors
+ * refer to the unmodified source.
  *
  * @param tuffSource - the program to evaluate.
  * @returns the value on success, or a TuffError describing the first syntax error.
@@ -458,6 +519,11 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     if (outcome === Step.End) break;
     if (outcome !== Step.Continue) return outcome;
   }
-  reduceOperators(state.values, state.ops);
-  return { ok: true, value: state.values.pop() ?? 0 };
+  const failure = reduceOperators(state.values, state.ops);
+  if (failure !== null) return failure;
+  const result = state.values.pop() ?? 0;
+  return {
+    ok: true,
+    value: typeof result === "boolean" ? Number(result) : result,
+  };
 }

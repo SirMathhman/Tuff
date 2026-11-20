@@ -29,7 +29,7 @@ const NAME_WHY =
   "A 'let' statement names the variable it declares, as in 'let x = 1;'.";
 const NAME_FIX = "Write a name made of letters after 'let'.";
 const KEYWORD_WHY =
-  "'let' starts a declaration, so it cannot also name a variable.";
+  "'let' has a fixed meaning, so it cannot also name a variable.";
 const KEYWORD_FIX = "Choose a different name.";
 const SEMICOLON_WHY = "Every 'let' statement must end with ';'.";
 const SEMICOLON_FIX = "Add ';' after the value.";
@@ -481,6 +481,22 @@ test('interpretTuff("let mut x = 1; { let x = 5; x = 2; } x") => error', () => {
       where: 28,
       why: "Only variables declared with 'let mut' can be reassigned.",
       fix: "Declare 'x' with 'let mut x = ...;' to allow reassignment.",
+    },
+  });
+});
+
+test('interpretTuff("let x = true; x") => 1', () => {
+  expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("true + 1") => error', () => {
+  expect(interpretTuff("true + 1")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot use a boolean with '+'",
+      where: 5,
+      why: "Only numbers can be combined with '+', '-', or '*'; a boolean has no arithmetic value.",
+      fix: "Use a number in place of the boolean, or remove the operator.",
     },
   });
 });
