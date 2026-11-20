@@ -12,7 +12,8 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow union of `TuffErrorKind` members (for example `DivisionByZero`). The operator never sees source positions. The evaluator attaches the operator token's span and widens the failure to a `TuffError`.
 - **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
 - **Block**: a sequence of zero or more bindings followed by one final expression, optionally wrapped in `{ }`. The whole source is a block without braces. A block is the only construct that creates a scope.
-- **Binding**: `let NAME = expr;`. It introduces an immutable name for the rest of its block. The right-hand side is evaluated before the name exists, so `let x = x;` refers to an outer `x` or fails with `UnknownName`.
+- **Binding**: `let NAME = expr;` or `let mut NAME = expr;`. It introduces a name for the rest of its block. Only a `let mut` binding may be changed later; assigning a plain `let` binding is `ImmutableAssignment`.
+- **Assignment**: `NAME = expr;`. It changes the value of a `let mut` binding, found by the same lookup as a read, so a nested block may assign a `mut` binding of an enclosing block. The right-hand side is evaluated before the name exists, so `let x = x;` refers to an outer `x` or fails with `UnknownName`.
 - **Scope**: the lexical environment of one block: its bindings plus a link to the enclosing scope. Lookup walks outward and stops at the first match. A scope exists only while its block is being evaluated.
 - **Invariant 1**: the same source always yields the same `Result`. There is no hidden state between calls.
 - **Invariant 2**: evaluation always terminates or returns a `TuffError` for resource exhaustion. It never hangs the caller.

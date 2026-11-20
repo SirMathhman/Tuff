@@ -1,4 +1,4 @@
-import { NodeKind, Operator, type Binding, type BlockNode, type ChainNode, type ChainStep, type Expr, type LiteralNode, type NameNode } from "./ast.ts";
+import { NodeKind, Operator, StatementKind, type AssignStatement, type BlockNode, type ChainNode, type ChainStep, type Expr, type LetStatement, type LiteralNode, type NameNode, type Statement } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import type { Token } from "./lexer.ts";
 import { err, ok, type Result } from "./result.ts";
@@ -28,40 +28,76 @@ const MULTIPLICATIVE = new Map<string, Operator>([
 ]);
 
 function isName(text: string): boolean {
-  return /^[A-Za-z]+$/.test(text) && text !== "let";
+  return /^[A-Za-z]+$/.test(text) && text !== "let" && text !== "mut";
+}
+
+function parseLet(input: Input, pos: number, depth: number, names: Set<string>, parseExpr: Parser): Step<LetStatement> {
+  const mutable = input.tokens[pos + 1]?.text === "mut";
+  const nameToken = input.tokens[pos + (mutable ? 2 : 1)];
+  if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
+  if (names.has(nameToken.text)) return err({ kind: TuffErrorKind.DuplicateName, span: nameToken.span });
+  names.add(nameToken.text);
+
+  const equalsPos = pos + (mutable ? 3 : 2);
+  const equals = input.tokens[equalsPos];
+  if (equals === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (equals.text !== "=") return err({ kind: TuffErrorKind.UnexpectedToken, span: equals.span });
+
+  const rhs = parseExpr(input, equalsPos + 1, depth);
+  if (!rhs.ok) return rhs;
+  const semicolon = input.tokens[rhs.value.next];
+  if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
+  const statement: LetStatement = {
+    kind: StatementKind.Let,
+    name: nameToken.text,
+    span: nameToken.span,
+    mutable,
+    value: rhs.value.value,
+  };
+  return ok({ value: statement, next: rhs.value.next + 1 });
+}
+
+function parseAssign(input: Input, pos: number, depth: number, parseExpr: Parser): Step<AssignStatement> {
+  const nameToken = input.tokens[pos];
+  if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  const rhs = parseExpr(input, pos + 2, depth);
+  if (!rhs.ok) return rhs;
+  const semicolon = input.tokens[rhs.value.next];
+  if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
+  if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
+  const target: NameNode = { kind: NodeKind.Name, name: nameToken.text, span: nameToken.span };
+  const statement: AssignStatement = { kind: StatementKind.Assign, target, value: rhs.value.value };
+  return ok({ value: statement, next: rhs.value.next + 1 });
 }
 
 function parseBlock(input: Input, pos: number, depth: number, parseExpr: Parser): Step<BlockNode> {
-  const bindings: Binding[] = [];
+  const statements: Statement[] = [];
   const names = new Set<string>();
   let cursor = pos;
   for (;;) {
     const token = input.tokens[cursor];
     if (token === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-    if (token.text !== "let") {
-      const result = parseExpr(input, cursor, depth);
-      if (!result.ok) return result;
-      const block: BlockNode = { kind: NodeKind.Block, bindings, result: result.value.value };
-      return ok({ value: block, next: result.value.next });
+    if (token.text === "let") {
+      const statement = parseLet(input, cursor, depth, names, parseExpr);
+      if (!statement.ok) return statement;
+      statements.push(statement.value.value);
+      cursor = statement.value.next;
+      continue;
+    }
+    if (isName(token.text) && input.tokens[cursor + 1]?.text === "=") {
+      const statement = parseAssign(input, cursor, depth, parseExpr);
+      if (!statement.ok) return statement;
+      statements.push(statement.value.value);
+      cursor = statement.value.next;
+      continue;
     }
 
-    const nameToken = input.tokens[cursor + 1];
-    if (nameToken === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-    if (!isName(nameToken.text)) return err({ kind: TuffErrorKind.UnexpectedToken, span: nameToken.span });
-    if (names.has(nameToken.text)) return err({ kind: TuffErrorKind.DuplicateName, span: nameToken.span });
-    names.add(nameToken.text);
-
-    const equals = input.tokens[cursor + 2];
-    if (equals === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-    if (equals.text !== "=") return err({ kind: TuffErrorKind.UnexpectedToken, span: equals.span });
-
-    const rhs = parseExpr(input, cursor + 3, depth);
-    if (!rhs.ok) return rhs;
-    const semicolon = input.tokens[rhs.value.next];
-    if (semicolon === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
-    if (semicolon.text !== ";") return err({ kind: TuffErrorKind.UnexpectedToken, span: semicolon.span });
-    bindings.push({ name: nameToken.text, span: nameToken.span, value: rhs.value.value });
-    cursor = rhs.value.next + 1;
+    const result = parseExpr(input, cursor, depth);
+    if (!result.ok) return result;
+    const block: BlockNode = { kind: NodeKind.Block, statements, result: result.value.value };
+    return ok({ value: block, next: result.value.next });
   }
 }
 
@@ -71,12 +107,12 @@ function parseFactor(input: Input, pos: number, depth: number, parseExpr: Parser
   if (token.text === "(" || token.text === "{") {
     if (depth >= MAX_NESTING_DEPTH) return err({ kind: TuffErrorKind.NestingTooDeep, span: token.span });
     const isBlock = token.text === "{";
+    const closer = isBlock ? "}" : ")";
     const inner: Step<Expr> = isBlock
       ? parseBlock(input, pos + 1, depth + 1, parseExpr)
       : parseExpr(input, pos + 1, depth + 1);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
-    const closer = isBlock ? "}" : ")";
     if (close === undefined) return err({ kind: TuffErrorKind.UnexpectedEnd, span: input.end });
     if (close.text !== closer) {
       return err({ kind: TuffErrorKind.ExpectedClosingParen, span: close.span });

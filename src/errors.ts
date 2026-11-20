@@ -22,6 +22,8 @@ export enum TuffErrorKind {
   DuplicateName = "DuplicateName",
   /** The resolver and evaluator disagree about a binding. This is a bug in Tuff, not in the source. */
   InternalError = "InternalError",
+  /** An assignment targets a name that was declared with `let`, not `let mut`. */
+  ImmutableAssignment = "ImmutableAssignment",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -43,7 +45,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.NestingTooDeep>
   | TuffErrorOf<TuffErrorKind.UnknownName>
   | TuffErrorOf<TuffErrorKind.DuplicateName>
-  | TuffErrorOf<TuffErrorKind.InternalError>;
+  | TuffErrorOf<TuffErrorKind.InternalError>
+  | TuffErrorOf<TuffErrorKind.ImmutableAssignment>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -117,6 +120,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "Internal error",
     why: "The name resolver and the evaluator disagree about a binding. The source is not at fault.",
     fix: "Report this source text to the Tuff maintainers.",
+  },
+  [TuffErrorKind.ImmutableAssignment]: {
+    what: "Assignment to an immutable binding",
+    why: "This name was declared with let, so its value cannot change after it is bound.",
+    fix: "Declare the binding with let mut, or bind a new name with let for the new value.",
   },
 };
 

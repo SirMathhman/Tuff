@@ -8,8 +8,16 @@ export enum NodeKind {
   Name = "Name",
   /** A chain of operators at one precedence level. */
   Chain = "Chain",
-  /** A block: bindings followed by a final expression. */
+  /** A block: statements followed by a final expression. */
   Block = "Block",
+}
+
+/** The kinds of statement that may appear in a block. */
+export enum StatementKind {
+  /** A `let` statement that binds a name. */
+  Let = "Let",
+  /** An assignment that changes a `let mut` binding. */
+  Assign = "Assign",
 }
 
 /** The binary operators. */
@@ -64,22 +72,39 @@ export interface ChainNode {
   steps: ChainStep[];
 }
 
-/** A `let NAME = value;` statement. */
-export interface Binding {
+/** A `let NAME = value;` or `let mut NAME = value;` statement. */
+export interface LetStatement {
+  /** Always `StatementKind.Let`. */
+  kind: StatementKind.Let;
   /** The name being bound. */
   name: string;
   /** Where the name sits in the source. */
   span: Span;
+  /** Whether the binding may later be assigned (`let mut`). */
+  mutable: boolean;
   /** The expression whose value is bound. */
   value: Expr;
 }
 
-/** Zero or more bindings followed by one final expression. */
+/** An assignment statement `NAME = value;` that changes a `let mut` binding. */
+export interface AssignStatement {
+  /** Always `StatementKind.Assign`. */
+  kind: StatementKind.Assign;
+  /** The name being assigned, located in the source. */
+  target: NameNode;
+  /** The new value. */
+  value: Expr;
+}
+
+/** A statement inside a block. */
+export type Statement = LetStatement | AssignStatement;
+
+/** Zero or more statements followed by one final expression. */
 export interface BlockNode {
   /** Always `NodeKind.Block`. */
   kind: NodeKind.Block;
-  /** The `let` statements, in source order. */
-  bindings: Binding[];
+  /** The statements, in source order. */
+  statements: Statement[];
   /** The expression whose value is the block's value. */
   result: Expr;
 }

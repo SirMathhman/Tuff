@@ -1,4 +1,4 @@
-import { NodeKind, Operator, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
+import { NodeKind, Operator, StatementKind, type AssignStatement, type BlockNode, type ChainNode, type Expr, type NameNode } from "./ast.ts";
 import { TuffErrorKind, type TuffError } from "./errors.ts";
 import { err, ok, type Result } from "./result.ts";
 import type { NameRefs } from "./resolver.ts";
@@ -81,10 +81,28 @@ function evaluateBlock(block: BlockNode, env: Env): Result<number, TuffError> {
 }
 
 function evaluateBlockBody(block: BlockNode, env: Env, frame: number[]): Result<number, TuffError> {
-  for (const binding of block.bindings) {
-    const value = evaluateIn(binding.value, env);
-    if (!value.ok) return value;
-    frame.push(value.value);
+  for (const statement of block.statements) {
+    if (statement.kind === StatementKind.Let) {
+      const value = evaluateIn(statement.value, env);
+      if (!value.ok) return value;
+      frame.push(value.value);
+      continue;
+    }
+    const assigned = evaluateAssign(statement, env);
+    if (!assigned.ok) return assigned;
   }
   return evaluateIn(block.result, env);
+}
+
+function evaluateAssign(statement: AssignStatement, env: Env): Result<undefined, TuffError> {
+  const value = evaluateIn(statement.value, env);
+  if (!value.ok) return value;
+  const ref = env.refs.get(statement.target);
+  const frame = ref === undefined ? undefined : env.frames[env.frames.length - 1 - ref.depth];
+  // Unreachable when the resolver ran first; see evaluateName.
+  if (ref === undefined || frame === undefined || ref.index >= frame.length) {
+    return err({ kind: TuffErrorKind.InternalError, span: statement.target.span });
+  }
+  frame[ref.index] = value.value;
+  return ok(undefined);
 }
