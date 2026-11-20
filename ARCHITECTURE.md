@@ -11,7 +11,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **TuffError**: a discriminated union (error enum) of failure kinds. Each variant carries its kind and the span where it occurred (start and end offsets). `describeError` answers what the error is, where it is, why it is an error, and what the caller can change to fix it. It derives the wording from the kind, so no text is built on the failure path.
 - **Operator**: a binary function from two numbers to a `Result` whose error type is a narrow union of `TuffErrorKind` members (for example `DivisionByZero`). The operator never sees source positions. The evaluator attaches the operator token's span and widens the failure to a `TuffError`.
 - **Finite result**: every value Tuff returns is a finite number. Overflow to `Infinity` and any `NaN` are failures, reported as a `TuffError`, never returned as a value.
-- **Boolean**: `true` or `false`, a value distinct from a number. Arithmetic on a boolean is a `BooleanOperand` error. A source whose final value is a boolean is returned as 1 for `true` and 0 for `false`, so the result is always a number.
+- **Boolean**: `true` or `false`, a value distinct from a number. Arithmetic on a boolean is a `BooleanOperand` error. A source whose final value is a boolean is returned as 1 for `true` and 0 for `false`, so the result is always a number. A binding keeps the kind (number or boolean) of the value it was declared with. Assigning a value of the other kind is a `TypeMismatch` error at the assignment target.
 - **Block**: a sequence of zero or more statements (`let` and assignment) followed by an optional final expression, optionally wrapped in `{ }`. A braced block must end in a final expression: `{ }` and `{ let x = 0; }` are `UnexpectedToken` errors at the closing brace. A source with statements but no final expression evaluates to 0, and an empty source is an error. The whole source is a block without braces. A block is the only construct that creates a scope.
 - **Binding**: `let NAME = expr;` or `let mut NAME = expr;`. It introduces a name for the rest of its block. Only a `let mut` binding may be changed later; assigning a plain `let` binding is `ImmutableAssignment`.
 - **Assignment**: `NAME = expr;`. It changes the value of a `let mut` binding, found by the same lookup as a read, so a nested block may assign a `mut` binding of an enclosing block. The right-hand side is evaluated before the name exists, so `let x = x;` refers to an outer `x` or fails with `UnknownName`.
@@ -20,7 +20,7 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Invariant 2**: evaluation always terminates or returns a `TuffError` for resource exhaustion. It never hangs the caller.
 - **Invariant 3**: a module under `src/` never imports from `index.ts`.
 - **Invariant 4**: a name is bound at most once per block (`DuplicateName`). A nested block may shadow an outer name. Every name used must resolve to a binding in scope (`UnknownName`). Both are static errors: decided from the source before any value is computed.
-- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. The reported error never depends on the order in which values happen to be computed. For example, `1 / 0 + x` reports `UnknownName`.
+- **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (`DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `TypeMismatch`), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
 - **Invariant 6**: name lookup uses `Map`-based scopes only, never plain objects, so a name such as `constructor` cannot reach host prototype properties.
 
 ## Structure
@@ -67,49 +67,10 @@ Rules:
 - Recursion is allowed only inside the parser, resolver, and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
 - Limits: 100 lines per function, 500 code lines per file, 10 files per directory. These must be enforced by lint (see Future Work). Lint does not enforce them yet.
 
-## Potential Problems
+## Risks, Security, and Future Work
 
-- **Public API surface growing before the contract is fixed.** Any export becomes a compatibility commitment. Return types should change only while the project has no external callers.
-- **Stringly-typed errors.** Plain string messages cannot be matched on, tested precisely, or localized. Use `TuffError` variants.
-- **Single-file growth.** `index.ts` is the natural place for "just one more function". Without the layout above it will exceed the file limit quickly.
-- **Unbounded recursion in the evaluator.** The parser caps group nesting at 256 and reports `NestingTooDeep`. Any later recursive stage must enforce the same limit (or a shared one in `limits.ts`) and produce a `TuffError`, not a `RangeError` crash.
-- **Parsing and evaluating in one pass.** A parser that evaluates `let` right-hand sides as it reads them is an evaluator in disguise. It cannot be split into `parser.ts` and `evaluator.ts`, and it cannot report a binding's value without running the whole block. The AST in `ast.ts` is the boundary that prevents this. Any stage that needs a value must go through the evaluator.
-- **Error-order drift.** If evaluation can run before the resolver, the reported error depends on evaluation order. For example, `1 / 0 + x` would report `DivisionByZero` instead of `UnknownName`. Invariant 5 forbids this, and tests must pin mixed-error inputs.
-- **Shared nesting budget.** Block braces and group parentheses share one nesting limit. It lives in `limits.ts`, not in each parser function.
-- **Name rules spread across stages.** Shadowing, the `let` keyword, and the ban on re-binding are language rules. If they are checked in more than one place, they will drift. Each rule belongs to one stage, as stated in the Rules above.
-- **Parallel name models.** Name slots would be modeled three times (resolver tables, evaluator frames, and `scope.ts`) if each stage kept its own. The ideal is one `scope.ts` definition used by both the resolver and the evaluator. Two models will disagree on shadowing or slot order.
-- **Silent number parsing rules.** Whatever numeric literal grammar Tuff adopts must be defined explicitly in the lexer, not inherited from a host function.
+See [docs/architecture-risks.md](docs/architecture-risks.md) for potential problems, security concerns, and future work.
 
-## Security Concerns
-
-Trust boundaries:
-
-- **Source text is untrusted.** It can come from a user, a file, or (later) a model. Everything that consumes source must treat it as hostile data, never as code to run on the host.
-- **The core evaluator has no authority.** It cannot read files, use the network, spawn processes, or touch globals. Any future capability (I/O, imports) must enter through an explicit host-provided interface passed as a parameter, never as an ambient global.
-
-What untrusted input can reach:
-
-- The lexer and parser: crafted input can try to exhaust memory (very long sources, huge token counts) or stack depth (deep nesting).
-- The evaluator: crafted input can try to loop forever or allocate large values.
-
-Controls the architecture should have:
-
-1. Maximum source length, checked before lexing. **Missing.**
-2. Maximum nesting depth, checked during parsing and evaluation, producing a `TuffError`. **Satisfied in the parser** (256 groups, `NestingTooDeep`); **missing in the evaluator**, which does not exist yet.
-3. Step budget in the evaluator, producing a `TuffError` when exhausted. **Missing.**
-4. No dynamic code execution anywhere in the pipeline. **Satisfied today** (no `eval` or `Function` in the code), but must be enforced by a lint rule banning `eval` and `Function` constructors. **Lint rule missing.**
-5. No ambient authority: the evaluator takes all capabilities as parameters. **Not yet applicable** (no capabilities exist), but the rule is recorded here so it is kept when they are added.
-6. Data exposure: error messages must not echo unbounded source text back to the caller. Spans identify the location; names are never copied into a `TuffError`; excerpts must be truncated. **Satisfied today** (spans only); **excerpt rule missing** until excerpts exist.
-7. Maximum bindings per block, checked during parsing, producing a `TuffError`. **Missing.**
-8. Environments are `Map`s keyed by name, never plain objects, so `constructor` or `toString` cannot resolve to host properties. **Satisfied and pinned by a test.**
-
-Prompt injection and unauthenticated state changes: Tuff has no network, no persistence, and no model integration today. When a model or a file loader is added to the pipeline, its output is untrusted source and must pass the same limits as any user input. Any operation that changes state outside the evaluation must require an explicit host grant. **None exist yet.**
-
-## Future Work
-
-1. Add lint enforcement of the modularity limits and the no-`eval` rule, plus a reviewer lint command in `package.json`.
-2. Define the Tuff numeric and expression grammar explicitly in the lexer.
-3. Add the remaining resource limits (source length, bindings per block, step budget) and tests that each one produces the right `TuffError`.
 4. Define a host-capability interface before any feature needs I/O.
 
 ## Performance
