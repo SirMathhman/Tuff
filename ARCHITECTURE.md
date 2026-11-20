@@ -6,7 +6,7 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 | File | Role |
 | --- | --- |
-| `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, and `TuffError`. |
+| `index.ts` | Entry module. Exports `interpretTuff`, `Result`, `Success`, `Failure`, `Factor`, and `TuffError`. |
 | `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
 | `eslint.config.js` | ESLint configuration (recommended JavaScript and TypeScript rules, plus restricted syntax). |
 | `package.json` | Project metadata and the `lint` script. Declares `@types/bun`, ESLint, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
