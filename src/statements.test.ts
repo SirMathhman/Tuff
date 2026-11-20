@@ -363,3 +363,15 @@ test('interpretTuff("if (true) 2 else (true + 1)") => 2', () => {
     value: 2,
   });
 });
+
+test('interpretTuff("1 + { let x = 2; }") => error', () => {
+  expect(interpretTuff("1 + { let x = 2; }")).toEqual({
+    ok: false,
+    error: {
+      what: "A block must end with an expression, not a statement",
+      where: 17,
+      why: "The value of a block is its final expression, so a block that ends with a statement has no value.",
+      fix: "Add an expression after the last statement, such as the variable's name.",
+    },
+  });
+});
