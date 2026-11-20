@@ -22,8 +22,8 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ### `interpretTuff(tuffSource: string): Result<number, TuffError>`
 
-1. Validates the whole source against `/^\s*[+-]?\d+(\s*[+-]\s*[+-]?\d+)*\s*$/`. Anything else returns `InvalidSyntax`.
-2. Scans the tokens `+`, `-`, and digit runs. Each number takes the sign that is the product of the `-` characters directly before it. The sum starts at `0`.
+1. Trims the source, then scans it left to right with character checks (no regular expressions). A sign must touch its digits. Whitespace is allowed around binary operators. Anything that does not fit the grammar returns `InvalidSyntax`.
+2. Each number takes its sign from the binary operator before it and any unary sign directly before its digits. The sum starts at `0`.
 
 Behavior:
 
@@ -41,7 +41,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 - **Error detail:** `InvalidSyntax` only reports the whole source. It does not identify which operand is wrong.
 - **Operators:** only `+` and `-` are supported, and only between integers. Multiplication and grouping are not implemented.
-- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. The project size limits are not enforced by lint.
+- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, and `match`/`matchAll`/`search` calls. The project size limits are not enforced by lint.
 
 ## Potential Problems
 
@@ -61,7 +61,7 @@ The ideal architecture keeps these rules as the project grows:
 
 ## Future Work
 
-- Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-regex design is a stopgap.
+- Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-pass scanner is a stopgap.
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report error positions: `TuffError` carries the offset and the offending token.
 - Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.
@@ -69,6 +69,6 @@ The ideal architecture keeps these rules as the project grows:
 
 ## Performance
 
-- The single regex validation and the token scan are both linear in source length, so performance is acceptable for expressions of typical size.
+- The single-pass scan is linear in source length, so performance is acceptable for expressions of typical size.
 - A very long digit run is parsed with one `parseInt`. This is fine for the current input size but gives no meaningful result past the safe-integer limit.
 - No profiling has been done. Measure with a profiler before optimizing.
