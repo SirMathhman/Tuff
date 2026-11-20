@@ -447,6 +447,37 @@ test('interpretTuff("let z = 1; let x = { &z }; *x") => 1', () => {
   });
 });
 
+test('interpretTuff("let z = 1; let x = if (true) { &z } else { &z }; *x") => 1', () => {
+  expect(
+    interpretTuff("let z = 1; let x = if (true) { &z } else { &z }; *x"),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("let z = 1; let x = if (false) { 0 } else { &z }; *x") => 1', () => {
+  expect(
+    interpretTuff("let z = 1; let x = if (false) { 0 } else { &z }; *x"),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("let z = 1; let x = { { &z } }; *x") => error', () => {
+  expect(interpretTuff("let z = 1; let x = { { &z } }; *x")).toEqual({
+    ok: false,
+    error: {
+      what: "'&' is only allowed as the whole value of a 'let' statement",
+      where: 23,
+      why: "A reference is bound to a variable by 'let', and cannot be part of a larger expression.",
+      fix: "Write 'let name = &variable;', or remove the '&'.",
+    },
+  });
+});
+
+test('interpretTuff("let z = 1; let x = { &z }; *x + 1") => 2', () => {
+  expect(interpretTuff("let z = 1; let x = { &z }; *x + 1")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,
