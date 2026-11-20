@@ -8,7 +8,10 @@ export default tseslint.config(
   tseslint.configs.recommended,
   {
     plugins: { local: { rules: { "no-recursion": noRecursion } } },
-    rules: { "local/no-recursion": "error" },
+    rules: {
+      "local/no-recursion": "error",
+      "max-lines-per-function": ["error", { max: 100, skipBlankLines: true, skipComments: true }],
+    },
   },
   {
     rules: {
