@@ -99,7 +99,7 @@ A live `&mut` blocks reads and writes of its owner, and any live reference block
 
 ### Misleading fixes
 
-Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. `*3` and `&3` report a missing name after `let`.
+Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. Missing-name errors name the preceding token, as in `*3`.
 
 ## Security Concerns
 

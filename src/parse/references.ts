@@ -97,7 +97,7 @@ export function operandRef(
     nameStart = skipSpaces(source, end);
     end = readName(source, nameStart);
   }
-  if (end === nameStart) return expectedVariableName(source, nameStart);
+  if (end === nameStart) return expectedVariableName(source, nameStart, "&");
   const name = source.slice(nameStart, end);
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);

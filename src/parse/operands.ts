@@ -94,7 +94,8 @@ function startLet(
     nameStart = skipSpaces(source, nameEnd);
     nameEnd = readName(source, nameStart);
   }
-  if (nameEnd === nameStart) return expectedVariableName(source, nameStart);
+  if (nameEnd === nameStart)
+    return expectedVariableName(source, nameStart, "let");
   const name = source.slice(nameStart, nameEnd);
   if (RESERVED_NAMES.has(name)) return reservedName(nameStart, name);
   const equals = skipSpaces(source, nameEnd);
@@ -209,7 +210,7 @@ function operandDeref(
   const { source, scopes, flags } = state;
   const nameStart = skipSpaces(source, state.pos + 1);
   const end = readName(source, nameStart);
-  if (end === nameStart) return expectedVariableName(source, nameStart);
+  if (end === nameStart) return expectedVariableName(source, nameStart, "*");
   const name = source.slice(nameStart, end);
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);

@@ -182,20 +182,26 @@ export function undefinedName(where: number, name: string): Failure<TuffError> {
 }
 
 /**
- * Reports a `let` without a name after it.
+ * Reports a missing variable name after the token that needs one.
  * @param source - the program being parsed.
  * @param where - the offset where the name should start.
+ * @param token - the token before the name: 'let', '&', or '*'.
  * @returns a failure describing the missing name.
  */
 export function expectedVariableName(
   source: string,
   where: number,
+  token: string,
 ): Failure<TuffError> {
+  const why =
+    token === "let"
+      ? "A 'let' statement names the variable it declares, as in 'let x = 1;'."
+      : `A '${token}' must be followed by the name of a variable.`;
   return fail(
-    `Expected a variable name after 'let' but found ${describe(source.charAt(where))}`,
+    `Expected a variable name after '${token}' but found ${describe(source.charAt(where))}`,
     where,
-    "A 'let' statement names the variable it declares, as in 'let x = 1;'.",
-    "Write a name made of letters after 'let'.",
+    why,
+    `Write a name made of letters after '${token}'.`,
   );
 }
 
