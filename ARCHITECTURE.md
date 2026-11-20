@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function whose body `e` is parsed at each `NAME()` call, in the scopes of its declaration. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`, and a braced body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `fn NAME() => e;` declares a parameterless function whose body `e` is parsed at each `NAME()` call, in the scopes of its declaration. A braced body needs no `;`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`, and a braced body ending in a statement is an error when `else` follows. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 

@@ -16,8 +16,10 @@ import { completeBranch, innermostNonOperator } from "./helpers";
 // The most calls that may be open at once, so a call that never ends stops with an error.
 const MAX_CALL_DEPTH = 100;
 
-// Offset of the ';' that ends a body starting at `start`, or undefined at the end of input.
+// Offset just past a body starting at `start`: past its closing brace when braced,
+// otherwise the ';' that ends it. Undefined at the end of input.
 function bodyEndOf(source: string, start: number): number | undefined {
+  const braced = source.charAt(start) === "{";
   let depth = 0;
   for (let index = start; index < source.length; index++) {
     const ch = source.charAt(index);
@@ -25,7 +27,8 @@ function bodyEndOf(source: string, start: number): number | undefined {
       depth++;
     } else if (ch === ")" || ch === "}") {
       depth--;
-    } else if (ch === ";" && depth === 0) {
+      if (braced && depth === 0) return index + 1;
+    } else if (ch === ";" && depth === 0 && !braced) {
       return index;
     }
   }
@@ -59,7 +62,9 @@ export function startFn(
   }
   const start = skipSpaces(source, arrow + 2);
   const end = bodyEndOf(source, start);
-  if (end === undefined) return expectedSemicolon(source, source.length, false);
+  if (end === undefined) {
+    return expectedSemicolon(source, source.length, "function declaration");
+  }
   if (end === start) return expectedNumber(source, start);
   const func: FuncDef = { start, end, scopes: [] };
   const cell: Cell = { value: 0, mutable: false, func };
@@ -67,7 +72,9 @@ export function startFn(
   scope?.set(name, cell);
   // Copies of the scopes, so later declarations stay invisible; the cells are shared.
   func.scopes = scopes.map((visible) => new Map(visible));
-  state.pos = end + 1;
+  // A braced body needs no ';' after it; otherwise the ';' is consumed.
+  const terminator = skipSpaces(source, end);
+  state.pos = source.charAt(terminator) === ";" ? terminator + 1 : end;
   state.expectOperand = true;
   flags.atStatementStart = true;
   flags.lastStatementEnded = true;

@@ -244,20 +244,18 @@ export function expectedEquals(
  * Reports a statement that does not end with `;`.
  * @param source - the program being parsed.
  * @param where - the offset where `;` should appear.
- * @param assign - whether the unfinished statement is an assignment rather than a let.
+ * @param noun - the kind of statement, such as "'let' statement" or "assignment".
  * @returns a failure describing the missing `;`.
  */
 export function expectedSemicolon(
   source: string,
   where: number,
-  assign: boolean,
+  noun: string,
 ): Failure<TuffError> {
   return fail(
     `Expected ';' but found ${describe(source.charAt(where))}`,
     where,
-    assign
-      ? "Every assignment must end with ';'."
-      : "Every 'let' statement must end with ';'.",
+    `Every ${noun} must end with ';'.`,
     "Add ';' after the value.",
   );
 }

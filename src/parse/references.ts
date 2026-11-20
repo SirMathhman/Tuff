@@ -113,7 +113,7 @@ export function operandRef(
   const after = skipSpaces(source, end);
   if (carrier === undefined) {
     if (source.charAt(after) !== ";")
-      return expectedSemicolon(source, after, false);
+      return expectedSemicolon(source, after, "'let' statement");
     binding.target = cell;
     binding.exclusive = exclusive;
   } else {

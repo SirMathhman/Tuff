@@ -96,7 +96,8 @@ function pushOperator(
 function missingSemicolon(state: ParserState): Failure<TuffError> | undefined {
   const pending = innermostNonOperator(state.ops);
   if (pending?.kind !== EntryKind.Binding) return undefined;
-  return expectedSemicolon(state.source, state.pos, pending.assign);
+  const noun = pending.assign ? "assignment" : "'let' statement";
+  return expectedSemicolon(state.source, state.pos, noun);
 }
 
 function endOfInput(state: ParserState): Failure<TuffError> | Step {
