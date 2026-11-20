@@ -1,7 +1,22 @@
 import { peek, peekName, peekStart, type Problem } from "./lexing";
 import { isDeclarableType, fitsIntegerType, lookupType } from "./scope";
-import { type Cursor } from "./types";
+import { type Cursor, type Scope } from "./types";
 import { err, ok, type Result } from "./result";
+
+/**
+ * Finds what a type name stands for. A type alias in scope shadows a built-in type of the same name.
+ *
+ * @param scope - The scope the annotation appears in.
+ * @param name - The type name as written.
+ * @returns The type the name stands for, or undefined if the name is neither an alias nor a built-in type.
+ */
+function resolveTypeName(scope: Scope, name: string): string | undefined {
+  const aliased = lookupType(scope, name);
+  if (aliased !== undefined) {
+    return aliased;
+  }
+  return isDeclarableType(name) ? name : undefined;
+}
 
 /**
  * Parses a type annotation after ":": a type name such as "U8" or "Bool", optionally
@@ -23,7 +38,7 @@ export function parseTypeAnnotation(text: string, cursor: Cursor): Result<string
     }
   }
   const typeName = peekName(text, cursor);
-  const resolved = isDeclarableType(typeName) ? typeName : lookupType(cursor.scope, typeName);
+  const resolved = resolveTypeName(cursor.scope, typeName);
   if (resolved === undefined) {
     return err({
       offset: typeStart,
@@ -46,7 +61,7 @@ export function parseTypeAlias(text: string, cursor: Cursor, reserved: ReadonlyS
   cursor.pos += "type".length;
   const nameStart = peekStart(text, cursor);
   const name = peekName(text, cursor);
-  if (name === "" || reserved.has(name) || isDeclarableType(name)) {
+  if (name === "" || reserved.has(name)) {
     return { offset: nameStart, expected: "a type name" };
   }
   cursor.pos += name.length;

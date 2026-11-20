@@ -79,6 +79,14 @@ test("interpretTuff typed return type rejects a wrong result type", () => {
   expect(interpretTuff("fn f(a : I32) : Bool => a; f(1)").ok).toBe(false);
 });
 
+test("interpretTuff('type Bool = I32; let temp : Bool = 1; temp') => 1", () => {
+  expect(interpretTuff("type Bool = I32; let temp : Bool = 1; temp")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff('type Bool = I32; let temp : Bool = 1; temp + 1') => 2", () => {
+  expect(interpretTuff("type Bool = I32; let temp : Bool = 1; temp + 1")).toEqual({ ok: true, value: 2 });
+});
+
 test("interpretTuff('type Temp = I32; let temp : Temp = 1; temp') => 1", () => {
   expect(interpretTuff("type Temp = I32; let temp : Temp = 1; temp")).toEqual({ ok: true, value: 1 });
 });
@@ -181,6 +189,10 @@ test("interpretTuff('true == true') => 1", () => {
 
 test("interpretTuff('true + 1') is an error: arithmetic needs numbers", () => {
   expect(interpretTuff("true + 1").ok).toBe(false);
+});
+
+test("interpretTuff('true + true') is an error: arithmetic needs numbers", () => {
+  expect(interpretTuff("true + true").ok).toBe(false);
 });
 
 test("interpretTuff('let x = 1; let y = &x; *y') => 1", () => {
