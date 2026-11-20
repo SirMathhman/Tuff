@@ -23,53 +23,11 @@ This is the canonical description of the architecture Tuff is working toward. It
 - **Invariant 4**: a name is bound at most once per block (`DuplicateName`). A nested block may shadow an outer name. Every name used must resolve to a binding in scope (`UnknownName`). Both are static errors: decided from the source before any value is computed.
 - **Invariant 5**: errors are reported in phase order. Lexical, syntax, and duplicate-name errors come first. Then the static name errors (`UnknownName`, `ImmutableAssignment`), in source order. Then evaluation errors (every kind decided while computing a value, such as `DivisionByZero`, `NotABoolean`, and `ImmutableAssignment` for a write through a shared reference), including the overflow of a numeric literal, which is checked when the literal is evaluated, not when it is parsed. Within one operator, an error in the left operand is reported before one in the right operand, and both before the operator's own error. The reported error depends only on the source, never on runtime state. For example, `1 / 0 + x` reports `UnknownName`, and `true + 1 / 0` reports `DivisionByZero`.
 - **Invariant 6**: name lookup uses `Map`-based scopes only, never plain objects, so a name such as `constructor` cannot reach host prototype properties.
-- **Invariant 7**: nesting is bounded. Block braces, group parentheses, and prefix `*` share one nesting limit. Exceeding it is `NestingTooDeep`, never a host stack overflow.
+- **Invariant 7**: nesting is bounded. Block braces, group parentheses, prefix `*`, and the bodies of `if` and `match` share one nesting limit. Exceeding it is `NestingTooDeep`, never a host stack overflow.
 
 ## Structure
 
-Target layout:
-
-```
-index.ts            public API: exports evaluateTuff (which composes the stages) and the public types
-src/
-  result.ts         Result type and helpers (ok, err, map, unwrap-for-tests)
-  errors.ts         TuffError enum and message/span helpers
-  span.ts           source positions shared by all stages
-  lexer.ts          source -> token stream
-  parser.ts         token stream -> AST
-  ast.ts            AST node types (no logic): every expression and statement
-  scope.ts          Scope type, creation, and name lookup; Frame (the runtime slots of one open block); NameRef and NameRefs (the resolver's output). No evaluation
-  value.ts          Value (number, boolean, or Reference) and Reference (a live pointer to one frame slot). Types and guards only
-  resolver.ts       AST -> Result<void, TuffError>: checks every name is bound. Computes no values
-  evaluator.ts      AST -> value: walks blocks, creates scopes, applies operators, enforces limits
-  limits.ts         configurable limits (max depth, max steps, max source length)
-```
-
-Dependency direction (arrows mean "may import"):
-
-```
-index.ts       -> lexer.ts, parser.ts, resolver.ts, evaluator.ts, errors.ts, result.ts (evaluateTuff composes the stages; re-exports the public types)
-evaluator.ts   -> ast.ts, scope.ts, value.ts, errors.ts, result.ts (limits.ts once it exists)
-value.ts       -> scope.ts (for the Frame type)
-resolver.ts    -> ast.ts, scope.ts, errors.ts, result.ts
-parser.ts      -> lexer.ts, ast.ts, errors.ts, result.ts, span.ts
-lexer.ts       -> errors.ts, result.ts, span.ts
-scope.ts       -> ast.ts (type only, for the NameRefs key); never value.ts, since value.ts imports Frame from here
-errors.ts      -> span.ts
-ast.ts         -> span.ts
-limits.ts      -> nothing (not yet created)
-result.ts      -> nothing; imported by every stage
-```
-
-Rules:
-
-- Dependencies flow one way, from `index.ts` toward the leaves. No cycles between files.
-- Each stage is a pure function from its input type to a `Result` of its output type. A stage never calls a later stage.
-- Name checks run before evaluation. `DuplicateName` is a property of the block's syntax, so the parser reports it when it builds a `Block`. `UnknownName` is reported by `resolver.ts`, a static pass over the AST that uses `scope.ts`. The resolver records the binding of every name use as a block depth and a position within that block, and the evaluator reads values by that reference. The evaluator never reports a name error. It reports `InternalError` only if the resolver and evaluator disagree, which is a bug in Tuff.
-- `NameRef` and `NameRefs` are defined in `scope.ts`, not in `resolver.ts`. The resolver writes them and the evaluator reads them, so the evaluator never imports the resolver. The resolver and evaluator both use `scope.ts` for block-level name slots; there is one definition of a slot, not one per stage.
-- The parser must not evaluate and must not look up names. Its output is a syntactically valid AST and nothing more.
-- Recursion is allowed only inside the parser, resolver, and evaluator, and only over the AST. Mutual recursion between functions in different files is forbidden. Where two functions must call each other, pass one as a parameter.
-- Limits: 100 lines per function, 500 code lines per file, 10 files per directory, enforced by `bun run lint` on every change.
+The module layout, the dependency direction between modules, and the rules for recursion and name checks are in [docs/structure.md](docs/structure.md). The short form: dependencies point one way from `index.ts` toward the leaves; each stage (lexer, parser, resolver, evaluator) is a pure function from its input to a `Result`; recursion over the AST goes through one entry point per stage, and helpers receive that entry point as a parameter instead of importing it.
 
 ## Risks, Security, and Future Work
 
@@ -82,4 +40,5 @@ Obvious concerns only; profile before optimizing.
 - Lexing and parsing are linear in source length and should stay that way. Avoid re-scanning the input for each token.
 - Evaluation cost is controlled by the step budget, not by the source length alone. Large literals or repeated operations can dominate.
 - Name lookup walks the enclosing scopes, so one lookup costs time proportional to block nesting. The nesting limit bounds that. A block with no bindings should not allocate a scope map.
+- Each `if` and each `match` arm copies every open frame before it runs (see [docs/architecture-risks.md](docs/architecture-risks.md)). A program with many open slots and many conditionals spends its time copying, not computing.
 - Error construction should be lazy: do not build excerpts or messages on the success path.
