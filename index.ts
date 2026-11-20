@@ -29,7 +29,7 @@ const MULTIPLICATIVE = new Map<string, BinaryOp>([
 
 function tokenize(source: string): Result<Token[], TuffError> {
   const tokens: Token[] = [];
-  const pattern = /\s*(\d+|[-+*/()])/y;
+  const pattern = /\s*(\d+|[-+*/(){}])/y;
   let index = 0;
   while (index < source.length) {
     pattern.lastIndex = index;
@@ -51,12 +51,13 @@ function tokenize(source: string): Result<Token[], TuffError> {
 function parseFactor(input: Input, pos: number): Step<number> {
   const token = input.tokens[pos];
   if (token === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
-  if (token.text === "(") {
+  if (token.text === "(" || token.text === "{") {
+    const closer = token.text === "(" ? ")" : "}";
     const inner = parseExpression(input, pos + 1);
     if (!inner.ok) return inner;
     const close = input.tokens[inner.value.next];
     if (close === undefined) return err({ kind: "UnexpectedEnd", span: input.end });
-    if (close.text !== ")") return err({ kind: "ExpectedClosingParen", span: close.span });
+    if (close.text !== closer) return err({ kind: "ExpectedClosingParen", span: close.span });
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
   if (/^\d+$/.test(token.text)) return ok({ value: Number(token.text), next: pos + 1 });
