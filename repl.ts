@@ -1,7 +1,11 @@
 import { createInterface } from "node:readline";
 import { interpretTuff } from "./index";
 
-const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: "tuff> " });
+const rl = createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: "tuff> ",
+});
 
 let exiting = false;
 

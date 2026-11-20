@@ -3,10 +3,12 @@ import { interpretTuff } from "./index";
 
 const NUMBER_WHY =
   "Every '+', '-', or '*' must be followed by an integer or a parenthesized expression, and an expression must start with one.";
-const NUMBER_FIX = "Put an integer or '(' at this position, or remove the operator before it.";
+const NUMBER_FIX =
+  "Put an integer or '(' at this position, or remove the operator before it.";
 const OPERATOR_WHY =
   "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.";
-const OPERATOR_FIX = "Insert '+', '-', or '*' between the numbers, or remove the extra character.";
+const OPERATOR_FIX =
+  "Insert '+', '-', or '*' between the numbers, or remove the extra character.";
 
 test('interpretTuff("5") => 5', () => {
   expect(interpretTuff("5")).toEqual({ ok: true, value: 5 });

@@ -56,7 +56,12 @@ function describe(c: string): string {
   return `'${c}'`;
 }
 
-function fail(what: string, where: number, why: string, fix: string): Failure<TuffError> {
+function fail(
+  what: string,
+  where: number,
+  why: string,
+  fix: string,
+): Failure<TuffError> {
   return { ok: false, error: { what, where, why, fix } };
 }
 
@@ -69,7 +74,11 @@ function expectedNumber(source: string, where: number): Failure<TuffError> {
   );
 }
 
-function expectedOperator(source: string, where: number, grouped: boolean): Failure<TuffError> {
+function expectedOperator(
+  source: string,
+  where: number,
+  grouped: boolean,
+): Failure<TuffError> {
   const found = describe(source.charAt(where));
   if (grouped) {
     return fail(
@@ -119,7 +128,11 @@ function applyTop(values: number[], ops: StackEntry[]): void {
 // Closes the innermost group: applies its operators, then scales the result by
 // the sign written before the "(".
 function closeGroup(values: number[], ops: StackEntry[]): void {
-  for (let top = ops[ops.length - 1]; top?.kind === "operator"; top = ops[ops.length - 1]) {
+  for (
+    let top = ops[ops.length - 1];
+    top?.kind === "operator";
+    top = ops[ops.length - 1]
+  ) {
     applyTop(values, ops);
   }
   const group = ops.pop();
@@ -176,7 +189,11 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     if (!isOperator(c)) return expectedOperator(tuffSource, pos, grouped);
 
     // Left-associative: apply pending operators that bind at least as tightly.
-    for (let top = ops[ops.length - 1]; top?.kind === "operator" && precedence(top.operator) >= precedence(c); top = ops[ops.length - 1]) {
+    for (
+      let top = ops[ops.length - 1];
+      top?.kind === "operator" && precedence(top.operator) >= precedence(c);
+      top = ops[ops.length - 1]
+    ) {
       applyTop(values, ops);
     }
     ops.push({ kind: "operator", operator: c });

@@ -9,7 +9,11 @@
 // Scope analysis resolves names, so shadowing is handled. Only one file is
 // examined; recursion that crosses files is not detected.
 
-const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+const FUNCTION_TYPES = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+]);
 
 function isFunction(node) {
   return FUNCTION_TYPES.has(node.type);
@@ -46,7 +50,11 @@ function parameterSlot(variable) {
 
 function functionName(fn) {
   if (fn.id) return fn.id.name;
-  if (fn.parent && fn.parent.type === "VariableDeclarator" && fn.parent.id.type === "Identifier") {
+  if (
+    fn.parent &&
+    fn.parent.type === "VariableDeclarator" &&
+    fn.parent.id.type === "Identifier"
+  ) {
     return fn.parent.id.name;
   }
   return "<anonymous function>";
@@ -69,10 +77,14 @@ function reaches(start, target, edges) {
 const noRecursion = {
   meta: {
     type: "problem",
-    docs: { description: "Disallow functions that call themselves, directly or indirectly, within a file." },
+    docs: {
+      description:
+        "Disallow functions that call themselves, directly or indirectly, within a file.",
+    },
     schema: [],
     messages: {
-      recursive: 'Recursion is not allowed: "{{name}}" can reach itself through a call cycle.',
+      recursive:
+        'Recursion is not allowed: "{{name}}" can reach itself through a call cycle.',
     },
   },
   create(context) {
@@ -101,7 +113,11 @@ const noRecursion = {
         // slotsOf(fn)[i]: the functions that may be passed as argument i of fn.
         const slots = new Map();
         function slotsOf(fn) {
-          if (!slots.has(fn)) slots.set(fn, fn.params.map(() => new Set()));
+          if (!slots.has(fn))
+            slots.set(
+              fn,
+              fn.params.map(() => new Set()),
+            );
           return slots.get(fn);
         }
 
@@ -114,10 +130,13 @@ const noRecursion = {
           return [];
         }
 
-        const variableOf = new Map(refs.map((ref) => [ref.identifier, ref.resolved]));
+        const variableOf = new Map(
+          refs.map((ref) => [ref.identifier, ref.resolved]),
+        );
         function valuesOfArgument(arg) {
           if (isFunction(arg)) return [arg];
-          if (arg.type === "Identifier" && variableOf.has(arg)) return targetsOf(variableOf.get(arg));
+          if (arg.type === "Identifier" && variableOf.has(arg))
+            return targetsOf(variableOf.get(arg));
           return [];
         }
 
@@ -127,7 +146,12 @@ const noRecursion = {
           changed = false;
           for (const ref of refs) {
             const call = ref.identifier.parent;
-            if (!call || call.type !== "CallExpression" || call.callee !== ref.identifier) continue;
+            if (
+              !call ||
+              call.type !== "CallExpression" ||
+              call.callee !== ref.identifier
+            )
+              continue;
             for (const target of targetsOf(ref.resolved)) {
               call.arguments.forEach((arg, i) => {
                 if (i >= target.params.length) return;
@@ -151,7 +175,11 @@ const noRecursion = {
 
         for (const fn of functions) {
           if (reaches(fn, fn, edges)) {
-            context.report({ node: fn, messageId: "recursive", data: { name: functionName(fn) } });
+            context.report({
+              node: fn,
+              messageId: "recursive",
+              data: { name: functionName(fn) },
+            });
           }
         }
       },

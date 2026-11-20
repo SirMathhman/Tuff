@@ -20,7 +20,10 @@ function listSources(dir: string): string[] {
     .map((name) => join(dir, name).split("\\").join("/"));
 }
 
-const rootNames = [...listSources(projectRoot), ...listSources(join(projectRoot, "scripts"))];
+const rootNames = [
+  ...listSources(projectRoot),
+  ...listSources(join(projectRoot, "scripts")),
+];
 
 const options: ts.CompilerOptions = {
   target: ts.ScriptTarget.ESNext,
@@ -32,14 +35,26 @@ const options: ts.CompilerOptions = {
 const program = ts.createProgram(rootNames, options);
 const checker = program.getTypeChecker();
 const projectFiles = new Set(
-  program.getSourceFiles().filter((sf) => rootNames.includes(sf.fileName)).map((sf) => sf.fileName),
+  program
+    .getSourceFiles()
+    .filter((sf) => rootNames.includes(sf.fileName))
+    .map((sf) => sf.fileName),
 );
 
 // "file::name" pairs that another file imports or re-exports; "file::*" marks a namespace import.
 const usedElsewhere = new Set<string>();
 
-function markUse(importerFile: string, specifier: string, names: string[]): void {
-  const resolved = ts.resolveModuleName(specifier, importerFile, options, ts.sys).resolvedModule;
+function markUse(
+  importerFile: string,
+  specifier: string,
+  names: string[],
+): void {
+  const resolved = ts.resolveModuleName(
+    specifier,
+    importerFile,
+    options,
+    ts.sys,
+  ).resolvedModule;
   if (!resolved || !projectFiles.has(resolved.resolvedFileName)) return;
   for (const name of names) {
     usedElsewhere.add(`${resolved.resolvedFileName}::${name}`);
@@ -49,13 +64,18 @@ function markUse(importerFile: string, specifier: string, names: string[]): void
 for (const sf of program.getSourceFiles()) {
   if (!projectFiles.has(sf.fileName)) continue;
   for (const statement of sf.statements) {
-    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+    if (
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
       const bindings = statement.importClause?.namedBindings;
       if (!bindings) continue;
       if (ts.isNamespaceImport(bindings)) {
         markUse(sf.fileName, statement.moduleSpecifier.text, ["*"]);
       } else {
-        const names = bindings.elements.map((el) => (el.propertyName ?? el.name).text);
+        const names = bindings.elements.map(
+          (el) => (el.propertyName ?? el.name).text,
+        );
         markUse(sf.fileName, statement.moduleSpecifier.text, names);
       }
     } else if (
@@ -64,9 +84,10 @@ for (const sf of program.getSourceFiles()) {
       ts.isStringLiteral(statement.moduleSpecifier)
     ) {
       const clause = statement.exportClause;
-      const names = clause && ts.isNamedExports(clause)
-        ? clause.elements.map((el) => (el.propertyName ?? el.name).text)
-        : ["*"];
+      const names =
+        clause && ts.isNamedExports(clause)
+          ? clause.elements.map((el) => (el.propertyName ?? el.name).text)
+          : ["*"];
       markUse(sf.fileName, statement.moduleSpecifier.text, names);
     }
   }
@@ -87,6 +108,8 @@ for (const fileName of projectFiles) {
 }
 
 for (const f of findings) {
-  console.log(`${f.file}: "${f.name}" is exported but not used by any other file; remove "export".`);
+  console.log(
+    `${f.file}: "${f.name}" is exported but not used by any other file; remove "export".`,
+  );
 }
 process.exitCode = findings.length > 0 ? 1 : 0;

@@ -4,17 +4,17 @@ Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an int
 
 ## Layout
 
-| File | Role |
-| --- | --- |
-| `index.ts` | Entry module. Exports `interpretTuff` only; the result and error types are internal. |
-| `scripts/unused-exports.ts` | Checks that no export goes unused by other project files, using the TypeScript compiler API. Run as part of `bun run lint`. |
-| `eslint-rules/no-recursion.js` | Custom ESLint rule. Reports any function that can reach itself through calls in its file, including calls through parameters and nested closures. |
-| `repl.ts` | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`. |
-| `index.test.ts` | Tests using Bun's built-in `bun:test` runner. |
-| `eslint.config.js` | ESLint configuration: recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax. |
-| `package.json` | Project metadata and the `lint` and `repl` scripts. Declares `@types/bun`, `@eslint/js`, `eslint`, `typescript-eslint`, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
-| `tsconfig.json` | TypeScript configuration. |
-| `.gitignore`, `README.md`, `bun.lock` | Repository support files. |
+| File                                  | Role                                                                                                                                                                                                 |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`                            | Entry module. Exports `interpretTuff` only; the result and error types are internal.                                                                                                                 |
+| `scripts/unused-exports.ts`           | Checks that no export goes unused by other project files, using the TypeScript compiler API. Run as part of `bun run lint`.                                                                          |
+| `eslint-rules/no-recursion.js`        | Custom ESLint rule. Reports any function that can reach itself through calls in its file, including calls through parameters and nested closures.                                                    |
+| `repl.ts`                             | Interactive read-eval-print loop. Reads lines from stdin, evaluates each with `interpretTuff`, and prints the value or the error. Started with `bun run repl`.                                       |
+| `index.test.ts`                       | Tests using Bun's built-in `bun:test` runner.                                                                                                                                                        |
+| `eslint.config.js`                    | ESLint configuration: recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax.                                                                             |
+| `package.json`                        | Project metadata and the `lint` and `repl` scripts. Declares `@types/bun`, `@eslint/js`, `eslint`, `typescript-eslint`, and `typescript` as dev dependencies, and `typescript` as a peer dependency. |
+| `tsconfig.json`                       | TypeScript configuration.                                                                                                                                                                            |
+| `.gitignore`, `README.md`, `bun.lock` | Repository support files.                                                                                                                                                                            |
 
 Dependency direction: `repl.ts` and `index.test.ts` depend on `index.ts`. `index.ts` depends on no project file and performs no I/O. `scripts/` and `eslint-rules/` depend on no runtime file. No project file may import `repl.ts`, and no import cycle may exist between project files.
 
@@ -42,7 +42,7 @@ A shunting-yard evaluator with explicit stacks, written as one loop with no recu
 Errors:
 
 - No digits and no `(` where a factor is expected: "Expected a number or '('".
-- A character after a term that is not an operator (or `)` inside parentheses): "Expected '+', '-', or '*'" at top level, or "Expected '+', '-', '*', or ')'" inside parentheses.
+- A character after a term that is not an operator (or `)` inside parentheses): "Expected '+', '-', or '_'" at top level, or "Expected '+', '-', '_', or ')'" inside parentheses.
 - Input ends inside parentheses: "Expected ')'".
 
 Behavior:
@@ -71,7 +71,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 ## Known gaps and open decisions
 
 - **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized groups. Division and other operators are not implemented.
-- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax) and then `scripts/unused-exports.ts`. The recursion rule works within one file, so recursion that crosses files is not detected. Calls through parameters and nested closures are counted, so passing a function into a parameter does not hide a cycle. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. Functions longer than 100 lines (blank lines and comments excluded) are reported by `max-lines-per-function`. File length and the files-per-directory limit are not enforced by lint.
+- **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax) and then `scripts/unused-exports.ts`. The recursion rule works within one file, so recursion that crosses files is not detected. Calls through parameters and nested closures are counted, so passing a function into a parameter does not hide a cycle. Known gaps: calls through object properties and `this` (for example `o.m()` or `this.m()` inside a method) are not followed, and an alias assigned outside the function (`function f() { g(); } const g = f;`) is not followed. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. Functions longer than 100 lines (blank lines and comments excluded) are reported by `max-lines-per-function`. File length and the files-per-directory limit are not enforced by lint.
 
 ## Potential Problems
 
@@ -81,18 +81,19 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 ## Security Concerns
 
-Tuff currently takes input only from its caller as a string. It performs no I/O, no network access, and no evaluation of host code, so it has no prompt-injection, data-exposure, or unauthenticated state-change surface today.
+`interpretTuff` takes input only from its caller as a string. It performs no I/O, no network access, and no evaluation of host code, so it has no prompt-injection, data-exposure, or unauthenticated state-change surface today. The REPL, which reads stdin, is covered below.
 
 The ideal architecture keeps these rules as the project grows:
 
 - Source text is untrusted. It must never be passed to `eval`, `Function`, or a shell.
 - Input length must be bounded before it is scanned. The current scanner has no length limit. Control: a maximum source length, returned as a `TuffError`.
 - Nesting depth must not exhaust the call stack. Control in place: the parser uses explicit stacks, so nesting costs memory, not call frames. Gap: deeply nested input can still use a lot of memory; no maximum depth is enforced.
+- The REPL is the only path where untrusted text reaches the interpreter: each stdin line is read without a length limit and passed straight to `interpretTuff`. Control: the same maximum source length applies, enforced in `interpretTuff`. Gap: not yet implemented.
 - Any future I/O (file reads, module imports, network) sits behind an explicit capability parameter, so `interpretTuff` stays pure. Gap: none of these exist yet.
 
 ## Future Work
 
-- Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-pass scanner is a stopgap.
+- Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The combined shunting-yard evaluator is a stopgap until that split exists.
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report line and column in addition to the offset in `where`.
 - Enforce the 500-code-line file limit in the ESLint configuration (`max-lines`). ESLint has no rule for the 10-files-per-directory limit, so check that by hand.

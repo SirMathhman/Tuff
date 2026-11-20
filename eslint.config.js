@@ -10,7 +10,10 @@ export default tseslint.config(
     plugins: { local: { rules: { "no-recursion": noRecursion } } },
     rules: {
       "local/no-recursion": "error",
-      "max-lines-per-function": ["error", { max: 100, skipBlankLines: true, skipComments: true }],
+      "max-lines-per-function": [
+        "error",
+        { max: 100, skipBlankLines: true, skipComments: true },
+      ],
     },
   },
   {
@@ -34,8 +37,10 @@ export default tseslint.config(
           message: "Calling RegExp as a function is not allowed.",
         },
         {
-          selector: "CallExpression[callee.property.name=/^(match|matchAll|search)$/]",
-          message: "String match, matchAll, and search can create a RegExp; they are not allowed.",
+          selector:
+            "CallExpression[callee.property.name=/^(match|matchAll|search)$/]",
+          message:
+            "String match, matchAll, and search can create a RegExp; they are not allowed.",
         },
       ],
     },
