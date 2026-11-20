@@ -1,9 +1,37 @@
 import type { Failure, Result, TuffError } from "./errors";
-import { Bracket, chainedComparison, closerFor, expectedClose, expectedMismatch, expectedNumber, expectedOperator, expectedSemicolon, fail, undefinedName, unexpectedSemicolon } from "./errors";
+import {
+  Bracket,
+  chainedComparison,
+  closerFor,
+  expectedClose,
+  expectedMismatch,
+  expectedNumber,
+  expectedOperator,
+  expectedSemicolon,
+  fail,
+  undefinedName,
+  unexpectedSemicolon,
+} from "./errors";
 import { isComparison, precedence } from "./operations";
 import type { Operator } from "./scanner";
-import { isCloser, isLetter, matchingClose, readDigits, readName, signOf, skipSpaces, toOperator } from "./scanner";
-import type { Advance, Compiled, Instruction, Names, Pending, Unit } from "./instructions";
+import {
+  isCloser,
+  isLetter,
+  matchingClose,
+  readDigits,
+  readName,
+  signOf,
+  skipSpaces,
+  toOperator,
+} from "./scanner";
+import type {
+  Advance,
+  Compiled,
+  Instruction,
+  Names,
+  Pending,
+  Unit,
+} from "./instructions";
 import { InstructionKind, UnitKind } from "./instructions";
 
 // The message of the marker that tells the caller to fall back to the parser.
@@ -187,7 +215,8 @@ function readOperand(
   if (isLetter(next)) {
     const end = readName(source, at);
     const word = source.slice(at, end);
-    if (word === "if") return readIf(source, at, end, code, stack, names, queue);
+    if (word === "if")
+      return readIf(source, at, end, code, stack, names, queue);
     if (UNSUPPORTED_WORDS.has(word)) return unsupportedAt(at);
     if (word === "true" || word === "false") {
       code.push({

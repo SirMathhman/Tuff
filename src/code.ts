@@ -15,7 +15,11 @@ import type { Operator } from "./scanner";
 import { readName, skipSpaces, toOperator } from "./scanner";
 import type { Instruction, Names, Unit } from "./instructions";
 import { InstructionKind, UnitKind } from "./instructions";
-import { UNSUPPORTED_WHAT, compileFrom, unsupportedAt } from "./compile-expression";
+import {
+  UNSUPPORTED_WHAT,
+  compileFrom,
+  unsupportedAt,
+} from "./compile-expression";
 
 // Words that have a fixed meaning and cannot name a variable.
 const RESERVED_NAMES = new Set([

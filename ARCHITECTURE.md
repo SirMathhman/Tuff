@@ -18,11 +18,11 @@ Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bi
 
 ### Lenient branches
 
-Unchosen `if` branches and unchosen `match` cases are parsed for syntax only: errors are reported, assignments have no effect.
+Unchosen `if` branches and `match` cases are checked for syntax only: errors are reported, assignments have no effect.
 
 ### Results and errors
 
-Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`. A `fix` is an edit the grammar allows.
+Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program result converts to 1 or 0. `TuffError` has `what`, `where` (a zero-based offset), `why`, and `fix`.
 
 ## Structure
 
@@ -32,14 +32,14 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 - `src/code.ts`, `src/compile-expression.ts` compile; `src/instructions.ts` defines instructions; `src/run.ts` runs.
 - `src/errors/`: `core.ts` types, and constructors by family.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
-- `src/operations.ts`: operator meaning, sign application, and reduction.
+- `src/operations.ts`: operator meaning, signs, and reduction.
 - `src/parse/`: one file per construct family; `helpers.ts` and `operators.ts` are shared.
 - `src/index.ts`: `interpretTuff`. `src/repl.ts`: stdin REPL (`bun run repl`).
-- `src/test/`: `bun:test` suites and shared messages.
+- `src/test/`: `bun:test` suites.
 
 ### Dependency direction
 
-`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/`. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`; the family files (`references`, `calls`, `loops`, `matches`, `arrays`) depend on `helpers.ts` and never on each other; `operands.ts` and `operators.ts` depend on them. `code.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `types.ts`. `run.ts` depends on `code.ts`, `errors/`, `operations.ts`, and `types.ts`. `index.ts` depends on all of them; `repl.ts` and the tests on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
+`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/`. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`; the family files (`references`, `calls`, `loops`, `matches`, `arrays`) depend on `helpers.ts` and never on each other; `operands.ts` and `operators.ts` depend on them. `instructions.ts` depends on `scanner.ts` and `types.ts`. `compile-expression.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `instructions.ts`. `code.ts` depends on those and on `compile-expression.ts`. `run.ts` depends on `errors/`, `operations.ts`, `instructions.ts`, and `types.ts`, never on the compiler. `index.ts` depends on all of them; `repl.ts` and the tests on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
@@ -47,7 +47,7 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 #### Stacks
 
-Value, operator, and scope stacks, plus a skip counter for unchosen branches. A `while`, `match`, array literal, or index pushes its own entry on the operator stack. A call pushes a `Call` entry that saves the caller's state. A callee sees its declaration's snapshot and later open-scope functions.
+Value, operator, and scope stacks, plus a skip counter for unchosen branches. A `while`, `match`, array literal, or index pushes its own entry on the operator stack. A call pushes a `Call` entry saving the caller's state. A callee sees its declaration's snapshot and later open-scope functions.
 
 #### Precedence
 
@@ -55,7 +55,7 @@ Pending operators apply left-associatively. `)` and `}` apply pending operators 
 
 ### Quality gates
 
-Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. ESLint enforces `import-x/no-cycle`, and `local/no-recursion` checks one file only.
+Changes must pass `bun run lint`, `bun test`, `bun run format:check`, and `bunx tsc --noEmit`. `local/no-recursion` checks one file only.
 
 #### Size and naming
 
@@ -69,23 +69,27 @@ Every step mutates one `ParserState`.
 
 ### Call fan-out
 
-Each call and loop pass reparses its body within one step budget: a loop of about 18,000 passes fails although it ends, and chains where each call uses an earlier function twice cost about 2^n parses.
+Each call and loop pass reparses its body within one step budget: a loop of about 18,000 passes fails although it ends, and chains doubling an earlier function cost about 2^n parses.
 
 ### Failure detection
 
-Failures and values share a return type, told apart by `typeof`. `values.pop() ?? 0` in `code.ts` and `run.ts` turns a broken stack into 0.
+Failures and values share a return type, told apart by `typeof`. `values.pop() ?? 0` in `index.ts` and `run.ts` turns a broken stack into 0.
 
 ### Two evaluators
 
-`parse/` and `code.ts` with `run.ts` duplicate the rules; differential tests check them.
+`parse/` and `code.ts` with `run.ts` duplicate the rules; differential tests check them. Both may report a later error before an earlier one in a block (`let a = { 1 2 }; let b = ;`).
 
 ### Numeric precision
 
-Numbers are doubles: large integers round silently, and overflow yields `Infinity` with no `TuffError`.
+Numbers are doubles: large integers round silently; overflow yields `Infinity`, not a `TuffError`.
+
+### Lenient cost
+
+Unchosen branches run with writes suppressed; loops and calls must stay bounded when they compile.
 
 ### Reference aliasing
 
-A live `&mut` blocks reads and writes of its owner; any live reference blocks writes. `borrowedBy` scans visible scopes, so a body misses references declared after its function: `let mut x = 1; fn g() => x; let y = &mut x; g()` gives 1.
+A live `&mut` blocks reads and writes of its owner; any live reference blocks writes. `borrowedBy` scans only visible scopes, so `let mut x = 1; fn g() => x; let y = &mut x; g()` gives 1.
 
 ## Security Concerns
 
@@ -99,23 +103,23 @@ Explicit stacks keep nesting off the JavaScript call stack; open calls are cappe
 
 ### Gaps
 
-Neither a REPL line nor a source program has a length limit. `runCode` enforces the same budget.
+No REPL line or program has a length limit. `runCode` enforces the same budget.
 
 ## Future Work
 
-Missing: `==`/`!=` on booleans, assignment outside statement starts, function parameters, names with digits or underscores, arrays as arguments, `break`/`continue`, a `while` ending a block, `if`/`else` with assignment branches, REPL bindings across lines, and REPL `why`/`fix` output.
+Missing: `==`/`!=` on booleans, assignment outside statement starts, function parameters, digits or underscores in names, array arguments, `break`/`continue`, `while` ending a block, assignment in `if` branches, REPL bindings across lines, and REPL `why`/`fix` output.
 
 ### Parse once
 
-Compile function and loop bodies once. Compiled bodies run in `run.ts`. `code.ts` covers `let`, assignment, and blocks; `compile-expression.ts` covers expressions and braced `if`. Still to compile: statement-start blocks, unbraced `if`, `match`, `while`, functions, arrays, and references. Then retire `parse/`.
+Compile function and loop bodies once, run by `run.ts`. Still to compile: statement-start blocks, unbraced `if`, `match`, `while`, functions, arrays, references. Then retire `parse/`.
 
 ### Call limits
 
-Give loops their own pass limit. Keep borrow state on the cell. Move calls onto `run.ts`'s frame stack.
+Give loops their own pass limit; keep borrow state on the cell; move calls onto `run.ts`'s frame stack.
 
 ### Module names
 
-Rename `operations.ts` to `reduce.ts` (too close to `operators.ts`) and `code.ts` to `compile.ts`; `run.ts` keeps its name. Split parse steps by statement, bracket, and `if`. `src/errors/` is at its 10-file cap.
+Rename `operations.ts` to `reduce.ts` (too close to `operators.ts`) and `code.ts` to `compile.ts`; Split parse steps by statement, bracket, and `if`. `src/errors/` is at its 10-file cap.
 
 ### Errors and data
 
