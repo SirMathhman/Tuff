@@ -1,6 +1,7 @@
 import type { Failure, TuffError } from "../errors";
 import {
   Bracket,
+  blockEndsWithStatement,
   chainedComparison,
   closerFor,
   expectedClose,
@@ -45,12 +46,15 @@ function startBranch(
   state: ParserState,
   closePos: number,
 ): Failure<TuffError> | Step {
-  const { ops, values } = state;
+  const { ops, values, source } = state;
   const entry = ops[ops.length - 1];
   if (entry?.kind !== EntryKind.If) return Step.Continue;
   const value = values.pop() ?? false;
   if (typeof value !== "boolean") return nonBooleanCondition(closePos);
   entry.condition = value === true;
+  const bodyStart = skipSpaces(source, state.pos);
+  entry.statement =
+    entry.statement === true && source.charAt(bodyStart) === "{";
   entry.phase = IfPhase.Then;
   entry.skipping = !entry.condition;
   if (entry.skipping) state.skipDepth++;
@@ -201,11 +205,19 @@ function awaitElse(
   state: ParserState,
   entry: IfEntry,
 ): Failure<TuffError> | Step {
-  const { source, flags } = state;
+  const { source, ops, flags } = state;
   const end = readName(source, state.pos);
   if (source.slice(state.pos, end) !== "else") {
-    return expectedElse(source, state.pos);
+    if (entry.statement !== true) return expectedElse(source, state.pos);
+    ops.pop();
+    flags.atStatementStart = true;
+    flags.lastStatementEnded = true;
+    flags.lastAssign = false;
+    state.expectOperand = true;
+    if (state.depth === 0) flags.afterLet = true;
+    return Step.Continue;
   }
+  if (entry.bodyEnd !== undefined) return blockEndsWithStatement(entry.bodyEnd);
   entry.phase = IfPhase.Else;
   entry.skipping = entry.condition;
   if (entry.skipping) state.skipDepth++;

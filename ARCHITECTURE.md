@@ -6,11 +6,11 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A boolean cannot be an operand of arithmetic or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. `/` truncates toward zero, and a zero divisor is always an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, a bracketed expression, or an `if`. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`. A boolean cannot be an operand of arithmetic or take a sign. Comparisons bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
-`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings.
+`let [mut] NAME = expression;` binds a name of ASCII letters, and `let` cannot be a name. `NAME = expression;` reassigns a `let mut` name to a value of the same type at a statement start. A block's value is its final expression, unless a top-level block ends in an assignment, which discards it; a sign after such a block starts a new operand. A program ending in `let` is 0. Blocks `{ ... }` scope bindings.
 
 ### References
 
@@ -65,7 +65,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### Lint rules
 
-ESLint adds local rules and restricted syntax to its recommended set (`eslint.config.ts`). `local/no-recursion` checks calls within one file and can false-positive on method names.
+ESLint adds local rules and restricted syntax to its recommended set (`eslint.config.ts`). `local/no-recursion` checks one file and can false-positive on method names.
 
 #### Size and naming
 
@@ -99,7 +99,7 @@ A live `&mut` blocks reads and writes of its owner, and any live reference block
 
 ### Misleading fixes
 
-Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references.
+Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. `*3` and `&3` report a missing name after `let`.
 
 ## Security Concerns
 
@@ -127,7 +127,7 @@ Not implemented: `==` and `!=` on booleans, assignment outside statement starts,
 
 ### Error kinds
 
-Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` (607 lines, mostly constructors) by category before it nears the 500-line limit.
+Give `TuffError` a kind enum, so tests match kinds rather than message text. Split `errors.ts` (mostly constructors) by category before it nears the 500-line limit.
 
 ### Parse tree
 

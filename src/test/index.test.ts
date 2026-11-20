@@ -305,3 +305,10 @@ test('interpretTuff("let mut x = 0; { x = 1; } x") => 1', () => {
     value: 1,
   });
 });
+
+test('interpretTuff("let mut x = 0; if (true) { x = 1; } x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

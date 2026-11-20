@@ -84,6 +84,8 @@ export interface GroupEntry {
   ref?: BindingRef;
   /** A top-level block opened at a statement start, whose value is discarded if it ends in a statement. */
   statementStart?: boolean;
+  /** The body of a statement-level if without else; a body ending in a statement is checked when an else is seen. */
+  discardable?: boolean;
   /** Whether the block's value is discarded because it ends in an assignment. */
   discardValue?: boolean;
 }
@@ -126,6 +128,10 @@ export interface IfEntry {
   skipping: boolean;
   /** The value of the chosen branch, once known. */
   value: Value | undefined;
+  /** Whether the if stands alone at a top-level statement start. */
+  statement?: boolean;
+  /** Offset of the then-branch's closing brace, when that branch ends in a statement. */
+  bodyEnd?: number;
   /** A reference yielded by the chosen branch, if any. */
   ref?: BindingRef;
 }

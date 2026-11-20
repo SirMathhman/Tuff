@@ -38,12 +38,17 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   const top = ops[ops.length - 1];
   const ifCondition =
     top?.kind === EntryKind.If && top.phase === IfPhase.Condition;
+  const discardable =
+    top?.kind === EntryKind.If &&
+    top.statement === true &&
+    top.phase === IfPhase.Then;
   ops.push({
     kind: EntryKind.Group,
     bracket,
     sign,
     where: state.pos,
     ifCondition,
+    discardable,
     statementStart:
       bracket === Bracket.Brace &&
       sign === 1 &&
@@ -68,6 +73,7 @@ function startIf(state: ParserState, sign: number, end: number): Step {
     condition: false,
     skipping: false,
     value: undefined,
+    statement: sign === 1 && state.depth === 0 && flags.atStatementStart,
   });
   state.pos = end;
   flags.atStatementStart = false;
@@ -256,6 +262,13 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
     source.charAt(state.pos) === "}"
   ) {
     const group = innermostGroup(ops);
+    if (group?.discardable === true) {
+      const owner = ops[ops.length - 2];
+      if (owner?.kind === EntryKind.If) owner.bodyEnd = state.pos;
+      values.push(0);
+      state.expectOperand = false;
+      return Step.Continue;
+    }
     if (group?.statementStart !== true || !flags.lastAssign) {
       return blockEndsWithStatement(state.pos);
     }
