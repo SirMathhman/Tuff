@@ -89,6 +89,14 @@ const IF_PROGRAMS = [
   "if (false) 1 else -2",
   "if (true) -1 else 2",
   "if (1) 1 else 2",
+  "if (true) { 1 } else { 1 / 0 }",
+  "if (true) { 1 } else { y }",
+  "-if (true) { 1 } else { 2 }",
+  "1 - if (false) { 2 } else { 3 }",
+  "let x = 1; let y = if (true) { let x = 5; x } else { x }; x + y",
+  "let mut x = 1; let y = if (false) { x = 2; 0 } else { 5 }; x + y",
+  "if (true) { if (false) { 1 } else { 2 } } else { if (true) { 3 } else { 4 } }",
+  "let a = { 1 2 }; let b = ;",
 ];
 
 for (const source of IF_PROGRAMS) {
