@@ -326,6 +326,74 @@ export function typeMismatch(
 }
 
 /**
+ * Reports an `if` that is not followed by a parenthesized condition.
+ *
+ * @param source - the program being parsed.
+ * @param where - the offset of the character that should be `(`.
+ * @returns a failure describing the missing parenthesis.
+ */
+export function expectedIfParen(
+  source: string,
+  where: number,
+): Failure<TuffError> {
+  return fail(
+    `Expected '(' after 'if' but found ${describe(source.charAt(where))}`,
+    where,
+    "An 'if' condition is written in parentheses, as in 'if (x < 5)'.",
+    "Write '(' directly after 'if'.",
+  );
+}
+
+/**
+ * Reports an `if` expression with no `else` branch.
+ *
+ * @param source - the program being parsed.
+ * @param where - the offset where `else` should appear.
+ * @returns a failure describing the missing else branch.
+ */
+export function expectedElse(
+  source: string,
+  where: number,
+): Failure<TuffError> {
+  return fail(
+    `Expected 'else' but found ${describe(source.charAt(where))}`,
+    where,
+    "An 'if' expression needs an 'else' branch so that it always has a value.",
+    "Add 'else' followed by a value.",
+  );
+}
+
+/**
+ * Reports an `if` whose condition is not a boolean.
+ *
+ * @param where - the offset of the condition's closing parenthesis.
+ * @returns a failure describing the non-boolean condition.
+ */
+export function nonBooleanCondition(where: number): Failure<TuffError> {
+  return fail(
+    "The condition of 'if' must be a boolean",
+    where,
+    "Only a boolean can choose a branch; a number has no truth value.",
+    "Use a comparison such as 'x < 5', or a boolean value.",
+  );
+}
+
+/**
+ * Reports `else` written where no `if` is waiting for it.
+ *
+ * @param where - the offset of `else`.
+ * @returns a failure describing the misplaced `else`.
+ */
+export function elseNotAllowed(where: number): Failure<TuffError> {
+  return fail(
+    "'else' must follow the then-branch of an 'if'",
+    where,
+    "'else' only appears between the branches of an 'if' expression.",
+    "Remove 'else', or write an 'if' before it.",
+  );
+}
+
+/**
  * Reports a comparison written directly after another comparison.
  *
  * @param where - the offset of the second comparison operator.

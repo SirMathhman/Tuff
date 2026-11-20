@@ -325,3 +325,41 @@ test('interpretTuff("true == true") => error', () => {
     },
   });
 });
+
+test('interpretTuff("let x = if (true) 2 else 3; x") => 2', () => {
+  expect(interpretTuff("let x = if (true) 2 else 3; x")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test('interpretTuff("if (1) 2 else 3") => error', () => {
+  expect(interpretTuff("if (1) 2 else 3")).toEqual({
+    ok: false,
+    error: {
+      what: "The condition of 'if' must be a boolean",
+      where: 5,
+      why: "Only a boolean can choose a branch; a number has no truth value.",
+      fix: "Use a comparison such as 'x < 5', or a boolean value.",
+    },
+  });
+});
+
+test('interpretTuff("if (true) 2") => error', () => {
+  expect(interpretTuff("if (true) 2")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected 'else' but found the end of the input",
+      where: 11,
+      why: "An 'if' expression needs an 'else' branch so that it always has a value.",
+      fix: "Add 'else' followed by a value.",
+    },
+  });
+});
+
+test('interpretTuff("if (true) 2 else (true + 1)") => 2', () => {
+  expect(interpretTuff("if (true) 2 else (true + 1)")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});

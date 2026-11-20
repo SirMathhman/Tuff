@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com). It evalu
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. A boolean cannot be an operand or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
+Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds tighter. A factor is a sign, then an integer, `true` or `false`, a variable, or a bracketed expression. `if (c) a else b` is an operand with a boolean condition and one-factor branches; only the chosen branch takes effect. A boolean cannot be an operand or take a sign. Comparisons (`<`, `>`, `<=`, `>=`, `==`, `!=`) bind loosest, produce booleans, and cannot be chained.
 
 ### Statements and scope
 
@@ -70,11 +70,11 @@ Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rule
 
 #### Interpreter (src/index.ts)
 
-Exports `interpretTuff`, the single-pass parser and evaluator.
+Exports `interpretTuff`: the parser and evaluator.
 
-#### Operations (planned: src/operations.ts)
+#### Operations (src/operations.ts)
 
-Operator meaning: `apply`, `precedence`, and reduction of pending operators.
+Operator meaning and reduction.
 
 #### REPL (src/repl.ts)
 
@@ -86,7 +86,7 @@ Use `bun:test`. Error tests check all four `TuffError` fields. Shared expected m
 
 ### Dependency direction
 
-`repl.ts` and the tests depend on `index.ts`. `index.ts` depends on `scanner.ts` and `errors.ts`. The planned `operations.ts` will depend on `errors.ts` too. `scanner.ts` depends on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
+`repl.ts` and the tests depend on `index.ts`. `index.ts` depends on `operations.ts`, `scanner.ts`, `types.ts`, and `errors.ts`. `operations.ts`, `scanner.ts`, and `types.ts` depend on `errors.ts`, which depends on no project file. Only `repl.ts` performs I/O.
 
 ### Implementation
 
