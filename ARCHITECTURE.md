@@ -94,7 +94,7 @@ A live `&mut` blocks reads and writes of its owner, and any live reference block
 
 ### Misleading fixes
 
-Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. An else-less `if` in a braced body that ends in a statement reports `blockEndsWithStatement`, whose fix omits the missing `else`. An assignment missing `;` can get `let` wording.
+Reassigning a reference reports `notMutable`, whose fix (`let mut`) is forbidden for references. An assignment missing `;` can get `let` wording.
 
 ## Security Concerns
 

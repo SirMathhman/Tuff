@@ -39,10 +39,7 @@ function openBracket(state: ParserState, bracket: Bracket, sign: number): Step {
   const top = ops[ops.length - 1];
   const ifCondition =
     top?.kind === EntryKind.If && top.phase === IfPhase.Condition;
-  const discardable =
-    top?.kind === EntryKind.If &&
-    top.statement === true &&
-    top.phase === IfPhase.Then;
+  const discardable = top?.kind === EntryKind.If && top.phase === IfPhase.Then;
   ops.push({
     kind: EntryKind.Group,
     bracket,
