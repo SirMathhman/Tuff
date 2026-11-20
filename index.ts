@@ -1,27 +1,58 @@
-export type Span = { start: number; end: number };
+export interface Span {
+  start: number;
+  end: number;
+}
+
+export interface TuffErrorOf<K extends string> {
+  kind: K;
+  span: Span;
+}
 
 export type TuffError =
-  | { kind: "UnexpectedCharacter"; span: Span }
-  | { kind: "UnexpectedEnd"; span: Span }
-  | { kind: "UnexpectedToken"; span: Span }
-  | { kind: "ExpectedClosingParen"; span: Span }
-  | { kind: "DivisionByZero"; span: Span }
-  | { kind: "NumericOverflow"; span: Span }
-  | { kind: "NestingTooDeep"; span: Span };
+  | TuffErrorOf<"UnexpectedCharacter">
+  | TuffErrorOf<"UnexpectedEnd">
+  | TuffErrorOf<"UnexpectedToken">
+  | TuffErrorOf<"ExpectedClosingParen">
+  | TuffErrorOf<"DivisionByZero">
+  | TuffErrorOf<"NumericOverflow">
+  | TuffErrorOf<"NestingTooDeep">;
 
-export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+export interface Ok<T> {
+  ok: true;
+  value: T;
+}
 
-type Token = { text: string; span: Span };
-type Input = { tokens: Token[]; end: Span };
-type Step<T> = Result<{ value: T; next: number }, TuffError>;
+export interface Err<E> {
+  ok: false;
+  error: E;
+}
+
+export type Result<T, E> = Ok<T> | Err<E>;
+
+interface Token {
+  text: string;
+  span: Span;
+}
+
+interface Input {
+  tokens: Token[];
+  end: Span;
+}
+
+interface Parsed<T> {
+  value: T;
+  next: number;
+}
+
+type Step<T> = Result<Parsed<T>, TuffError>;
 type Parser = (input: Input, pos: number, depth: number) => Step<number>;
 type OperatorError = "DivisionByZero" | "NumericOverflow";
 type BinaryOp = (a: number, b: number) => Result<number, OperatorError>;
 
 const MAX_NESTING_DEPTH = 256;
 
-const ok = <T>(value: T): { ok: true; value: T } => ({ ok: true, value });
-const err = <E>(error: E): { ok: false; error: E } => ({ ok: false, error });
+const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
+const err = <E>(error: E): Err<E> => ({ ok: false, error });
 const finite = (n: number): Result<number, "NumericOverflow"> =>
   Number.isFinite(n) ? ok(n) : err("NumericOverflow");
 
