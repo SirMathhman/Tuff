@@ -41,7 +41,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 - **Error detail:** `InvalidSyntax` only reports the whole source. It does not identify which operand is wrong.
 - **Operators:** only `+` and `-` are supported, and only between integers. Multiplication and grouping are not implemented.
-- **Linting:** no linter or lint configuration exists.
+- **Linting:** ESLint with the recommended JavaScript and TypeScript rules runs via `bun run lint`. The project size limits are not enforced by lint.
 
 ## Potential Problems
 
@@ -64,7 +64,7 @@ The ideal architecture keeps these rules as the project grows:
 - Split the pipeline into `lexer`, `parser` (producing an AST), and `evaluator`, each in its own file, with `interpretTuff` as the composition point. The current single-regex design is a stopgap.
 - Replace `number` with `bigint` (or a decimal type) so arithmetic is exact. This also resolves the precision issue above.
 - Report error positions: `TuffError` carries the offset and the offending token.
-- Add a lint configuration that enforces the limits in the project guidelines (100 lines per function, 500 code lines per file, 10 files per directory) and a `lint` script in `package.json`.
+- Enforce the project size limits (100 lines per function, 500 code lines per file) in the ESLint configuration. ESLint has no rule for the 10-files-per-directory limit, so check that by hand.
 - Add multiplication, grouping, and an error-context field.
 
 ## Performance
