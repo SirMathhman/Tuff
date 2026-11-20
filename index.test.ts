@@ -29,12 +29,27 @@ test("interpretTuff('(2 + 3) * 4') => 20", () => {
   expect(interpretTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test("interpretTuff('{ 2 + 3 } * 4') => 20", () => {
+  expect(interpretTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test("interpretTuff('{ let x = 2 + 3; x } * 4') => 20", () => {
+  expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test("interpretTuff('(1 + 2}') reports the expected closing character", () => {
+  const result = interpretTuff("(1 + 2}");
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error).toContain('Where: line 1, column 7, found "}" where ")" was expected');
+});
+
 test("interpretTuff('1 +') reports what, where, why, and the fix", () => {
   const result = interpretTuff("1 +");
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.error).toContain("What: unsupported Tuff source");
-  expect(result.error).toContain('Where: line 1, column 4, found end of input where a number or "(" was expected');
+  expect(result.error).toContain('Where: line 1, column 4, found end of input where a number, a variable, "(" or "{" was expected');
   expect(result.error).toContain("Why: ");
   expect(result.error).toContain('Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3"');
 });
