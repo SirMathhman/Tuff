@@ -34,6 +34,7 @@ import {
   readName,
   skipSpaces,
   toBracket,
+  signOf,
 } from "../scanner";
 import type { Cell, ParserState } from "../types";
 import { EntryKind, GroupPart, IfPhase, Step } from "../types";
@@ -397,9 +398,10 @@ export function stepOperand(state: ParserState): Failure<TuffError> | Step {
   }
   let sign = 1;
   let ch = source.charAt(state.pos);
-  const signed = ch === "+" || ch === "-";
-  if (signed) {
-    if (ch === "-") sign = -1;
+  const written = signOf(ch);
+  const signed = written !== undefined;
+  if (written !== undefined) {
+    sign = written;
     state.pos++;
     ch = source.charAt(state.pos);
   }

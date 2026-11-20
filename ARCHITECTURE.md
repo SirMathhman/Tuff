@@ -6,7 +6,7 @@ Tuff is a small TypeScript interpreter run with [Bun](https://bun.com).
 
 ### Grammar
 
-Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. Two terms may be joined by one comparison (`<`, `<=`, `>`, `>=`, `==`, `!=`), which yields a boolean; comparisons do not chain. `/` truncates toward zero; a zero divisor is an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, `NAME[e]`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, which takes the first matching case (`case _` must be last), or is an error at `match` if none matches. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes. A braced body needs no `;`; ending in an assignment makes the call 0. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean takes no arithmetic or sign.
+Terms are joined by `+` or `-`. A term is factors joined by `*` or `/`, which bind tighter. Two terms may be joined by one comparison (`<`, `<=`, `>`, `>=`, `==`, `!=`), which yields a boolean; comparisons do not chain. `/` truncates toward zero; a zero divisor is an error. A factor is a sign, then an integer, `true` or `false`, a variable, `*name`, `NAME()`, `NAME[e]`, a bracketed expression, an `if`, or `match (v) { case L => e; }`, taking the first matching case (`case _` last); no match is an error. `fn NAME() => e;` declares a parameterless function. Functions are hoisted within open scopes. A braced body needs no `;`; ending in an assignment makes the call 0. `if (c) a else b` has a boolean condition and one-factor branches. A statement-level braced `if` may omit `else`; a body ending in a statement is an error when `else` follows. A boolean takes no arithmetic or sign.
 
 ### Statements and scope
 
@@ -28,18 +28,18 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 
 ### Source files
 
-- `src/scanner.ts`: character classes, token readers, bracket matching, and `Operator`.
+- `src/scanner.ts`: character classes, token readers, bracket matching.
 - `src/code.ts`: compiled expressions, not yet used by `interpretTuff`.
-- `src/errors/`: `core.ts` (types), and constructors by family, re-exported by `index.ts`.
+- `src/errors/`: `core.ts` types, and constructors by family.
 - `src/types.ts`: parser state, stack entry types, and `Cell`.
 - `src/operations.ts`: operator meaning, sign application, and reduction.
-- `src/parse/`: one file per construct family, with `helpers.ts` and `operators.ts` shared by all.
+- `src/parse/`: one file per construct family; `helpers.ts` and `operators.ts` are shared.
 - `src/index.ts`: `interpretTuff`. `src/repl.ts`: stdin REPL (`bun run repl`).
 - `src/test/`: `bun:test` suites and shared messages.
 
 ### Dependency direction
 
-`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/` and owns bracket matching. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, `matches.ts`, and `arrays.ts` depend on `helpers.ts`, never on each other; the last three also use `operations.ts`. `operands.ts` depends on those five, and `operators.ts` depends on `loops.ts`, `matches.ts`, and `arrays.ts`. `code.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `types.ts`; nothing depends on it yet. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
+`errors/` depends on nothing outside itself, and `core.ts` owns `Bracket`. `scanner.ts` depends on `errors/`. `types.ts` depends on both. `operations.ts` depends on `errors/`, `scanner.ts`, `types.ts`. In `src/parse/`, `helpers.ts` depends on `operations.ts`. `references.ts`, `calls.ts`, `loops.ts`, `matches.ts`, and `arrays.ts` depend on `helpers.ts`, never on each other; the last three also use `operations.ts`. `operands.ts` depends on those five, and `operators.ts` depends on `loops.ts`, `matches.ts`, and `arrays.ts`. `code.ts` depends on `errors/`, `operations.ts`, `scanner.ts`, and `types.ts`; nothing depends on it yet. `index.ts` depends on all of them; `repl.ts` and the tests on `index.ts`. Only `repl.ts` performs I/O. Import cycles between project files are not allowed.
 
 ### Implementation
 
@@ -59,7 +59,7 @@ Every change must pass `bun run lint`, `bun test`, `bun run format:check`, and `
 
 #### Size and naming
 
-Functions are capped at 100 lines, files at 500, and names need two characters. A directory may hold at most 10 files, subdirectories excluded (`scripts/max-files-per-dir.ts`).
+Functions are capped at 100 lines, files at 500, and names need two characters. A directory holds at most 10 files (`scripts/max-files-per-dir.ts`).
 
 ## Potential Problems
 
@@ -73,11 +73,11 @@ Each call and loop pass reparses its body within one step budget: a loop of abou
 
 ### Failure detection
 
-Failures and values share a return type, told apart by `typeof === "object"`.
+Failures and values share a return type, told apart by `typeof`.
 
 ### Two evaluators
 
-Until `parse/` is retired, `code.ts` must match it. A sign sits directly before its operand, as in `parse/`.
+`code.ts` and `parse/` share the sign rule (`signOf`), bracket matching, and precedence; differential tests check the rest.
 
 ### Numeric precision
 
@@ -105,11 +105,11 @@ Neither a REPL line nor a source program has a length limit.
 
 ### Known gaps
 
-Not implemented: `==` and `!=` on booleans, assignment outside statement starts, function parameters, and names with digits or underscores. Also missing: arrays as function arguments, `break` and `continue`, a `while` that ends a block, statement-level `if`/`else` with assignment branches, REPL bindings across lines, and REPL `why` and `fix` output.
+Not implemented: `==`/`!=` on booleans, assignment outside statement starts, function parameters, names with digits or underscores, arrays as arguments, `break`/`continue`, a `while` ending a block, `if`/`else` with assignment branches, REPL bindings across lines, and REPL `why`/`fix` output.
 
 ### Parse once
 
-Compile function and loop bodies once, so calls stop multiplying parse work. A compiled body is an instruction list with no parser state, run per call against an environment. `src/code.ts` covers expressions and top-level `let` and assignment, and `interpretTuff` does not use it yet.
+Compile function and loop bodies once, so calls stop multiplying parse work. A compiled body is an instruction list with no parser state, run per call against an environment. `src/code.ts` covers expressions, top-level `let`, and assignment, but `interpretTuff` does not use it. Once it does, retire `parse/` and move the sign, bracket, and precedence rules into one module that both sides import.
 
 ### Call limits
 
@@ -117,7 +117,7 @@ Give loops their own pass limit. Keep borrow state on the cell. Move calls to th
 
 ### Module names
 
-Rename `operations.ts` to `reduce.ts`, which is too close to `operators.ts`. Split parse steps by statement, bracket, and `if`.
+Rename `operations.ts` to `reduce.ts` (too close to `operators.ts`) and `code.ts` to `compile.ts`. Split parse steps by statement, bracket, and `if`. `src/errors/` is at its 10-file cap.
 
 ### Errors and data
 

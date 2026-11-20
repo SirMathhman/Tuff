@@ -52,6 +52,25 @@ function isSpace(ch: string): boolean {
  * @param pos - the offset of the operator's first character.
  * @returns the operator, or undefined when the text there is not one.
  */
+/**
+ * The sign a character gives the operand after it: -1 for '-', 1 for '+'.
+ *
+ * @param ch - the character.
+ * @returns the sign, or undefined when the character is not a sign.
+ */
+export function signOf(ch: string): number | undefined {
+  if (ch === "-") return -1;
+  if (ch === "+") return 1;
+  return undefined;
+}
+
+/**
+ * Maps the text at an offset to a binary operator.
+ *
+ * @param source - the program text.
+ * @param pos - the offset to read from.
+ * @returns the operator, or undefined when none starts at the offset.
+ */
 export function toOperator(source: string, pos: number): Operator | undefined {
   const ch = source.charAt(pos);
   const next = source.charAt(pos + 1);

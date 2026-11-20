@@ -23,6 +23,7 @@ import {
   isLetter,
   readDigits,
   readName,
+  signOf,
   skipSpaces,
   toOperator,
 } from "./scanner";
@@ -360,13 +361,12 @@ function readOperand(
   stack: Pending[],
   names: Names,
 ): Advance | Failure<TuffError> {
-  let sign = 1;
   let at = pos;
   const ch = source.charAt(at);
-  if (ch === "+" || ch === "-") {
-    if (ch === "-") sign = -1;
+  const written = signOf(ch);
+  if (written !== undefined) {
     at++;
-    stack.push({ sign, open: false, where: at });
+    stack.push({ sign: written, open: false, where: at });
     if (source.charAt(at) === "+" || source.charAt(at) === "-") {
       return expectedNumber(source, at);
     }
