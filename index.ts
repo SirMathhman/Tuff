@@ -17,16 +17,25 @@ interface Failure<E> {
 
 type Result<T, E> = Success<T> | Failure<E>;
 
-type Operator = "+" | "-" | "*";
+enum Operator {
+  Add = "+",
+  Subtract = "-",
+  Multiply = "*",
+}
+
+enum EntryKind {
+  Operator = "operator",
+  Group = "group",
+}
 
 interface OperatorEntry {
-  kind: "operator";
+  kind: EntryKind.Operator;
   operator: Operator;
 }
 
 // An open parenthesis, remembering the sign written directly before it.
 interface GroupEntry {
-  kind: "group";
+  kind: EntryKind.Group;
   sign: number;
 }
 
@@ -40,8 +49,11 @@ function isSpace(c: string): boolean {
   return c.length === 1 && c.trim() === "";
 }
 
-function isOperator(c: string): c is Operator {
-  return c === "+" || c === "-" || c === "*";
+function toOperator(c: string): Operator | null {
+  if (c === "+") return Operator.Add;
+  if (c === "-") return Operator.Subtract;
+  if (c === "*") return Operator.Multiply;
+  return null;
 }
 
 function skipSpaces(source: string, pos: number): number {
@@ -106,12 +118,12 @@ function expectedClose(source: string, where: number): Failure<TuffError> {
 }
 
 function precedence(op: Operator): number {
-  return op === "*" ? 2 : 1;
+  return op === Operator.Multiply ? 2 : 1;
 }
 
 function apply(left: number, op: Operator, right: number): number {
-  if (op === "+") return left + right;
-  if (op === "-") return left - right;
+  if (op === Operator.Add) return left + right;
+  if (op === Operator.Subtract) return left - right;
   return left * right;
 }
 
@@ -119,7 +131,7 @@ function apply(left: number, op: Operator, right: number): number {
 // guarantees both operands are present.
 function applyTop(values: number[], ops: StackEntry[]): void {
   const entry = ops.pop();
-  if (entry?.kind !== "operator") return;
+  if (entry?.kind !== EntryKind.Operator) return;
   const right = values.pop() ?? 0;
   const left = values.pop() ?? 0;
   values.push(apply(left, entry.operator, right));
@@ -130,13 +142,13 @@ function applyTop(values: number[], ops: StackEntry[]): void {
 function closeGroup(values: number[], ops: StackEntry[]): void {
   for (
     let top = ops[ops.length - 1];
-    top?.kind === "operator";
+    top?.kind === EntryKind.Operator;
     top = ops[ops.length - 1]
   ) {
     applyTop(values, ops);
   }
   const group = ops.pop();
-  if (group?.kind !== "group") return;
+  if (group?.kind !== EntryKind.Group) return;
   values.push(group.sign * (values.pop() ?? 0));
 }
 
@@ -160,7 +172,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
         c = tuffSource.charAt(pos);
       }
       if (c === "(") {
-        ops.push({ kind: "group", sign });
+        ops.push({ kind: EntryKind.Group, sign });
         depth++;
         pos++;
         continue;
@@ -186,17 +198,19 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       pos++;
       continue;
     }
-    if (!isOperator(c)) return expectedOperator(tuffSource, pos, grouped);
+    const op = toOperator(c);
+    if (op === null) return expectedOperator(tuffSource, pos, grouped);
 
     // Left-associative: apply pending operators that bind at least as tightly.
     for (
       let top = ops[ops.length - 1];
-      top?.kind === "operator" && precedence(top.operator) >= precedence(c);
+      top?.kind === EntryKind.Operator &&
+      precedence(top.operator) >= precedence(op);
       top = ops[ops.length - 1]
     ) {
       applyTop(values, ops);
     }
-    ops.push({ kind: "operator", operator: c });
+    ops.push({ kind: EntryKind.Operator, operator: op });
     pos++;
     expectOperand = true;
   }

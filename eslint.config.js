@@ -33,6 +33,10 @@ export default tseslint.config(
           message: "Use a named interface instead of an object type literal.",
         },
         {
+          selector: "TSLiteralType > Literal[raw=/^[\"']/]",
+          message: "String literal types are not allowed; use an enum.",
+        },
+        {
           selector: "CallExpression[callee.name='RegExp']",
           message: "Calling RegExp as a function is not allowed.",
         },
