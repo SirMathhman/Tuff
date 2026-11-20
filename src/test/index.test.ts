@@ -38,7 +38,7 @@ test('interpretTuff("2x") => error', () => {
   expect(interpretTuff("2x")).toEqual({
     ok: false,
     error: {
-      what: "Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found 'x'",
+      what: "Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found 'x'",
       where: 1,
       why: OPERATOR_WHY,
       fix: OPERATOR_FIX,
@@ -50,7 +50,7 @@ test('interpretTuff("1.9 + 1") => error', () => {
   expect(interpretTuff("1.9 + 1")).toEqual({
     ok: false,
     error: {
-      what: "Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found '.'",
+      what: "Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found '.'",
       where: 1,
       why: OPERATOR_WHY,
       fix: OPERATOR_FIX,
@@ -170,7 +170,7 @@ test('interpretTuff("(1 2)") => error', () => {
   expect(interpretTuff("(1 2)")).toEqual({
     ok: false,
     error: {
-      what: "Expected '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found '2'",
+      what: "Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found '2'",
       where: 3,
       why: GROUPED_OPERATOR_WHY,
       fix: GROUPED_OPERATOR_FIX,
@@ -182,7 +182,7 @@ test('interpretTuff("1 + 2)") => error', () => {
   expect(interpretTuff("1 + 2)")).toEqual({
     ok: false,
     error: {
-      what: "Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found ')'",
+      what: "Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found ')'",
       where: 5,
       why: OPERATOR_WHY,
       fix: OPERATOR_FIX,
@@ -281,4 +281,20 @@ test('interpretTuff("each comparison operator") => 1, 1, 1, 0, 1, 0', () => {
 
 test('interpretTuff("1 - -2") => 3', () => {
   expect(interpretTuff("1 - -2")).toEqual({ ok: true, value: 3 });
+});
+
+test('interpretTuff("1 / 0") => error', () => {
+  expect(interpretTuff("1 / 0")).toEqual({
+    ok: false,
+    error: {
+      what: "Division by zero",
+      where: 2,
+      why: "A number cannot be divided by zero.",
+      fix: "Use a non-zero divisor.",
+    },
+  });
+});
+
+test('interpretTuff("7 / 2") => 3', () => {
+  expect(interpretTuff("7 / 2")).toEqual({ ok: true, value: 3 });
 });

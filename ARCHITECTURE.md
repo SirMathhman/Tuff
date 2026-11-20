@@ -47,7 +47,6 @@ Results are `{ ok: true, value }` or `{ ok: false, error }`. A boolean program r
 - `interpretTuff("let x = 1;")` returns `{ ok: true, value: 0 }`.
 - `interpretTuff("let mut x = 0; x = 1; x")` returns `{ ok: true, value: 1 }`.
 - `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression.
-- `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `x` is out of scope.
 
 ## Structure
 
@@ -61,11 +60,11 @@ Repository checks live in `scripts/`, custom ESLint rules in `eslint-rules/`, cu
 - `src/operations.ts`: operator meaning and reduction.
 - `src/helpers.ts`, `src/operands.ts`, `src/operators.ts`: parse steps. `src/index.ts`: `interpretTuff`.
 - `src/repl.ts`: stdin REPL. Run with `bun run repl`.
-- `src/test/*.test.ts`: `bun:test` suites. Shared messages live in `src/test/test-messages.ts`.
+- `src/test/*.test.ts`: `bun:test` suites.
 
 ### Dependency direction
 
-Edges point one way. `errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
+`errors.ts` depends on no project file and owns `Bracket`. `scanner.ts` depends on `errors.ts`. `types.ts` depends on `errors.ts` and `scanner.ts`. `operations.ts` depends on `errors.ts`, `scanner.ts`, `types.ts`. Parse steps depend on `helpers.ts`. `index.ts` depends on all of them. `repl.ts` and the tests depend on `index.ts`. Only `repl.ts` performs I/O.
 
 ### Implementation
 
@@ -117,6 +116,10 @@ Types used by exports must be exported. Markdown lint caps bullet lists at 10 it
 
 Every parse step mutates one `ParserState`, so any step can touch any field, and the shape grows with each construct.
 
+### Lenient flag threading
+
+A `lenient` flag reaches every reduction and sign call, and each site decides whether its error is static or value. A new error site can get this wrong silently.
+
 ### Numeric precision
 
 Numbers use `parseInt` and doubles, so values above `Number.MAX_SAFE_INTEGER` round silently. `9007199254740993 + 0` gives `9007199254740992` with `ok: true`.
@@ -143,11 +146,15 @@ The REPL reads each stdin line with no length limit, and no maximum source lengt
 
 ### Known gaps
 
-Not implemented: division, `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
+Not implemented: `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
 
 ### Parse tree
 
 Build an AST in a parse module, then evaluate it in a separate module. Lenient branches become an evaluator concern, so the parser only reports syntax errors.
+
+### Error classes
+
+Each error is tagged static or value when constructed, and one gate drops value errors in unchosen branches.
 
 ### Numbers and output
 
@@ -155,4 +162,4 @@ Replace `number` with `bigint` or a decimal type, so arithmetic is exact. Report
 
 ## Performance
 
-The scan is linear in source length. A long digit run is one `parseInt` call, which gives no meaningful value past the safe-integer limit. Profile before optimizing.
+The scan is linear in source length. Profile before optimizing.

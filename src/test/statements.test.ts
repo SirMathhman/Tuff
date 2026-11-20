@@ -135,7 +135,7 @@ test('interpretTuff("let x = 1; x y") => error', () => {
   expect(interpretTuff("let x = 1; x y")).toEqual({
     ok: false,
     error: {
-      what: "Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found 'y'",
+      what: "Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found 'y'",
       where: 13,
       why: OPERATOR_WHY,
       fix: OPERATOR_FIX,

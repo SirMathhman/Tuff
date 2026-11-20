@@ -89,7 +89,7 @@ export function expectedNumber(
   return fail(
     `Expected a number, a variable, '(', or '{' but found ${describe(source.charAt(where))}`,
     where,
-    "Every '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
+    "Every '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.",
     "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.",
   );
 }
@@ -109,17 +109,17 @@ export function expectedOperator(
   const found = describe(source.charAt(where));
   if (grouped) {
     return fail(
-      `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found ${found}`,
+      `Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', ')', or '}' but found ${found}`,
       where,
-      "Two terms can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
-      "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.",
+      "Two terms can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
+      "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.",
     );
   }
   return fail(
-    `Expected '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' but found ${found}`,
+    `Expected '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' but found ${found}`,
     where,
-    "Two numbers can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.",
-    "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.",
+    "Two numbers can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.",
+    "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.",
   );
 }
 
@@ -403,6 +403,21 @@ export function elseNotAllowed(where: number): Failure<TuffError> {
     where,
     "'else' only appears between the branches of an 'if' expression.",
     "Remove 'else', or write an 'if' before it.",
+  );
+}
+
+/**
+ * Reports a division whose divisor is zero.
+ *
+ * @param where - the offset of the division operator.
+ * @returns a failure describing the division by zero.
+ */
+export function divisionByZero(where: number): Failure<TuffError> {
+  return fail(
+    "Division by zero",
+    where,
+    "A number cannot be divided by zero.",
+    "Use a non-zero divisor.",
   );
 }
 

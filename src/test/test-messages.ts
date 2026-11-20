@@ -2,17 +2,17 @@
  * Expected error messages shared by the test files.
  */
 export const NUMBER_WHY =
-  "Every '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.";
+  "Every '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' must be followed by an integer, a variable, or a parenthesized or braced expression, and an expression must start with one.";
 export const NUMBER_FIX =
   "Put an integer, a variable, '(' or '{' at this position, or remove the operator before it.";
 export const OPERATOR_WHY =
-  "Two numbers can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.";
+  "Two numbers can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!='; any other character cannot follow a number.";
 export const OPERATOR_FIX =
-  "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.";
+  "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=' between the numbers, or remove the extra character.";
 export const GROUPED_OPERATOR_WHY =
-  "Two terms can only be combined with '+', '-', '*', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.";
+  "Two terms can only be combined with '+', '-', '*', '/', '<', '>', '<=', '>=', '==', or '!=', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.";
 export const GROUPED_OPERATOR_FIX =
-  "Insert '+', '-', '*', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.";
+  "Insert '+', '-', '*', '/', '<', '>', '<=', '>=', '==', '!=', or a closing bracket here, or remove the extra character.";
 export const UNDEFINED_WHY =
   "A variable is only visible inside the block where it was declared with 'let', and inside blocks nested in that block.";
 export const MISMATCH_WHY =

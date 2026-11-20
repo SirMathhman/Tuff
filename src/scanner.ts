@@ -10,6 +10,8 @@ export enum Operator {
   Subtract = "-",
   /** Multiplication. */
   Multiply = "*",
+  /** Division, truncated toward zero. */
+  Divide = "/",
   /** Less than. */
   LessThan = "<",
   /** Less than or equal. */
@@ -56,6 +58,7 @@ export function toOperator(source: string, pos: number): Operator | undefined {
   if (ch === "+") return Operator.Add;
   if (ch === "-") return Operator.Subtract;
   if (ch === "*") return Operator.Multiply;
+  if (ch === "/") return Operator.Divide;
   if (ch === "<") return next === "=" ? Operator.LessEqual : Operator.LessThan;
   if (ch === ">")
     return next === "=" ? Operator.GreaterEqual : Operator.GreaterThan;

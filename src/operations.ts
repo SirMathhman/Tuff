@@ -1,4 +1,4 @@
-import { booleanOperand, booleanSign } from "./errors";
+import { booleanOperand, booleanSign, divisionByZero } from "./errors";
 import type { Failure, TuffError } from "./errors";
 import { Operator } from "./scanner";
 import { EntryKind } from "./types";
@@ -12,7 +12,10 @@ import type { StackEntry, Value } from "./types";
  */
 export function isComparison(op: Operator): boolean {
   return (
-    op !== Operator.Add && op !== Operator.Subtract && op !== Operator.Multiply
+    op !== Operator.Add &&
+    op !== Operator.Subtract &&
+    op !== Operator.Multiply &&
+    op !== Operator.Divide
   );
 }
 
@@ -24,7 +27,7 @@ export function isComparison(op: Operator): boolean {
  * @returns a larger number for an operator that binds more tightly.
  */
 export function precedence(op: Operator): number {
-  if (op === Operator.Multiply) return 2;
+  if (op === Operator.Multiply || op === Operator.Divide) return 2;
   return isComparison(op) ? 0 : 1;
 }
 
@@ -32,6 +35,7 @@ function apply(left: number, op: Operator, right: number): Value {
   if (op === Operator.Add) return left + right;
   if (op === Operator.Subtract) return left - right;
   if (op === Operator.Multiply) return left * right;
+  if (op === Operator.Divide) return Math.trunc(left / right);
   if (op === Operator.LessThan) return left < right;
   if (op === Operator.LessEqual) return left <= right;
   if (op === Operator.GreaterThan) return left > right;
@@ -87,6 +91,13 @@ export function applyTop(
       return undefined;
     }
     return booleanOperand(entry.where, entry.operator);
+  }
+  if (entry.operator === Operator.Divide && right === 0) {
+    if (lenient) {
+      values.push(0);
+      return undefined;
+    }
+    return divisionByZero(entry.where);
   }
   values.push(apply(left, entry.operator, right));
   return undefined;
