@@ -120,11 +120,9 @@ function startAssign(
   equals: number,
 ): Failure<TuffError> | Step {
   const { source, ops, scopes, flags } = state;
-  if (!isLenient(state)) {
-    const cell = lookupCell(scopes, name);
-    if (cell === undefined) return undefinedName(nameStart, name);
-    if (!cell.mutable) return notMutable(nameStart, name);
-  }
+  const cell = lookupCell(scopes, name);
+  if (cell === undefined) return undefinedName(nameStart, name);
+  if (!cell.mutable) return notMutable(nameStart, name);
   ops.push({
     kind: EntryKind.Binding,
     name,
@@ -168,7 +166,6 @@ function operandName(
   }
   const cell = lookupCell(scopes, name);
   if (cell === undefined) {
-    if (isLenient(state)) return pushOperand(state, 0, end);
     return undefinedName(state.pos, name);
   }
   const value = applySign(cell.value, sign, state.pos, isLenient(state));

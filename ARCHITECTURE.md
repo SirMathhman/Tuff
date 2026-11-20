@@ -113,9 +113,9 @@ Types used by exports must be exported. Markdown lint caps bullet lists at 10 it
 
 ## Potential Problems
 
-### Parser size
+### Shared parser state
 
-`index.ts` holds every parse step in one file, so each new construct adds to a file that is near the 500-line cap.
+Every parse step mutates one `ParserState`, so any step can touch any field, and the shape grows with each construct.
 
 ### Numeric precision
 
@@ -145,9 +145,9 @@ The REPL reads each stdin line with no length limit, and no maximum source lengt
 
 Not implemented: division, `==` and `!=` on booleans, assignment outside statement starts, functions, and names with digits or underscores.
 
-### Parser split
+### Parse tree
 
-Split the parse loop before it reaches the line cap: operand steps, operator steps, and `if` branches each get a module, and `index.ts` stays the composition point. Later, split the parser (producing an AST) from the evaluator.
+Build an AST in a parse module, then evaluate it in a separate module. Lenient branches become an evaluator concern, so the parser only reports syntax errors.
 
 ### Numbers and output
 

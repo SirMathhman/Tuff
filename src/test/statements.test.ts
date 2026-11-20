@@ -382,3 +382,17 @@ test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
     value: 3,
   });
 });
+
+test('interpretTuff("if (false) { let x = 0; x = 1; x } else { 3 }") => error', () => {
+  expect(
+    interpretTuff("if (false) { let x = 0; x = 1; x } else { 3 }"),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot assign to 'x' because it was not declared with 'let mut'",
+      where: 24,
+      why: "Only variables declared with 'let mut' can be reassigned.",
+      fix: "Declare 'x' with 'let mut x = ...;' to allow reassignment.",
+    },
+  });
+});
