@@ -1,6 +1,6 @@
 # Architecture
 
-Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum, difference, or product of integers and parenthesized groups, with `*` binding tighter than `+` and `-`.
+Tuff is a small TypeScript project run with [Bun](https://bun.com). It is an interpreter for the Tuff language, and it is at an early stage: the only supported expression is a sum, difference, or product of integers and parenthesized or braced groups, with `*` binding tighter than `+` and `-`.
 
 ## Layout
 
@@ -20,7 +20,7 @@ Dependency direction: `repl.ts` and `index.test.ts` depend on `index.ts`. `index
 
 ## Definitions
 
-- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an optional sign followed by either an integer or a parenthesized expression. A sign may follow a binary operator, so `1 - -2`, `2 * -3`, and `-(2 + 3)` are valid.
+- **Expression:** terms joined by `+` or `-`. A term is factors joined by `*`. A factor is an optional sign followed by either an integer or a parenthesized or braced expression. A sign may follow a binary operator, so `1 - -2`, `2 * -3`, and `-(2 + 3)` are valid.
 - **Result:** `{ ok: true, value }` (a `Success`) on success or `{ ok: false, error }` (a `Failure`) on failure.
 - **TuffError:** a four-part description of a syntax error:
   - `what`: the error, for example `Expected '+', '-', or '*' but found 'x'`.
@@ -32,18 +32,18 @@ Dependency direction: `repl.ts` and `index.test.ts` depend on `index.ts`. `index
 
 ### `interpretTuff(tuffSource: string): Result<number, TuffError>`
 
-A shunting-yard evaluator with explicit stacks, written as one loop with no recursion. It reads the original source with character checks (no regular expressions) and skips whitespace. A sign must touch its digits or its `(`. Whitespace is allowed around operators.
+A shunting-yard evaluator with explicit stacks, written as one loop with no recursion. It reads the original source with character checks (no regular expressions) and skips whitespace. A sign must touch its digits or its opening bracket. Whitespace is allowed around operators.
 
-- A value stack holds numbers. An operator stack holds pending `+`, `-`, `*` operators and open-group entries. Each group entry remembers the sign written before its `(`.
+- A value stack holds numbers. An operator stack holds pending `+`, `-`, `*` operators and open-group entries. Each group entry remembers the sign written before its opening bracket and which kind of bracket it is.
 - Operands are read directly. A pending operator is applied first when it binds at least as tightly (`*` above `+` and `-`), which makes operators left-associative.
 - `)` applies pending operators back to the group entry, then scales the group's value by its sign.
 - Nesting depth is limited only by memory, not by the call stack.
 
 Errors:
 
-- No digits and no `(` where a factor is expected: "Expected a number or '('".
-- A character after a term that is not an operator (or `)` inside parentheses): "Expected '+', '-', or '_'" at top level, or "Expected '+', '-', '_', or ')'" inside parentheses.
-- Input ends inside parentheses: "Expected ')'".
+- No digits and no opening bracket where a factor is expected: `Expected a number, '(', or '{'`.
+- A character after a term that is not an operator (or a closing bracket inside brackets): `Expected '+', '-', or '*'` at top level, or `Expected '+', '-', '*', ')', or '}'` inside brackets.
+- Input ends inside brackets: `Expected ')'` or `Expected '}'`, matching the innermost opening bracket.
 
 Behavior:
 
@@ -56,9 +56,11 @@ Behavior:
 - `interpretTuff("(2 + 3) * 4")` returns `{ ok: true, value: 20 }`.
 - `interpretTuff("-(2 + 3) * 4")` returns `{ ok: true, value: -20 }`.
 - `interpretTuff("2x")` returns an error at offset 1: `what` is `Expected '+', '-', or '*' but found 'x'`.
-- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number or '(' but found 'x'`.
-- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number or '(' but found the end of the input`.
+- `interpretTuff("1 + x")` returns an error at offset 4: `what` is `Expected a number, '(', or '{' but found 'x'`.
+- `interpretTuff("")` returns an error at offset 0: `what` is `Expected a number, '(', or '{' but found the end of the input`.
 - `interpretTuff("(2 + 3")` returns an error at offset 6: `what` is `Expected ')' but found the end of the input`.
+- `interpretTuff("{ 2 + 3 } * 4")` returns `{ ok: true, value: 20 }`.
+- `interpretTuff("(2 + 3 }")` returns an error at offset 7: `what` is `Expected ')' to close '(' but found '}'`.
 
 ### REPL (`repl.ts`)
 
@@ -70,7 +72,7 @@ Run `bun test`. Each feature has a test named after the expression and its expec
 
 ## Known gaps and open decisions
 
-- **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized groups. Division and other operators are not implemented.
+- **Operators:** `+`, `-`, and `*` are supported, and only between integers and parenthesized or braced groups. Division and other operators are not implemented.
 - **Linting:** `bun run lint` runs ESLint (recommended JavaScript and TypeScript rules, the `local/no-recursion` rule, and restricted syntax) and then `scripts/unused-exports.ts`. The recursion rule counts direct calls (by name, through aliases, and as methods `x.name(...)`) and closures nested in a function. Recursion that closes only through a parameter is allowed, and passing a function as an argument is not an edge. The rule works within one file, so recursion that crosses files is not detected. Calls through object properties and `this` (`o.m()`, `this.m()`) are matched to methods by name only, so two unrelated objects with a method of the same name can produce a false positive. Aliases (`const g = f`) are followed. Known gaps: methods with computed keys (`o["m"]()`) are not matched. `no-restricted-syntax` bans regex literals, `RegExp` construction or calls, `match`/`matchAll`/`search` calls, and object type literals (use named interfaces instead), and string literal types (use enums instead). The unused-export check fails if any export is not imported or re-exported by another project file, so the export keyword must be removed. Functions longer than 100 lines (blank lines and comments excluded) are reported by `max-lines-per-function`. Exported top-level functions, classes, interfaces, type aliases, and enums must have JSDoc; exported functions must document every `@param` name and have a `@returns` entry (`jsdoc/require-jsdoc`, `jsdoc/require-param`, `jsdoc/require-returns`). File length and the files-per-directory limit are not enforced by lint.
 
 ## Potential Problems

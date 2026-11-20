@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { interpretTuff } from "./index";
 
 const NUMBER_WHY =
-  "Every '+', '-', or '*' must be followed by an integer or a parenthesized expression, and an expression must start with one.";
+  "Every '+', '-', or '*' must be followed by an integer or a parenthesized or braced expression, and an expression must start with one.";
 const NUMBER_FIX =
-  "Put an integer or '(' at this position, or remove the operator before it.";
+  "Put an integer, '(' or '{' at this position, or remove the operator before it.";
 const OPERATOR_WHY =
   "Two numbers can only be combined with '+', '-', or '*'; any other character cannot follow a number.";
 const OPERATOR_FIX =
@@ -54,7 +54,7 @@ test('interpretTuff("1 + x") => error', () => {
   expect(interpretTuff("1 + x")).toEqual({
     ok: false,
     error: {
-      what: "Expected a number or '(' but found 'x'",
+      what: "Expected a number, '(', or '{' but found 'x'",
       where: 4,
       why: NUMBER_WHY,
       fix: NUMBER_FIX,
@@ -66,7 +66,7 @@ test('interpretTuff("") => error', () => {
   expect(interpretTuff("")).toEqual({
     ok: false,
     error: {
-      what: "Expected a number or '(' but found the end of the input",
+      what: "Expected a number, '(', or '{' but found the end of the input",
       where: 0,
       why: NUMBER_WHY,
       fix: NUMBER_FIX,
@@ -92,6 +92,22 @@ test('interpretTuff("2 + 3 * 4") => 14', () => {
 
 test('interpretTuff("(2 + 3) * 4") => 20', () => {
   expect(interpretTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test('interpretTuff("{ 2 + 3 } * 4") => 20', () => {
+  expect(interpretTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test('interpretTuff("(2 + 3 }") => error', () => {
+  expect(interpretTuff("(2 + 3 }")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected ')' to close '(' but found '}'",
+      where: 7,
+      why: "Each opening bracket must be closed by its own kind of bracket: '(' by ')' and '{' by '}'.",
+      fix: "Replace this character with ')', or change the opening bracket.",
+    },
+  });
 });
 
 test('interpretTuff("1 - -2") => 3', () => {

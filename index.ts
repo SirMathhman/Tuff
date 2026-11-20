@@ -28,14 +28,20 @@ enum EntryKind {
   Group = "group",
 }
 
+enum Bracket {
+  Paren = "(",
+  Brace = "{",
+}
+
 interface OperatorEntry {
   kind: EntryKind.Operator;
   operator: Operator;
 }
 
-// An open parenthesis, remembering the sign written directly before it.
+// An open bracket, remembering its kind and the sign written directly before it.
 interface GroupEntry {
   kind: EntryKind.Group;
+  bracket: Bracket;
   sign: number;
 }
 
@@ -54,6 +60,20 @@ function toOperator(c: string): Operator | null {
   if (c === "-") return Operator.Subtract;
   if (c === "*") return Operator.Multiply;
   return null;
+}
+
+function toBracket(c: string): Bracket | null {
+  if (c === "(") return Bracket.Paren;
+  if (c === "{") return Bracket.Brace;
+  return null;
+}
+
+function isCloser(c: string): boolean {
+  return c === ")" || c === "}";
+}
+
+function closerFor(bracket: Bracket): string {
+  return bracket === Bracket.Paren ? ")" : "}";
 }
 
 function skipSpaces(source: string, pos: number): number {
@@ -79,10 +99,10 @@ function fail(
 
 function expectedNumber(source: string, where: number): Failure<TuffError> {
   return fail(
-    `Expected a number or '(' but found ${describe(source.charAt(where))}`,
+    `Expected a number, '(', or '{' but found ${describe(source.charAt(where))}`,
     where,
-    "Every '+', '-', or '*' must be followed by an integer or a parenthesized expression, and an expression must start with one.",
-    "Put an integer or '(' at this position, or remove the operator before it.",
+    "Every '+', '-', or '*' must be followed by an integer or a parenthesized or braced expression, and an expression must start with one.",
+    "Put an integer, '(' or '{' at this position, or remove the operator before it.",
   );
 }
 
@@ -94,10 +114,10 @@ function expectedOperator(
   const found = describe(source.charAt(where));
   if (grouped) {
     return fail(
-      `Expected '+', '-', '*', or ')' but found ${found}`,
+      `Expected '+', '-', '*', ')', or '}' but found ${found}`,
       where,
-      "Two terms can only be combined with '+', '-', or '*', and a '(' must be closed with ')'; any other character cannot follow a number.",
-      "Insert '+', '-', '*', or ')' here, or remove the extra character.",
+      "Two terms can only be combined with '+', '-', or '*', and an opening bracket must be closed by its matching bracket; any other character cannot follow a number.",
+      "Insert '+', '-', '*', or a closing bracket here, or remove the extra character.",
     );
   }
   return fail(
@@ -108,12 +128,32 @@ function expectedOperator(
   );
 }
 
-function expectedClose(source: string, where: number): Failure<TuffError> {
+function expectedClose(
+  source: string,
+  where: number,
+  bracket: Bracket,
+): Failure<TuffError> {
+  const closer = closerFor(bracket);
+  const noun = bracket === Bracket.Paren ? "parenthesized" : "braced";
   return fail(
-    `Expected ')' but found ${describe(source.charAt(where))}`,
+    `Expected '${closer}' but found ${describe(source.charAt(where))}`,
     where,
-    "Every '(' must be closed by a matching ')'.",
-    "Add a ')' at the end of the parenthesized expression.",
+    `Every '${bracket}' must be closed by a matching '${closer}'.`,
+    `Add a '${closer}' at the end of the ${noun} expression.`,
+  );
+}
+
+function expectedMismatch(
+  source: string,
+  where: number,
+  bracket: Bracket,
+): Failure<TuffError> {
+  const closer = closerFor(bracket);
+  return fail(
+    `Expected '${closer}' to close '${bracket}' but found ${describe(source.charAt(where))}`,
+    where,
+    "Each opening bracket must be closed by its own kind of bracket: '(' by ')' and '{' by '}'.",
+    `Replace this character with '${closer}', or change the opening bracket.`,
   );
 }
 
@@ -137,8 +177,17 @@ function applyTop(values: number[], ops: StackEntry[]): void {
   values.push(apply(left, entry.operator, right));
 }
 
+// The newest open bracket on the stack, or null when none is open.
+function innermostGroup(ops: StackEntry[]): GroupEntry | null {
+  for (let i = ops.length - 1; i >= 0; i--) {
+    const entry = ops[i];
+    if (entry?.kind === EntryKind.Group) return entry;
+  }
+  return null;
+}
+
 // Closes the innermost group: applies its operators, then scales the result by
-// the sign written before the "(".
+// the sign written before its opening bracket.
 function closeGroup(values: number[], ops: StackEntry[]): void {
   for (
     let top = ops[ops.length - 1];
@@ -154,8 +203,9 @@ function closeGroup(values: number[], ops: StackEntry[]): void {
 
 /**
  * Evaluates a Tuff expression: integers joined by `+`, `-`, and `*`, with
- * parentheses and signs. Uses explicit stacks, so nesting depth is not limited
- * by the JavaScript call stack. Offsets in errors refer to the unmodified source.
+ * parentheses, braces, and signs. Uses explicit stacks, so nesting depth is not
+ * limited by the JavaScript call stack. Offsets in errors refer to the
+ * unmodified source.
  *
  * @param tuffSource - the expression to evaluate.
  * @returns the value on success, or a TuffError describing the first syntax error.
@@ -163,7 +213,7 @@ function closeGroup(values: number[], ops: StackEntry[]): void {
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const values: number[] = [];
   const ops: StackEntry[] = [];
-  let depth = 0; // number of open parentheses
+  let depth = 0; // number of open brackets
   let pos = 0;
   let expectOperand = true;
 
@@ -177,8 +227,9 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
         pos++;
         c = tuffSource.charAt(pos);
       }
-      if (c === "(") {
-        ops.push({ kind: EntryKind.Group, sign });
+      const bracket = toBracket(c);
+      if (bracket !== null) {
+        ops.push({ kind: EntryKind.Group, bracket, sign });
         depth++;
         pos++;
         continue;
@@ -194,11 +245,19 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     pos = skipSpaces(tuffSource, pos);
     const grouped = depth > 0;
     if (pos === tuffSource.length) {
-      if (grouped) return expectedClose(tuffSource, pos);
+      const group = innermostGroup(ops);
+      if (grouped && group !== null) {
+        return expectedClose(tuffSource, pos, group.bracket);
+      }
       break;
     }
     const c = tuffSource.charAt(pos);
-    if (grouped && c === ")") {
+    if (grouped && isCloser(c)) {
+      const group = innermostGroup(ops);
+      if (group === null) return expectedOperator(tuffSource, pos, grouped);
+      if (c !== closerFor(group.bracket)) {
+        return expectedMismatch(tuffSource, pos, group.bracket);
+      }
       closeGroup(values, ops);
       depth--;
       pos++;
