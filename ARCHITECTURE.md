@@ -73,7 +73,7 @@ Source lives in `src/`. Repository checks live in `scripts/`, custom ESLint rule
 
 #### Interpreter (src/index.ts)
 
-Exports `interpretTuff`. Character scanning lives in `src/scanner.ts`, and error types and messages live in `src/errors.ts`.
+Exports `interpretTuff`. Scanning lives in `src/scanner.ts`; errors live in `src/errors.ts`.
 
 #### REPL (src/repl.ts)
 
@@ -171,7 +171,7 @@ Operators are `+`, `-`, and `*`, applied to integers, variables, and groups. Not
 
 ### Module split
 
-Split into `lexer`, `parser` (producing an AST), and `evaluator`, with `interpretTuff` as the composition point. The combined evaluator is a stopgap until then.
+Split into `lexer`, `parser` (producing an AST), and `evaluator`, with `interpretTuff` as the composition point. It is a stopgap until then.
 
 ### Numbers and output
 
