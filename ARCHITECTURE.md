@@ -40,7 +40,7 @@ Terms are joined by `+` or `-`. A term is factors joined by `*`, and `*` binds t
 
 ### Blocks
 
-A block's value is its final expression, so it cannot end with a `let`. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
+A block's value is its final expression, so it cannot end with a statement. A program that ends with a `let` evaluates to 0. A block `{ ... }` scopes its bindings, and a repeat in the same block replaces the value.
 
 ### Results and errors
 
@@ -92,7 +92,7 @@ Each example below gives an error at the stated offset.
 
 ##### Scope
 
-- `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block cannot end with a `let`.
+- `interpretTuff("{ let x = 1; }")` returns an error at offset 13: a block must end with an expression, not a statement.
 - `interpretTuff("{ let x = 1; x } + x")` returns an error at offset 19: `x` is out of scope.
 
 ## Implementation

@@ -156,10 +156,10 @@ test('interpretTuff("{ let x = 1; }") => error', () => {
   expect(interpretTuff("{ let x = 1; }")).toEqual({
     ok: false,
     error: {
-      what: "Expected a number, a variable, '(', or '{' but found '}'",
+      what: "A block must end with an expression, not a statement",
       where: 13,
-      why: NUMBER_WHY,
-      fix: NUMBER_FIX,
+      why: "The value of a block is its final expression, so a block that ends with a statement has no value.",
+      fix: "Add an expression after the last statement, such as the variable's name.",
     },
   });
 });

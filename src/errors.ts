@@ -272,6 +272,27 @@ export function notMutable(where: number, name: string): Failure<TuffError> {
  * @param where - the offset of the `;`.
  * @returns a failure describing the stray `;`.
  */
+export /**
+ * Reports a block whose last item is a statement rather than an expression.
+ *
+ * @param where - the offset of the block's closing brace.
+ * @returns a failure describing the block that ends in a statement.
+ */
+function blockEndsWithStatement(where: number): Failure<TuffError> {
+  return fail(
+    "A block must end with an expression, not a statement",
+    where,
+    "The value of a block is its final expression, so a block that ends with a statement has no value.",
+    "Add an expression after the last statement, such as the variable's name.",
+  );
+}
+
+/**
+ * Reports a `;` that does not end a `let` or assignment.
+ *
+ * @param where - the offset of the `;`.
+ * @returns a failure describing the stray `;`.
+ */
 export function unexpectedSemicolon(where: number): Failure<TuffError> {
   return fail(
     "Unexpected ';' outside a let statement",

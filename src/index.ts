@@ -9,6 +9,7 @@ import {
   expectedOperator,
   expectedSemicolon,
   expectedVariableName,
+  blockEndsWithStatement,
   letNotAllowed,
   notMutable,
   reservedName,
@@ -72,6 +73,7 @@ interface ParserState {
   expectOperand: boolean;
   atStatementStart: boolean;
   afterLet: boolean; // the last top-level statement was a `let` or an assignment
+  lastStatementEnded: boolean; // the most recent item was a statement, not an expression
 }
 
 function isDigit(ch: string): boolean {
@@ -201,10 +203,12 @@ function closeBinding(state: ParserState, binding: BindingEntry): void {
     const cell = { value, mutable: binding.mutable };
     state.scopes[state.scopes.length - 1]?.set(binding.name, cell);
   }
+  state.lastStatementEnded = true;
   if (state.depth === 0) state.afterLet = true;
 }
 
 function pushOperand(state: ParserState, value: number, end: number): Step {
+  state.lastStatementEnded = false;
   state.values.push(value);
   state.pos = end;
   state.expectOperand = false;
@@ -318,6 +322,14 @@ function stepOperand(state: ParserState): Failure<TuffError> | Step {
     state.pos === state.source.length
   ) {
     return Step.End;
+  }
+  if (
+    state.atStatementStart &&
+    state.depth > 0 &&
+    state.lastStatementEnded &&
+    state.source.charAt(state.pos) === "}"
+  ) {
+    return blockEndsWithStatement(state.pos);
   }
   if (state.atStatementStart && state.source.charAt(state.pos) === ";") {
     return unexpectedSemicolon(state.pos);
@@ -437,6 +449,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     expectOperand: true,
     atStatementStart: true,
     afterLet: false,
+    lastStatementEnded: false,
   };
   for (;;) {
     const outcome = state.expectOperand
