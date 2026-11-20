@@ -190,6 +190,20 @@ test("interpretTuff rejects a program that ends with a statement block", () => {
   expect(interpretTuff("let mut x = 0; { x = 1; }").ok).toBe(false);
 });
 
+test("interpretTuff('let mut x = 1; x += 2; x') => 3", () => {
+  expect(interpretTuff("let mut x = 1; x += 2; x")).toEqual({ ok: true, value: 3 });
+});
+
+test("interpretTuff: -= and *= compound assignments", () => {
+  expect(interpretTuff("let mut x = 5; x -= 2; x")).toEqual({ ok: true, value: 3 });
+  expect(interpretTuff("let mut x = 2; x *= 3; x")).toEqual({ ok: true, value: 6 });
+});
+
+test("interpretTuff rejects a compound assignment to an immutable or non-numeric variable", () => {
+  expect(interpretTuff("let x = 1; x += 2; x").ok).toBe(false);
+  expect(interpretTuff("let mut b = true; b += 1; b").ok).toBe(false);
+});
+
 test("interpretTuff('1 == 2') => 0", () => {
   expect(interpretTuff("1 == 2")).toEqual({ ok: true, value: 0 });
 });

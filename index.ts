@@ -131,6 +131,24 @@ interface ParsedStatement {
 }
 
 /**
+ * A variable found by name in the source.
+ */
+interface NamedVariable {
+  /**
+   * The variable's name.
+   */
+  readonly name: string;
+  /**
+   * Offset of the variable's name in the source.
+   */
+  readonly start: number;
+  /**
+   * The variable's binding.
+   */
+  readonly binding: Binding;
+}
+
+/**
  * A one-based position in source text.
  */
 interface Location {
@@ -169,6 +187,7 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  *   program    := statement* expression
  *   block      := "{" statement* expression "}"
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" factor "=" expression ";"
+ *               | name ("+=" | "-=" | "*=") expression ";"   (numeric variables declared with "let mut")
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *   expression := sum ("==" sum)*
@@ -451,16 +470,14 @@ function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
     cursor.pos += "mut".length;
     mutable = true;
   }
-  const name = peekName(text, cursor);
-  if (name === "") {
+  if (peekName(text, cursor) === "") {
     return err({ offset: cursor.pos, expected: `a variable name after "&"` });
   }
-  const start = cursor.pos;
-  cursor.pos += name.length;
-  const binding = lookup(cursor.scope, name);
-  if (binding === undefined) {
-    return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
+  const found = findVariable(text, cursor);
+  if (!found.ok) {
+    return found;
   }
+  const { name, start, binding } = found.value;
   if (mutable && !binding.mutable) {
     return err({ offset: start, expected: `a mutable variable (declare "${name}" with "let mut") to borrow mutably` });
   }
@@ -685,6 +702,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name !== "" && peekAfterName(text, cursor, name) === "=") {
     return { matched: true, problem: parseAssignment(text, cursor) };
+  }
+  if (name !== "" && peekCompoundOperator(text, cursor, name) !== "") {
+    return { matched: true, problem: parseCompoundAssignment(text, cursor) };
   }
   if (name === "" && isDereferenceAssignment(text, peekStart(text, cursor))) {
     return { matched: true, problem: parseDereferenceAssignment(text, cursor) };
@@ -912,22 +932,122 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
  * @returns The first problem found, or undefined if the assignment parsed.
  */
 function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
-  const name = peekName(text, cursor);
-  const start = cursor.pos;
-  cursor.pos += name.length;
-  const binding = lookup(cursor.scope, name);
-  if (binding === undefined) {
-    return { offset: start, expected: `a variable in scope (no "${name}" is defined)` };
+  const target = findMutableTarget(text, cursor);
+  if (!target.ok) {
+    return target.error;
   }
-  if (!binding.mutable) {
-    return { offset: start, expected: `a mutable variable (declare "${name}" with "let mut")` };
-  }
+  const { name, binding } = target.value;
   const init = parseInitializer(text, cursor, (value, offset) => checkStore(value, offset, binding, `"${name}"`));
   if (!init.ok) {
     return init.error;
   }
   if (!cursor.dead) {
     binding.value = init.value;
+  }
+  return undefined;
+}
+
+/**
+ * Reads the variable name at the cursor and finds it in scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the variable name.
+ * @returns An Ok result with the variable, or an Err result with the first problem found.
+ */
+function findVariable(text: string, cursor: Cursor): Result<NamedVariable, Problem> {
+  const name = peekName(text, cursor);
+  const start = cursor.pos;
+  cursor.pos += name.length;
+  const binding = lookup(cursor.scope, name);
+  if (binding === undefined) {
+    return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
+  }
+  return ok({ name, start, binding });
+}
+
+/**
+ * Reads the variable being assigned to, and checks that it is in scope and declared with "let mut".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the variable name.
+ * @returns An Ok result with the target, or an Err result with the first problem found.
+ */
+function findMutableTarget(text: string, cursor: Cursor): Result<NamedVariable, Problem> {
+  const found = findVariable(text, cursor);
+  if (!found.ok) {
+    return found;
+  }
+  if (!found.value.binding.mutable) {
+    return err({ offset: found.value.start, expected: `a mutable variable (declare "${found.value.name}" with "let mut")` });
+  }
+  return found;
+}
+
+/**
+ * Returns the compound-assignment operator ("+", "-" or "*") that follows a name, as in "x += 1",
+ * without moving the cursor.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, which is left unchanged.
+ * @param name - The name that starts at the cursor's next significant character.
+ * @returns The operator, or "" if the name is not followed by a compound assignment.
+ */
+function peekCompoundOperator(text: string, cursor: Cursor, name: string): string {
+  const saved = cursor.pos;
+  cursor.pos += name.length;
+  const op = peek(text, cursor);
+  const isCompound = (op === "+" || op === "-" || op === "*") && text.charAt(cursor.pos + 1) === "=";
+  cursor.pos = saved;
+  return isCompound ? op : "";
+}
+
+/**
+ * Applies a compound-assignment operator to two numbers.
+ *
+ * @param op - The operator: "+", "-" or "*".
+ * @param left - The variable's current value.
+ * @param right - The value of the right-hand side.
+ * @returns The result to store back in the variable.
+ */
+function applyCompound(op: string, left: number, right: number): number {
+  if (op === "+") {
+    return left + right;
+  }
+  if (op === "-") {
+    return left - right;
+  }
+  return left * right;
+}
+
+/**
+ * Parses a compound assignment such as "x += expression;" to a mutable numeric variable.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the assignment.
+ * @returns The first problem found, or undefined if the assignment parsed.
+ */
+function parseCompoundAssignment(text: string, cursor: Cursor): Problem | undefined {
+  const target = findMutableTarget(text, cursor);
+  if (!target.ok) {
+    return target.error;
+  }
+  const { name, start, binding } = target.value;
+  if (typeof binding.value !== "number") {
+    return { offset: start, expected: `a number variable for a compound assignment to "${name}"` };
+  }
+  peek(text, cursor);
+  const op = text.charAt(cursor.pos);
+  cursor.pos++;
+  const init = parseInitializer(text, cursor, (value, offset) =>
+    typeof value === "number" ? undefined : { offset, expected: `a number for "${op}=" on "${name}"` },
+  );
+  if (!init.ok) {
+    return init.error;
+  }
+  const current = binding.value;
+  const rhs = init.value;
+  if (typeof current === "number" && typeof rhs === "number" && !cursor.dead) {
+    binding.value = applyCompound(op, current, rhs);
   }
   return undefined;
 }
