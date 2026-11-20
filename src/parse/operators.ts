@@ -41,7 +41,12 @@ import {
   borrowedBy,
 } from "./helpers";
 import { closeLoopBody, closeLoopCondition } from "./loops";
-import { closeSquare, nextElement, unclosedSquare } from "./arrays";
+import {
+  assignElement,
+  closeSquare,
+  nextElement,
+  unclosedSquare,
+} from "./arrays";
 import { closeMatchBody, closeMatchScrutinee, finishArm } from "./matches";
 
 // Starts the then-branch once the condition is known. An unchosen branch is
@@ -128,6 +133,14 @@ function closeBinding(
   if (reduced !== undefined) return reduced;
   ops.pop();
   const value = values.pop() ?? 0;
+  if (binding.index !== undefined) {
+    const failure = assignElement(state, binding, value);
+    if (failure !== undefined) return failure;
+    flags.lastStatementEnded = true;
+    flags.lastAssign = true;
+    if (state.depth === 0) flags.afterLet = true;
+    return undefined;
+  }
   if (binding.assign) {
     const cell = binding.target ?? lookupCell(scopes, binding.name);
     if (

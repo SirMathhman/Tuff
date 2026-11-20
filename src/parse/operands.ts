@@ -304,11 +304,18 @@ function arrayOperand(
   sign: number,
   end: number,
 ): Failure<TuffError> | Step {
-  const { source, ops } = state;
+  const { source, ops, flags } = state;
   const next = skipSpaces(source, end);
-  const items = cell.items ?? [];
   if (source.charAt(next) === "[") {
-    return openIndex(state, items, sign, next);
+    return openIndex(
+      state,
+      cell,
+      name,
+      sign,
+      state.pos,
+      next,
+      flags.atStatementStart && sign === 1,
+    );
   }
   const top = ops[ops.length - 1];
   if (
@@ -317,7 +324,7 @@ function arrayOperand(
     sign === 1 &&
     source.charAt(next) === ";"
   ) {
-    top.items = items;
+    top.items = cell.items ?? [];
     cell.moved = true;
     return pushOperand(state, 0, end);
   }

@@ -7,11 +7,27 @@ import {
   expectedText,
   indexNotInteger,
   indexOutOfRange,
+  notMutable,
+  ownerBorrowed,
+  typeMismatch,
 } from "../errors";
 import { applySign, reduceOperators } from "../operations";
-import type { ArrayEntry, IndexEntry, ParserState, Value } from "../types";
+import { skipSpaces } from "../scanner";
+import type {
+  ArrayEntry,
+  BindingEntry,
+  Cell,
+  IndexEntry,
+  ParserState,
+  Value,
+} from "../types";
 import { EntryKind, Step } from "../types";
-import { completeBranch, innermostNonOperator } from "./helpers";
+import {
+  borrowedBy,
+  completeBranch,
+  innermostNonOperator,
+  isLenient,
+} from "./helpers";
 
 /**
  * Starts an array literal, which must be the value of a let.
@@ -106,26 +122,35 @@ function closeArray(
 }
 
 /**
- * Starts an index into the array named by an operand, after its opening bracket.
+ * Starts an index into a named array, after its opening bracket. At a statement start
+ * the index may be the target of an element assignment.
  *
  * @param state - the parser state.
- * @param items - the elements of the array.
+ * @param cell - the array's variable.
+ * @param name - the array's name.
  * @param sign - the sign written before the name.
+ * @param nameStart - the offset of the name.
  * @param bracket - the offset of the opening bracket.
+ * @param statement - whether the index starts a statement.
  * @returns the next step.
  */
 export function openIndex(
   state: ParserState,
-  items: Value[],
+  cell: Cell,
+  name: string,
   sign: number,
+  nameStart: number,
   bracket: number,
+  statement: boolean,
 ): Step {
   const { ops, flags } = state;
   const entry: IndexEntry = {
     kind: EntryKind.Index,
-    where: bracket,
+    where: nameStart,
     sign,
-    items,
+    cell,
+    name,
+    statement,
   };
   ops.push(entry);
   state.pos = bracket + 1;
@@ -139,15 +164,38 @@ function closeIndex(
   index: IndexEntry,
 ): Failure<TuffError> | Step {
   const { source, ops, values, flags } = state;
+  const { cell, name } = index;
   if (state.expectOperand) return expectedNumber(source, state.pos);
   const reduced = reduceOperators(values, ops);
   if (reduced !== undefined) return reduced;
   const position = values.pop() ?? 0;
   ops.pop();
   if (typeof position !== "number") return indexNotInteger(state.pos);
-  const { items } = index;
+  const items = cell.items ?? [];
   if (position < 0 || position >= items.length) {
     return indexOutOfRange(state.pos, position, items.length);
+  }
+  const next = skipSpaces(source, state.pos + 1);
+  const assigning =
+    index.statement &&
+    source.charAt(next) === "=" &&
+    source.charAt(next + 1) !== "=";
+  if (assigning) {
+    if (!cell.mutable) return notMutable(index.where, name);
+    ops.push({
+      kind: EntryKind.Binding,
+      name,
+      mutable: false,
+      assign: true,
+      where: index.where,
+      target: cell,
+      index: position,
+    });
+    state.pos = skipSpaces(source, next + 1);
+    state.expectOperand = true;
+    flags.atStatementStart = false;
+    flags.lastStatementEnded = false;
+    return Step.Continue;
   }
   const element = items[position] ?? 0;
   const signed = applySign(element, index.sign, index.where);
@@ -157,6 +205,33 @@ function closeIndex(
   state.expectOperand = false;
   flags.atStatementStart = false;
   return completeBranch(state) ?? Step.Continue;
+}
+
+/**
+ * Stores a value into an element of a let mut array, once the assignment is complete.
+ *
+ * @param state - the parser state.
+ * @param binding - the element assignment, whose target is the array's variable.
+ * @param value - the value being assigned.
+ * @returns a failure, or undefined when the element was stored.
+ */
+export function assignElement(
+  state: ParserState,
+  binding: BindingEntry,
+  value: Value,
+): Failure<TuffError> | undefined {
+  const { target, where, name, index } = binding;
+  if (target === undefined || index === undefined) return undefined;
+  if (borrowedBy(state.scopes, target, false)) {
+    return ownerBorrowed(where, name, true);
+  }
+  const items = target.items ?? [];
+  const current = items[index];
+  if (current !== undefined && typeof current !== typeof value) {
+    return typeMismatch(where, name, typeof current, typeof value);
+  }
+  if (!isLenient(state)) items[index] = value;
+  return undefined;
 }
 
 /**

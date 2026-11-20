@@ -407,3 +407,11 @@ test('interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]") => 
     interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
   ).toEqual({ ok: true, value: 6 });
 });
+
+test('interpretTuff("let mut array = [1, 2, 3]; array[0] = 9; array[0] + array[1]") => 11', () => {
+  expect(
+    interpretTuff(
+      "let mut array = [1, 2, 3]; array[0] = 9; array[0] + array[1]",
+    ),
+  ).toEqual({ ok: true, value: 11 });
+});

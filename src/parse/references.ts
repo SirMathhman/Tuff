@@ -6,6 +6,7 @@ import {
   expectedVariableName,
   mutableBorrow,
   mutableReference,
+  arrayNotUsable,
   referenceNotLet,
   referenceOverlap,
   referenceUse,
@@ -102,6 +103,7 @@ export function operandRef(
   const cell = lookupCell(scopes, name);
   if (cell === undefined) return undefinedName(nameStart, name);
   if (cell.target !== undefined) return referenceUse(nameStart, name);
+  if (cell.items !== undefined) return arrayNotUsable(nameStart, name);
   if (exclusive && !cell.mutable) return mutableBorrow(nameStart, name);
   if (conflictsWithReference(scopes, cell, exclusive)) {
     return referenceOverlap(nameStart, name);

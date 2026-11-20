@@ -110,6 +110,8 @@ export interface BindingEntry {
   kind: EntryKind.Binding;
   /** The array a let binds, or moves from another name. */
   items?: Value[];
+  /** The element an assignment stores into, when assigning an array element. */
+  index?: number;
   /** The variable name. */
   name: string;
   /** Whether the variable was declared with let mut. */
@@ -305,8 +307,12 @@ export interface IndexEntry {
   where: number;
   /** The sign written before the indexed name. */
   sign: number;
-  /** The elements of the array being indexed. */
-  items: Value[];
+  /** The variable holding the array being indexed. */
+  cell: Cell;
+  /** The array's name. */
+  name: string;
+  /** Whether the index starts a statement, so it may be an element assignment. */
+  statement: boolean;
 }
 
 /**
