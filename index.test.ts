@@ -364,3 +364,24 @@ test("assigning a reference to a number binding is a TypeMismatch error at the t
     error: { kind: TuffErrorKind.TypeMismatch, span: { start: 15, end: 16 } },
   });
 });
+
+test("a run of 300 prefix stars is a NestingTooDeep error, not a stack overflow", () => {
+  expect(evaluateTuff("let z = 1; " + "*".repeat(300) + "z")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NestingTooDeep, span: { start: 267, end: 268 } },
+  });
+});
+
+test("255 prefix stars are still parsed; the error is a NotAReference, not a nesting error", () => {
+  expect(evaluateTuff("let z = 1; " + "*".repeat(255) + "z")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NotAReference, span: { start: 265, end: 266 } },
+  });
+});
+
+test("parentheses and prefix stars share one nesting budget", () => {
+  expect(evaluateTuff("(".repeat(200) + "*".repeat(100) + "z")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.NestingTooDeep, span: { start: 256, end: 257 } },
+  });
+});
