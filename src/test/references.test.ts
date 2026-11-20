@@ -80,3 +80,39 @@ test('interpretTuff("let mut x = 0; let y = &mut x; let z = &mut x;") => error',
     },
   });
 });
+
+test('interpretTuff("let mut x = 0; x = 1; *3") => error naming *', () => {
+  expect(interpretTuff("let mut x = 0; x = 1; *3")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected a variable name after '*' but found '3'",
+      where: 23,
+      why: "A '*' must be followed by the name of a variable.",
+      fix: "Write a name made of letters after '*'.",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; let y = &3;") => error naming &', () => {
+  expect(interpretTuff("let x = 1; let y = &3;")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected a variable name after '&' but found '3'",
+      where: 20,
+      why: "A '&' must be followed by the name of a variable.",
+      fix: "Write a name made of letters after '&'.",
+    },
+  });
+});
+
+test('interpretTuff("let mut x = 0; { x = 1; } * 2") => error without let', () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } * 2")).toEqual({
+    ok: false,
+    error: {
+      what: "Expected a variable name after '*' but found '2'",
+      where: 28,
+      why: "A '*' must be followed by the name of a variable.",
+      fix: "Write a name made of letters after '*'.",
+    },
+  });
+});
