@@ -37,6 +37,21 @@ test("interpretTuff('{ let x = 2 + 3; x } * 4') => 20", () => {
   expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test("interpretTuff('let y = { let x = 2 + 3; x } * 4; y') => 20", () => {
+  expect(interpretTuff("let y = { let x = 2 + 3; x } * 4; y")).toEqual({ ok: true, value: 20 });
+});
+
+test("interpretTuff('let mut x = 0; x = 1; x') => 1", () => {
+  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff assignment to an immutable variable is rejected", () => {
+  const result = interpretTuff("let x = 0; x = 1; x");
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error).toContain('found "x" where a mutable variable (declare "x" with "let mut") was expected');
+});
+
 test("interpretTuff('(1 + 2}') reports the expected closing character", () => {
   const result = interpretTuff("(1 + 2}");
   expect(result.ok).toBe(false);

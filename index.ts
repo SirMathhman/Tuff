@@ -15,13 +15,27 @@ interface Problem {
 }
 
 /**
+ * A variable's current value and whether it may be reassigned.
+ */
+interface Binding {
+  /**
+   * The variable's current value.
+   */
+  value: number;
+  /**
+   * True if the variable was declared with "let mut" and may be assigned.
+   */
+  readonly mutable: boolean;
+}
+
+/**
  * A set of variables introduced by one block, linked to the enclosing block.
  */
 interface Scope {
   /**
-   * Values of the variables declared directly in this block.
+   * Variables declared directly in this block.
    */
-  readonly vars: Map<string, number>;
+  readonly vars: Map<string, Binding>;
   /**
    * The enclosing scope, or undefined for the program's outermost scope.
    */
@@ -60,22 +74,25 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * Parses the whole source as one expression.
  *
  * Grammar:
+ *   program    := statement* expression
+ *   block      := "{" statement* expression "}"
+ *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";"
  *   expression := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
  *   factor     := number | name | "(" expression ")" | block
- *   block      := "{" ("let" name "=" expression ";")* expression "}"
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
- * group sub-expressions. A block declares variables with "let" and evaluates
- * to its final expression; variables are visible only inside the block that
- * declares them. Whitespace between tokens is ignored.
+ * group sub-expressions. "let" declares a variable and the final expression
+ * is the value; a block's variables are visible only inside that block. Only
+ * variables declared with "let mut" may be assigned. Whitespace between tokens
+ * is ignored.
  *
  * @param text - The source to parse.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
 function parseProgram(text: string): Result<number, Problem> {
   const cursor: Cursor = { pos: 0, scope: { vars: new Map(), parent: undefined } };
-  const value = parseExpression(text, cursor);
+  const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
   }
@@ -165,11 +182,11 @@ function parseFactor(text: string, cursor: Cursor): Result<number, Problem> {
   if (name !== "") {
     const start = cursor.pos;
     cursor.pos += name.length;
-    const value = lookup(cursor.scope, name);
-    if (value === undefined) {
+    const binding = lookup(cursor.scope, name);
+    if (binding === undefined) {
       return err({ offset: start, expected: `a variable in scope (no "${name}" is defined)` });
     }
-    return ok(value);
+    return ok(binding.value);
   }
   if (!/\d/.test(c)) {
     return err({ offset: cursor.pos, expected: `a number, a variable, "(" or "{"` });
@@ -206,36 +223,111 @@ function parseBlock(text: string, cursor: Cursor): Result<number, Problem> {
 }
 
 /**
- * Parses the "let" declarations and final expression inside a block, recording
- * each declared variable in the cursor's current scope.
+ * Parses the statements and final expression inside a block or program.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past what was consumed.
  * @returns An Ok result with the value of the final expression, or an Err result with the first problem found.
  */
 function parseBlockBody(text: string, cursor: Cursor): Result<number, Problem> {
-  while (peekName(text, cursor) === "let") {
-    cursor.pos += "let".length;
+  for (;;) {
     const name = peekName(text, cursor);
-    if (name === "") {
-      return err({ offset: cursor.pos, expected: "a variable name" });
+    let problem: Problem | undefined;
+    if (name === "let") {
+      problem = parseDeclaration(text, cursor);
+    } else if (name !== "" && peekAfterName(text, cursor, name) === "=") {
+      problem = parseAssignment(text, cursor);
+    } else {
+      break;
     }
-    cursor.pos += name.length;
-    if (peek(text, cursor) !== "=") {
-      return err({ offset: cursor.pos, expected: `"="` });
+    if (problem !== undefined) {
+      return err(problem);
     }
-    cursor.pos++;
-    const value = parseExpression(text, cursor);
-    if (!value.ok) {
-      return value;
-    }
-    if (peek(text, cursor) !== ";") {
-      return err({ offset: cursor.pos, expected: `";"` });
-    }
-    cursor.pos++;
-    cursor.scope.vars.set(name, value.value);
   }
   return parseExpression(text, cursor);
+}
+
+/**
+ * Parses a "let" declaration, optionally "mut", and records the variable in the current scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "let".length;
+  let mutable = false;
+  if (peekName(text, cursor) === "mut") {
+    cursor.pos += "mut".length;
+    mutable = true;
+  }
+  const name = peekName(text, cursor);
+  if (name === "") {
+    return { offset: cursor.pos, expected: "a variable name" };
+  }
+  cursor.pos += name.length;
+  if (peek(text, cursor) !== "=") {
+    return { offset: cursor.pos, expected: `"="` };
+  }
+  cursor.pos++;
+  const value = parseExpression(text, cursor);
+  if (!value.ok) {
+    return value.error;
+  }
+  if (peek(text, cursor) !== ";") {
+    return { offset: cursor.pos, expected: `";"` };
+  }
+  cursor.pos++;
+  cursor.scope.vars.set(name, { value: value.value, mutable });
+  return undefined;
+}
+
+/**
+ * Parses an assignment to a variable declared with "let mut".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, advanced past the assignment.
+ * @returns The first problem found, or undefined if the assignment parsed.
+ */
+function parseAssignment(text: string, cursor: Cursor): Problem | undefined {
+  const name = peekName(text, cursor);
+  const start = cursor.pos;
+  cursor.pos += name.length;
+  const binding = lookup(cursor.scope, name);
+  if (binding === undefined) {
+    return { offset: start, expected: `a variable in scope (no "${name}" is defined)` };
+  }
+  if (!binding.mutable) {
+    return { offset: start, expected: `a mutable variable (declare "${name}" with "let mut")` };
+  }
+  peek(text, cursor);
+  cursor.pos++;
+  const value = parseExpression(text, cursor);
+  if (!value.ok) {
+    return value.error;
+  }
+  if (peek(text, cursor) !== ";") {
+    return { offset: cursor.pos, expected: `";"` };
+  }
+  cursor.pos++;
+  binding.value = value.value;
+  return undefined;
+}
+
+/**
+ * Returns the significant character that follows a name, without moving the cursor.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position, which is left unchanged.
+ * @param name - The name that starts at the cursor's next significant character.
+ * @returns The next significant character after the name, or "" at end of input.
+ */
+function peekAfterName(text: string, cursor: Cursor, name: string): string {
+  const saved = cursor.pos;
+  cursor.pos += name.length;
+  const after = peek(text, cursor);
+  cursor.pos = saved;
+  return after;
 }
 
 /**
@@ -262,13 +354,13 @@ function peekName(text: string, cursor: Cursor): string {
  *
  * @param scope - The innermost scope to search first.
  * @param name - The variable name to look up.
- * @returns The value of the nearest declaration of the name, or undefined if none is in scope.
+ * @returns The binding of the nearest declaration of the name, or undefined if none is in scope.
  */
-function lookup(scope: Scope | undefined, name: string): number | undefined {
+function lookup(scope: Scope | undefined, name: string): Binding | undefined {
   for (let s = scope; s !== undefined; s = s.parent) {
-    const value = s.vars.get(name);
-    if (value !== undefined) {
-      return value;
+    const binding = s.vars.get(name);
+    if (binding !== undefined) {
+      return binding;
     }
   }
   return undefined;
@@ -315,7 +407,7 @@ function describeUnsupported(tuffSource: string, problem: Problem): string {
   return (
     `What: unsupported Tuff source. ` +
     `Where: line ${line}, column ${column}, found ${found} where ${problem.expected} was expected. ` +
-    `Why: Tuff currently only evaluates non-negative integer literals, variables declared with "let" inside braces, binary "+", "-", and "*", and parentheses or braces for grouping. ` +
+    `Why: Tuff currently only evaluates non-negative integer literals, variables declared with "let" (assignable only when declared with "let mut"), binary "+", "-", and "*", and parentheses or braces for grouping. ` +
     `Fix: change the source to a form such as "1", "1 + 2 * 3", or "(1 + 2) * 3" (received ${JSON.stringify(tuffSource)}).`
   );
 }
