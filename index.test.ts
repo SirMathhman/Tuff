@@ -60,6 +60,46 @@ test("re-declaring a name in the same block is a DuplicateName error", () => {
   expect(evaluateTuff("{ let x = 1; let x = 2; x }")).toEqual({ ok: false, error: { kind: TuffErrorKind.DuplicateName, span: { start: 17, end: 18 } } });
 });
 
+test("a name bound in a block is UnknownName after the block ends", () => {
+  expect(evaluateTuff("{ let x = 1; x } + x")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 19, end: 20 } } });
+});
+
+test("a binding is not visible before its declaration", () => {
+  expect(evaluateTuff("let y = x; let x = 1; y")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 8, end: 9 } } });
+});
+
+test("a block may shadow an outer name", () => {
+  expect(evaluateTuff("{ let x = 1; { let x = 2; x } + x }")).toEqual({ ok: true, value: 3 });
+});
+
+test("a name that is a host property such as constructor is an ordinary binding", () => {
+  expect(evaluateTuff("{ let constructor = 1; constructor }")).toEqual({ ok: true, value: 1 });
+});
+
+test("unknown name in a left operand is reported before a division by zero", () => {
+  expect(evaluateTuff("1 / 0 + x")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 8, end: 9 } } });
+});
+
+test("a syntax error is reported before a division by zero", () => {
+  expect(evaluateTuff("1 / 0 )")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 6, end: 7 } } });
+});
+
+test("a duplicate name is reported before a division by zero", () => {
+  expect(evaluateTuff("{ let x = 1 / 0; let x = 2; x }")).toEqual({ ok: false, error: { kind: TuffErrorKind.DuplicateName, span: { start: 21, end: 22 } } });
+});
+
+test("an empty block is an UnexpectedToken at its closing brace", () => {
+  expect(evaluateTuff("{ }")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 2, end: 3 } } });
+});
+
+test("a block without a closing brace is an UnexpectedEnd error", () => {
+  expect(evaluateTuff("{ let x = 1; x")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedEnd, span: { start: 14, end: 14 } } });
+});
+
+test("a let whose right-hand side uses its own name is UnknownName", () => {
+  expect(evaluateTuff("{ let x = x; x }")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnknownName, span: { start: 10, end: 11 } } });
+});
+
 test("hex and exponent forms are rejected", () => {
   expect(evaluateTuff("0x10")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 1, end: 2 } } });
   expect(evaluateTuff("1e3")).toEqual({ ok: false, error: { kind: TuffErrorKind.UnexpectedToken, span: { start: 1, end: 2 } } });
