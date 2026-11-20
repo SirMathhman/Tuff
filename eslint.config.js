@@ -50,6 +50,10 @@ export default tseslint.config(
           message: "Do not use inline object types; declare a named interface instead.",
         },
         {
+          selector: "TSTypeReference[typeName.name='Record']",
+          message: "Do not use Record; use Map instead.",
+        },
+        {
           selector: "ClassDeclaration",
           message: "Do not declare classes; use functions and plain objects instead.",
         },

@@ -95,6 +95,10 @@ export interface Scope {
   /** Structs declared directly in this scope. */
   readonly structs: Map<string, StructDef>;
 }
+/**
+ * A function the host supplies to a Tuff program: it takes numbers and booleans and returns one of them.
+ */
+export type HostFunction = (...args: (number | boolean)[]) => number | boolean;
 /** A parameter of a function declared with "fn". */
 export interface Param {
   /** The parameter's name. */
@@ -108,12 +112,14 @@ export interface FunctionDef {
   readonly params: readonly Param[];
   /** Declared return type, such as "I32"; undefined if the function has none. */
   readonly returnType?: string;
-  /** Offset where the body expression starts. */
+  /** Offset where the body expression starts; unused when the function is external. */
   readonly bodyStart: number;
-  /** Offset of the ";" that ends the body. */
+  /** Offset of the ";" that ends the body; unused when the function is external. */
   readonly bodyEnd: number;
   /** The scope the function was declared in. */
   readonly scope: Scope;
+  /** True if the function was declared with "in fn" and its body is supplied by the host. */
+  readonly external: boolean;
 }
 /**
  * Mutable read position shared by the parsing functions.
@@ -141,6 +147,8 @@ export interface Cursor {
   exit?: LoopExit;
   /** Number of function calls currently being evaluated. */
   callDepth: number;
+  /** The functions the host supplies, keyed by name. */
+  readonly hostFunctions: ReadonlyMap<string, HostFunction>;
 }
 /**
  * The value a "break" produced, which ends the enclosing loop.

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { interpretTuff } from "./index";
+import { type HostFunction } from "./src/types";
 
 test("interpretTuff('1') => 1", () => {
   expect(interpretTuff("1")).toEqual({ ok: true, value: 1 });
@@ -89,6 +90,34 @@ test("interpretTuff('type Bool = I32; let temp : Bool = 1; temp + 1') => 2", () 
 
 test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get returns a number, not a Bool", () => {
   expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
+});
+
+test("interpretTuff('in fn get() : I32; get()') with host get => 1", () => {
+  expect(interpretTuff("in fn get() : I32; get()", new Map([["get", () => 1]]))).toEqual({ ok: true, value: 1 });
+});
+
+test("interpretTuff host function receives its arguments", () => {
+  expect(
+    interpretTuff(
+      "in fn add(a : I32, b : I32) : I32; add(2, 3)",
+      new Map<string, HostFunction>([["add", (first, second) => Number(first) + Number(second)]]),
+    ),
+  ).toEqual({
+    ok: true,
+    value: 5,
+  });
+});
+
+test("interpretTuff host function without a provided implementation is an error", () => {
+  expect(interpretTuff("in fn get() : I32; get()").ok).toBe(false);
+});
+
+test("interpretTuff host function result of the wrong type is an error", () => {
+  expect(interpretTuff("in fn get() : I32; get()", new Map([["get", () => true]])).ok).toBe(false);
+});
+
+test("interpretTuff function without a body must be declared with in", () => {
+  expect(interpretTuff("fn get() : I32; get()", new Map([["get", () => 1]])).ok).toBe(false);
 });
 
 test("interpretTuff('struct Wrapper { value : I32 } let temp = Wrapper { value : 1 }; temp.value') => 1", () => {

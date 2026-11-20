@@ -14,16 +14,15 @@ import {
 import {
   type Value,
   type FunctionDef,
+  type HostFunction,
   type Cursor,
   type NamedVariable,
-  type Param,
   type StatementStep,
 } from "./src/types";
 import {
   lookup,
   lookupFunction,
   newScope,
-  findFunctionBodyEnd,
   escapes,
   isSuppressed,
   takeExit,
@@ -39,6 +38,8 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/annotations";
 import { hoistFunctions } from "./src/hoisting";
+import { callHostFunction } from "./src/host";
+import { parseFunctionDeclaration } from "./src/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/arrays";
 import { parsePostfix } from "./src/postfix";
@@ -48,10 +49,14 @@ import { parseStructDeclaration, parseStructLiteral } from "./src/structs";
  * Interprets a Tuff program and returns its result.
  *
  * @param tuffSource - The Tuff source text to interpret.
+ * @param hostFunctions - Functions the host supplies, by name, for "in fn" declarations.
  * @returns An Ok result with the numeric result of the program, or an Err result describing what is wrong, where, why, and how to fix it.
  */
-export function interpretTuff(tuffSource: string): Result<number, string> {
-  const result = parseProgram(tuffSource);
+export function interpretTuff(
+  tuffSource: string,
+  hostFunctions: ReadonlyMap<string, HostFunction> = new Map(),
+): Result<number, string> {
+  const result = parseProgram(tuffSource, hostFunctions);
   if (result.ok) {
     const value = result.value;
     if (typeof value === "boolean") {
@@ -90,15 +95,20 @@ export function interpretTuff(tuffSource: string): Result<number, string> {
  * variable it points to. Whitespace between tokens is ignored.
  *
  * @param text - The source to parse.
+ * @param hostFunctions - Functions the host supplies, by name.
  * @returns An Ok result with the number or boolean result, or an Err result with the first problem found.
  */
-function parseProgram(text: string): Result<number | boolean, Problem> {
+function parseProgram(
+  text: string,
+  hostFunctions: ReadonlyMap<string, HostFunction>,
+): Result<number | boolean, Problem> {
   const cursor: Cursor = {
     pos: 0,
     scope: newScope(undefined),
     dead: false,
     breakable: false,
     callDepth: 0,
+    hostFunctions,
   };
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
@@ -548,6 +558,13 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "in" && allowDeclaration) {
+    cursor.pos += "in".length;
+    if (peekName(text, cursor) !== "fn") {
+      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" after "in"` } };
+    }
+    return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
   }
   if (name === "struct" && allowDeclaration) {
     return { matched: true, problem: parseStructDeclaration(text, cursor, RESERVED_WORDS) };
@@ -1250,74 +1267,6 @@ function parseCondition(text: string, cursor: Cursor): Result<boolean, Problem> 
 const MAX_CALL_DEPTH = 100;
 
 /**
- * Parses "fn name(params) => expression;". The body is not evaluated here; it is re-parsed
- * from its text on each call.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position, advanced past the declaration.
- * @returns The first problem found, or undefined if the declaration parsed.
- */
-function parseFunctionDeclaration(text: string, cursor: Cursor): Problem | undefined {
-  cursor.pos += "fn".length;
-  const name = peekName(text, cursor);
-  if (name === "" || RESERVED_WORDS.has(name)) {
-    return { offset: cursor.pos, expected: "a function name" };
-  }
-  cursor.pos += name.length;
-  if (peek(text, cursor) !== "(") {
-    return { offset: cursor.pos, expected: `"("` };
-  }
-  cursor.pos++;
-  const params: Param[] = [];
-  while (peek(text, cursor) !== ")") {
-    const paramName = peekName(text, cursor);
-    if (paramName === "" || RESERVED_WORDS.has(paramName)) {
-      return { offset: cursor.pos, expected: `a parameter name or ")"` };
-    }
-    cursor.pos += paramName.length;
-    if (peek(text, cursor) !== ":") {
-      return { offset: cursor.pos, expected: `": " and a type for parameter "${paramName}"` };
-    }
-    cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return annotation.error;
-    }
-    params.push({ name: paramName, type: annotation.value });
-    if (peek(text, cursor) === ",") {
-      cursor.pos++;
-    } else if (peek(text, cursor) !== ")") {
-      return { offset: cursor.pos, expected: `"," or ")"` };
-    }
-  }
-  cursor.pos++;
-  let returnType: string | undefined;
-  if (peek(text, cursor) === ":") {
-    cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return annotation.error;
-    }
-    returnType = annotation.value;
-  }
-  if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
-    return { offset: cursor.pos, expected: `"=>"` };
-  }
-  cursor.pos += 2;
-  peek(text, cursor);
-  const bodyStart = cursor.pos;
-  const bodyEnd = findFunctionBodyEnd(text, bodyStart);
-  if (bodyEnd < 0) {
-    return { offset: bodyStart, expected: `";" ending the function body` };
-  }
-  cursor.pos = bodyEnd + 1;
-  const { scope } = cursor;
-  const { functions } = scope;
-  functions.set(name, { params, returnType, bodyStart, bodyEnd, scope });
-  return undefined;
-}
-
-/**
  * Parses the argument list of a call, evaluates the function body with the arguments bound to
  * its parameters, and returns the body's value. The body is parsed from its text in a new scope
  * whose parent is the scope the function was declared in.
@@ -1355,6 +1304,14 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     .find((problem) => problem !== undefined);
   if (argumentProblem !== undefined) {
     return err(argumentProblem);
+  }
+  if (fn.external) {
+    const { hostFunctions } = cursor;
+    const host = hostFunctions.get(name);
+    if (host === undefined) {
+      return err({ offset: start, expected: `a host function named "${name}" to be provided` });
+    }
+    return callHostFunction(host, args, start, fn);
   }
   if (cursor.callDepth >= MAX_CALL_DEPTH) {
     return err({ offset: start, expected: `a call nested within ${MAX_CALL_DEPTH} levels` });
