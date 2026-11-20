@@ -376,6 +376,18 @@ test('interpretTuff("1 + { let x = 2; }") => error', () => {
   });
 });
 
+test('interpretTuff("1 / { let x = 0; x }") => error', () => {
+  expect(interpretTuff("1 / { let x = 0; x }")).toEqual({
+    ok: false,
+    error: {
+      what: "Division by zero",
+      where: 2,
+      why: "A number cannot be divided by zero.",
+      fix: "Use a non-zero divisor.",
+    },
+  });
+});
+
 test('interpretTuff("if (false) { 2 } else { 3 }") => 3', () => {
   expect(interpretTuff("if (false) { 2 } else { 3 }")).toEqual({
     ok: true,
