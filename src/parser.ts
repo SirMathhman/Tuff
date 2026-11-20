@@ -234,9 +234,7 @@ function parseArm(input: Input, pos: number, depth: number, parseExpr: Parser): 
   if (patternToken.text === "_") {
     pattern = undefined;
   } else if (/^\d+$/.test(patternToken.text)) {
-    const value = Number(patternToken.text);
-    if (!Number.isFinite(value)) return err({ kind: TuffErrorKind.NumericOverflow, span: patternToken.span });
-    pattern = { kind: NodeKind.Literal, value, span: patternToken.span };
+    pattern = { kind: NodeKind.Literal, value: Number(patternToken.text), span: patternToken.span };
   } else if (patternToken.text === "true" || patternToken.text === "false") {
     pattern = { kind: NodeKind.Boolean, value: patternToken.text === "true", span: patternToken.span };
   } else {
@@ -255,7 +253,17 @@ function parseArm(input: Input, pos: number, depth: number, parseExpr: Parser): 
 }
 
 /**
- * Parses `match (scrutinee) { case ...; ... }`. A match needs at least one arm.
+ * Identifies an arm's pattern, so two arms with the same pattern can be detected.
+ *
+ * @param arm - The arm.
+ * @returns A string that is equal for two arms exactly when their patterns are equal.
+ */
+function patternKey(arm: MatchArm): string {
+  return arm.pattern === undefined ? "_" : `${typeof arm.pattern.value}:${arm.pattern.value}`;
+}
+
+/**
+ * Parses `match (scrutinee) { case ...; ... }`. A match needs at least one arm, and no two arms may share a pattern.
  *
  * @param input - The tokens being parsed.
  * @param pos - The position of the `match` token.
@@ -280,6 +288,7 @@ function parseMatch(input: Input, pos: number, depth: number, parseExpr: Parser)
   if (brace.text !== "{") return err({ kind: TuffErrorKind.UnexpectedToken, span: brace.span });
 
   const arms: MatchArm[] = [];
+  const keys = new Set<string>();
   let cursor = scrutinee.value.next + 2;
   for (;;) {
     const token = input.tokens[cursor];
@@ -287,6 +296,9 @@ function parseMatch(input: Input, pos: number, depth: number, parseExpr: Parser)
     if (token.text === "}") break;
     const arm = parseArm(input, cursor, depth, parseExpr);
     if (!arm.ok) return arm;
+    const key = patternKey(arm.value.value);
+    if (keys.has(key)) return err({ kind: TuffErrorKind.DuplicatePattern, span: arm.value.value.patternSpan });
+    keys.add(key);
     arms.push(arm.value.value);
     cursor = arm.value.next;
   }

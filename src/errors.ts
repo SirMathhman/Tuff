@@ -38,6 +38,8 @@ export enum TuffErrorKind {
   NotABoolean = "NotABoolean",
   /** No arm of a match has a pattern equal to the scrutinee. */
   NoMatchingArm = "NoMatchingArm",
+  /** Two arms of one match have the same pattern, so the later arm can never be selected. */
+  DuplicatePattern = "DuplicatePattern",
 }
 
 /** A failure of kind `K`, located by the span it covers in the source. */
@@ -67,7 +69,8 @@ export type TuffError =
   | TuffErrorOf<TuffErrorKind.ReferenceAsValue>
   | TuffErrorOf<TuffErrorKind.ReferenceEscapes>
   | TuffErrorOf<TuffErrorKind.NotABoolean>
-  | TuffErrorOf<TuffErrorKind.NoMatchingArm>;
+  | TuffErrorOf<TuffErrorKind.NoMatchingArm>
+  | TuffErrorOf<TuffErrorKind.DuplicatePattern>;
 
 /** What a person needs to act on a `TuffError`: what it is, where, why, and how to fix it. */
 export interface ErrorExplanation {
@@ -181,6 +184,11 @@ const WORDING: Record<TuffErrorKind, Wording> = {
     what: "No matching arm",
     why: "No case pattern equals the value being matched, so the match has no result.",
     fix: "Add a case for this value, or add a wildcard case `case _ => ...;` as the last arm.",
+  },
+  [TuffErrorKind.DuplicatePattern]: {
+    what: "Duplicate match pattern",
+    why: "Two arms of this match have the same pattern, so the later arm can never be selected.",
+    fix: "Remove the later arm, or change its pattern.",
   },
 };
 

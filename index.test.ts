@@ -465,3 +465,24 @@ test("an error in an unselected arm is still reported", () => {
     error: { kind: TuffErrorKind.DivisionByZero, span: { start: 47, end: 48 } },
   });
 });
+
+test("a division by zero in the scrutinee is reported before an overflowing pattern literal", () => {
+  expect(evaluateTuff("match (1 / 0) { case " + "9".repeat(400) + " => 1; case _ => 2; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DivisionByZero, span: { start: 9, end: 10 } },
+  });
+});
+
+test("a reference cannot be the scrutinee of a match, even when every arm is a wildcard", () => {
+  expect(evaluateTuff("let x = 1; match (&x) { case _ => 7; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.ReferenceAsValue, span: { start: 18, end: 19 } },
+  });
+});
+
+test("two arms with the same pattern are a DuplicatePattern error at the later arm", () => {
+  expect(evaluateTuff("match (1) { case 1 => 1; case 1 => 2; }")).toEqual({
+    ok: false,
+    error: { kind: TuffErrorKind.DuplicatePattern, span: { start: 30, end: 31 } },
+  });
+});

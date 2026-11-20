@@ -2,7 +2,7 @@ import type { Expr, IfNode, MatchNode } from "../ast.ts";
 import { TuffErrorKind, type TuffError } from "../errors.ts";
 import { err, ok, type Result } from "../result.ts";
 import type { Frame } from "../scope.ts";
-import type { Value } from "../value.ts";
+import { isReference, type Value } from "../value.ts";
 import type { Env } from "./env.ts";
 import { spanOf } from "./span-of.ts";
 
@@ -44,8 +44,15 @@ export function evaluateIf(node: IfNode, env: Env, evaluate: Evaluate): Result<V
 export function evaluateMatch(node: MatchNode, env: Env, evaluate: Evaluate): Result<Value, TuffError> {
   const scrutinee = evaluate(node.scrutinee, env);
   if (!scrutinee.ok) return scrutinee;
+  if (isReference(scrutinee.value)) {
+    return err({ kind: TuffErrorKind.ReferenceAsValue, span: spanOf(node.scrutinee) });
+  }
   for (const arm of node.arms) {
-    if (arm.pattern !== undefined && typeof arm.pattern.value !== typeof scrutinee.value) {
+    if (arm.pattern === undefined) continue;
+    if (typeof arm.pattern.value === "number" && !Number.isFinite(arm.pattern.value)) {
+      return err({ kind: TuffErrorKind.NumericOverflow, span: arm.patternSpan });
+    }
+    if (typeof arm.pattern.value !== typeof scrutinee.value) {
       return err({ kind: TuffErrorKind.TypeMismatch, span: arm.patternSpan });
     }
   }

@@ -77,6 +77,8 @@ Both branches are resolved and evaluated, so an error in either is reported even
 - Every arm is evaluated, so an error in any arm is reported.
 - The value comes from the first arm whose pattern equals the value. Writes made by other arms are undone.
 - A pattern of a different kind than the value is `TypeMismatch` at the pattern.
+- Two arms may not have the same pattern (`DuplicatePattern`, reported at the later arm).
+- The scrutinee must be a number or a boolean; a reference is `ReferenceAsValue`.
 - When no pattern matches, the result is `NoMatchingArm` at the `match` keyword.
 
 Examples:
@@ -88,7 +90,7 @@ Examples:
 
 Every error has a kind, a span, and an explanation from `describeError`, which gives what, where, why, and how to fix it. The kinds are listed in `TuffErrorKind` in `src/errors.ts`:
 
-- Syntax: `UnexpectedCharacter`, `UnexpectedEnd`, `UnexpectedToken`, `ExpectedClosingParen`, `NestingTooDeep`.
+- Syntax: `UnexpectedCharacter`, `UnexpectedEnd`, `UnexpectedToken`, `ExpectedClosingParen`, `NestingTooDeep`, `DuplicatePattern`.
 - Names: `UnknownName`, `DuplicateName`, `ImmutableAssignment`.
 - Evaluation: `DivisionByZero`, `NumericOverflow`, `BooleanOperand`, `ReferenceAsValue`, `TypeMismatch`, `NotAReference`, `ReferenceEscapes`, `NotABoolean`, `NoMatchingArm`.
 - Internal: `InternalError`, a bug in Tuff rather than in the source.
