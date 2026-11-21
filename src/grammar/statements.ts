@@ -18,7 +18,7 @@ import { parseDestructuring, parseExternLet } from "../parse/destructure";
 import { parseCallStatement, parseFunctionDeclaration, parseActualFn, parseExpectFn } from "../parse/functions";
 import { RESERVED_WORDS } from "../keywords";
 import { parseStructDeclaration } from "../parse/structs";
-import { parseNamespaceDeclaration } from "../parse/namespaces";
+import { parseNamespaceDeclaration, parseObjectDeclaration } from "../parse/namespaces";
 import { parseCondition, parseExpression, parseFactor, parseFunctionCall } from "./expression";
 import { findVariable, inBreakContext, MAX_LOOP_ITERATIONS, type Grammar } from "./grammar";
 
@@ -110,6 +110,14 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
     return {
       matched: true,
       problem: parseNamespaceDeclaration(text, cursor, RESERVED_WORDS, (source, position, scope) =>
+        parseStatementsInScope(source, position, scope, grammar),
+      ),
+    };
+  }
+  if (name === "object" && allowDeclaration) {
+    return {
+      matched: true,
+      problem: parseObjectDeclaration(text, cursor, RESERVED_WORDS, (source, position, scope) =>
         parseStatementsInScope(source, position, scope, grammar),
       ),
     };

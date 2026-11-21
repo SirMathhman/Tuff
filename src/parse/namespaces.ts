@@ -3,12 +3,60 @@ import { err, ok, type Result } from "../result";
 import { lookupNamespace, newScope } from "../scope";
 import { type Cursor, type Scope, type Value } from "../types";
 
-/** Parses the statements and closing brace of a namespace body, running them in the scope it is given. */
+/** Parses the statements and closing brace of a body, running them in the scope it is given. */
 type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undefined;
 
 /**
- * Parses "namespace Name { statements }", which declares a namespace in the current scope. The body runs in its
- * own scope; only the names it declares with "out let" are reachable from outside, as "Name::name".
+ * Binds a parsed body's exports under its name in the scope that declares it. Returns the reason the name
+ * cannot be bound, or undefined if it was bound.
+ */
+type Bind = (scope: Scope, name: string, exports: Map<string, Value>) => string | undefined;
+
+/**
+ * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The body runs in its own
+ * scope, and the names it declares with "out let" are its exports. Once the body is parsed, the exports are
+ * bound under the name by the caller's rule.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the keyword, advanced past the declaration.
+ * @param keyword - The word that starts the declaration.
+ * @param reserved - Words that cannot be used as names.
+ * @param parseBody - Parses the body after its opening brace, in the scope it is given.
+ * @param bind - Binds the exports under the name in the enclosing scope.
+ * @returns The first problem found, or undefined if the declaration parsed and was bound.
+ */
+function parseExportingBlock(
+  text: string,
+  cursor: Cursor,
+  keyword: string,
+  reserved: ReadonlySet<string>,
+  parseBody: ParseBody,
+  bind: Bind,
+): Problem | undefined {
+  cursor.pos += keyword.length;
+  const nameStart = peekStart(text, cursor);
+  const name = peekName(text, cursor);
+  if (name === "" || reserved.has(name)) {
+    return { offset: nameStart, expected: `a ${keyword} name` };
+  }
+  cursor.pos += name.length;
+  if (peek(text, cursor) !== "{") {
+    return { offset: cursor.pos, expected: `"{"` };
+  }
+  cursor.pos++;
+  const { scope: outer } = cursor;
+  const exports = new Map<string, Value>();
+  const problem = parseBody(text, cursor, { ...newScope(outer), exports });
+  if (problem !== undefined) {
+    return problem;
+  }
+  const reason = bind(outer, name, exports);
+  return reason === undefined ? undefined : { offset: nameStart, expected: reason };
+}
+
+/**
+ * Parses "namespace Name { statements }", which declares a namespace in the current scope. Only the names the body
+ * declares with "out let" are reachable from outside, as "Name::name".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "namespace", advanced past the declaration.
@@ -22,33 +70,46 @@ export function parseNamespaceDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  cursor.pos += "namespace".length;
-  const nameStart = peekStart(text, cursor);
-  const name = peekName(text, cursor);
-  if (name === "" || reserved.has(name)) {
-    return { offset: nameStart, expected: "a namespace name" };
-  }
-  cursor.pos += name.length;
-  const { scope: outer } = cursor;
-  const { namespaces } = outer;
-  if (namespaces.has(name)) {
-    return { offset: nameStart, expected: `a namespace name not already declared in this scope` };
-  }
-  const { vars } = outer;
-  if (vars.has(name)) {
-    return { offset: nameStart, expected: `a namespace name not already used by a variable in this scope` };
-  }
-  if (peek(text, cursor) !== "{") {
-    return { offset: cursor.pos, expected: `"{"` };
-  }
-  cursor.pos++;
-  const exports = new Map<string, Value>();
-  const problem = parseBody(text, cursor, { ...newScope(outer), exports });
-  if (problem !== undefined) {
-    return problem;
-  }
-  namespaces.set(name, exports);
-  return undefined;
+  return parseExportingBlock(text, cursor, "namespace", reserved, parseBody, (scope, name, exports) => {
+    const { namespaces, vars } = scope;
+    if (namespaces.has(name)) {
+      return `a namespace name not already declared in this scope`;
+    }
+    if (vars.has(name)) {
+      return `a namespace name not already used by a variable in this scope`;
+    }
+    namespaces.set(name, exports);
+    return undefined;
+  });
+}
+
+/**
+ * Parses "object Name { statements }", which declares a variable in the current scope whose value is a struct of
+ * the body's exports. Its exports are read as "Name.name", the same as a module's.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "object", advanced past the declaration.
+ * @param reserved - Words that cannot be used as object names.
+ * @param parseBody - Parses the body after its opening brace, in the scope it is given.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseObjectDeclaration(
+  text: string,
+  cursor: Cursor,
+  reserved: ReadonlySet<string>,
+  parseBody: ParseBody,
+): Problem | undefined {
+  return parseExportingBlock(text, cursor, "object", reserved, parseBody, (scope, name, exports) => {
+    const { namespaces, vars } = scope;
+    if (namespaces.has(name)) {
+      return `an object name not already used by a namespace in this scope`;
+    }
+    if (vars.has(name)) {
+      return `an object name not already declared in this scope`;
+    }
+    vars.set(name, { value: { structName: name, fields: exports }, mutable: false, depth: scope.depth });
+    return undefined;
+  });
 }
 
 /**
