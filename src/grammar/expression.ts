@@ -685,7 +685,7 @@ export function parseCall(
   }
   const savedPos = cursor.pos;
   const savedScope = cursor.scope;
-  const callScope = newScope(definingScope);
+  const callScope = { ...newScope(definingScope), functionName: name };
   const { vars } = callScope;
   args.forEach((value, index) => {
     const param = params[index];

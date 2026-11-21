@@ -57,7 +57,7 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
     }
     typeParams = parsed.value;
   }
-  const signature = parseSignature(text, cursor, typeParams);
+  const signature = parseSignature(text, cursor, typeParams, name);
   if (!signature.ok) {
     return signature.error;
   }
@@ -114,12 +114,18 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
  * @param text - The source being parsed.
  * @param cursor - The read position at "(", advanced past the signature.
  * @param typeParams - The function's type parameter names, in order.
+ * @param fnName - The function's name; a return type written as this name is the struct its "this" builds.
  * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
  */
-function parseSignature(text: string, cursor: Cursor, typeParams: readonly string[]): Result<Signature, Problem> {
+function parseSignature(
+  text: string,
+  cursor: Cursor,
+  typeParams: readonly string[],
+  fnName: string,
+): Result<Signature, Problem> {
   const outer = cursor.scope;
   cursor.scope = newTypeScope(outer, bindTypeParams(typeParams, typeParams));
-  const signature = parseParamsAndReturn(text, cursor);
+  const signature = parseParamsAndReturn(text, cursor, fnName);
   cursor.scope = outer;
   return signature;
 }
@@ -129,9 +135,10 @@ function parseSignature(text: string, cursor: Cursor, typeParams: readonly strin
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "(", advanced past the signature.
+ * @param fnName - The function's name; a return type written as this name is the struct its "this" builds.
  * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
  */
-function parseParamsAndReturn(text: string, cursor: Cursor): Result<Signature, Problem> {
+function parseParamsAndReturn(text: string, cursor: Cursor, fnName: string): Result<Signature, Problem> {
   if (peek(text, cursor) !== "(") {
     return err({ offset: cursor.pos, expected: `"("` });
   }
@@ -161,11 +168,17 @@ function parseParamsAndReturn(text: string, cursor: Cursor): Result<Signature, P
   let returnType: string | undefined;
   if (peek(text, cursor) === ":") {
     cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return err(annotation.error);
+    if (peekName(text, cursor) === fnName) {
+      // A function's own name is its return type: the struct its "this" builds.
+      cursor.pos += fnName.length;
+      returnType = fnName;
+    } else {
+      const annotation = parseTypeAnnotation(text, cursor);
+      if (!annotation.ok) {
+        return err(annotation.error);
+      }
+      returnType = annotation.value;
     }
-    returnType = annotation.value;
   }
   return ok({ params, returnType });
 }

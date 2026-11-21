@@ -179,6 +179,8 @@ export interface Scope {
   readonly exports?: Map<string, Export>;
   /** True for an object body: its "out let" names are exported as live cells, and it may export functions. */
   readonly objectBody?: boolean;
+  /** For the scope of a function call: the function's name, which names the struct a bare "this" builds. */
+  readonly functionName?: string;
   /** Object templates declared directly in this scope, keyed by name. */
   readonly templates: Map<string, ObjectTemplate>;
 }

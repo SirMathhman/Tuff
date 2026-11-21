@@ -251,7 +251,7 @@ let b = Box { foo : 3 };
 - Inside an object body, including a block nested in the body, it reads a name the object exports with `out`, the same rule as `Name.name` from outside. `this.p` for a name that is not exported is an error.
 - Inside a namespace body, it reads any variable declared directly in that body, including names the namespace does not export. This is intended.
 
-- Bare `this`, with no `.name` after it, is a snapshot value: an object whose names are the names `this.name` can read at that point, each with its value at that moment. Inside an object body those are the exported names, so private names do not leak. It can be bound with `let`, returned from a function, and read with `.name`.
+- Bare `this`, with no `.name` after it, is a snapshot value: a struct named after the function it is written in (`this` outside any function). Its fields are the names `this.name` can read at that point, each with its value at that moment. Inside an object body those are the exported names, so private names do not leak. It can be bound with `let`, returned from a function, and read with `.name`. A function may name its own return type, so `fn Wrapper() : Wrapper => { let x = 1; this }` is valid.
 
 `this` is a reserved word.
 

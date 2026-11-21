@@ -11,3 +11,10 @@ test('interpretTuff("fn Wrapper() => { let x = 1; this } Wrapper().x") => 1', ()
 test("bare this inside an object body does not expose private names", () => {
   expect(interpretTuff("object O { let p = 1; out let x = 2; out let t = this; } O.t.p").ok).toBe(false);
 });
+
+test("a function may name its own return type, and bare this has that struct type", () => {
+  expect(interpretTuff("fn Wrapper() : Wrapper => {\n  let x = 1;\n  this\n}\n\nWrapper().x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

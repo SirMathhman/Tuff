@@ -16,6 +16,7 @@ import {
   type Export,
   type FunctionDef,
   type ObjectBodyParser,
+  type StructValue,
   type ObjectTemplate,
   type ObjectValue,
   type Scope,
@@ -509,16 +510,32 @@ function readableThisNames(scope: Scope): ReadableThis {
  * @param scope - The scope "this" is written in.
  * @returns The snapshot object.
  */
-function thisSnapshot(scope: Scope): ObjectValue {
+function thisSnapshot(scope: Scope): StructValue {
   const { names } = readableThisNames(scope);
-  const exports = new Map<string, Export>();
+  const fields = new Map<string, Value>();
   for (const [name, exported] of names) {
     const value = exportedValue(exported);
     if (value !== undefined) {
-      exports.set(name, { kind: "value", value });
+      fields.set(name, value);
     }
   }
-  return { kind: "object", name: "this", exports };
+  return { structName: enclosingFunctionName(scope), fields };
+}
+
+/**
+ * Names the struct a bare "this" builds: the name of the nearest enclosing function call, or "this" outside any call.
+ *
+ * @param scope - The scope "this" is written in.
+ * @returns The function's name, or "this".
+ */
+function enclosingFunctionName(scope: Scope): string {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { functionName } = current;
+    if (functionName !== undefined) {
+      return functionName;
+    }
+  }
+  return "this";
 }
 
 /**
