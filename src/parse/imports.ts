@@ -1,10 +1,20 @@
 import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
 import { type Binding, type Cursor, type ModuleExports, type Value } from "../types";
-import { parseDeclare, parseHostVariable } from "./functions";
+import { parseFunctionDeclaration, parseHostVariable, parseInputLet } from "./functions";
 import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as a module input. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
+
+/** The modifiers written before "let" or "fn" in a declaration. */
+interface Modifiers {
+  /** True if the statement has the "out" modifier, so the name is exported. */
+  readonly out: boolean;
+  /** True if the statement has the "in" modifier, so the name is a module input. */
+  readonly input: boolean;
+  /** True if the statement has the "declare" modifier, so the value comes from an earlier binding or the host. */
+  readonly declared: boolean;
+}
 
 /**
  * Parses ".name" after a module name, and yields the value the module exports under that name.
@@ -40,32 +50,88 @@ export function parseModuleMember(
 }
 
 /**
- * Parses "out let name ...", a declaration whose name the module exports. Only allowed at the top level.
+ * Parses a declaration that starts with any of the modifiers "out", "in" and "declare", in any order,
+ * followed by "let" or "fn". "out" exports the name; "in" makes a module input; "declare" takes the value or
+ * function from an earlier extern binding or from the host.
  *
  * @param text - The source being parsed.
- * @param cursor - The read position at "out", advanced past the declaration.
- * @param parseDeclaration - Parses the "let" declaration that follows "out".
- * @returns The first problem found, or undefined if the declaration parsed.
+ * @param cursor - The read position at the first modifier, advanced past the declaration.
+ * @param parseDeclaration - Parses a plain "let" declaration.
+ * @returns The first problem found, or undefined if the statement parsed.
  */
-export function parseExportDeclaration(
+export function parseModifiedStatement(
   text: string,
   cursor: Cursor,
+  parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
+): Problem | undefined {
+  const modifiers = readModifiers(text, cursor);
+  if (!modifiers.ok) {
+    return modifiers.error;
+  }
+  const { out, input, declared } = modifiers.value;
+  if (input && declared) {
+    return { offset: cursor.pos, expected: '"in" and "declare" cannot be combined' };
+  }
+  if (input) {
+    return parseInputLet(text, cursor, out);
+  }
+  const keyword = peekName(text, cursor);
+  if (keyword === "fn") {
+    if (!declared || out) {
+      return { offset: cursor.pos, expected: '"declare fn" (a function is declared, not exported)' };
+    }
+    return parseFunctionDeclaration(text, cursor);
+  }
+  if (keyword !== "let") {
+    return { offset: cursor.pos, expected: '"let" or "fn" after the modifiers' };
+  }
+  if (out) {
+    return exportLet(text, cursor, declared, parseDeclaration);
+  }
+  return declared ? parseHostVariable(text, cursor) : parseDeclaration(text, cursor);
+}
+
+/**
+ * Reads the modifiers at the cursor, each at most once, in any order.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the first modifier, advanced past the modifiers.
+ * @returns An Ok result with the modifiers, or an Err result if one repeats.
+ */
+function readModifiers(text: string, cursor: Cursor): Result<Modifiers, Problem> {
+  const found = new Set<string>();
+  while (true) {
+    const word = peekName(text, cursor);
+    if (word !== "out" && word !== "in" && word !== "declare") {
+      break;
+    }
+    if (found.has(word)) {
+      return err({ offset: cursor.pos, expected: `each modifier at most once, but "${word}" repeats` });
+    }
+    found.add(word);
+    cursor.pos += word.length;
+  }
+  return ok({ out: found.has("out"), input: found.has("in"), declared: found.has("declare") });
+}
+
+/**
+ * Parses an exported "let" (or "declare let") at the top level, and records the name's value as an export.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "let", advanced past the declaration.
+ * @param declared - True if the statement has the "declare" modifier.
+ * @param parseDeclaration - Parses a plain "let" declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+function exportLet(
+  text: string,
+  cursor: Cursor,
+  declared: boolean,
   parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
 ): Problem | undefined {
   const { scope } = cursor;
   if (scope.depth !== 0) {
     return { offset: cursor.pos, expected: '"out" only at the top level of a module' };
-  }
-  const declared = peekName(text, cursor) === "declare";
-  if (declared) {
-    cursor.pos += "declare".length;
-  }
-  if (peekName(text, cursor) !== "out") {
-    return { offset: cursor.pos, expected: '"out" after "declare"' };
-  }
-  cursor.pos += "out".length;
-  if (peekName(text, cursor) !== "let") {
-    return { offset: cursor.pos, expected: '"let" after "out"' };
   }
   const letStart = cursor.pos;
   cursor.pos += "let".length;
@@ -264,25 +330,4 @@ export function unreadable(binding: Binding, start: number, name: string): Probl
     return { offset: start, expected: `a type for extern "${name}" (declare it with declare let ${name} : T)` };
   }
   return undefined;
-}
-
-/**
- * Parses a statement that starts with "declare": "declare out let ..." exports a declared value, and
- * "declare let" or "declare fn" declare a single name.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position at "declare", advanced past the declaration.
- * @param parseDeclaration - Parses a "let" declaration, for plain "out let".
- * @returns The first problem found, or undefined if the statement parsed.
- */
-export function parseDeclareStatement(
-  text: string,
-  cursor: Cursor,
-  parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
-): Problem | undefined {
-  const start = cursor.pos;
-  cursor.pos += "declare".length;
-  const next = peekName(text, cursor);
-  cursor.pos = start;
-  return next === "out" ? parseExportDeclaration(text, cursor, parseDeclaration) : parseDeclare(text, cursor);
 }

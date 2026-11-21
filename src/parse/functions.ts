@@ -269,36 +269,16 @@ export function parseCallStatement(
 }
 
 /**
- * Parses what follows "declare": "let name : Type;" for a value or "fn name(params) : Type;" for a function,
- * both supplied by an earlier extern binding or by the host.
+ * Parses "let name : Type;" after the "in" modifier: an input to a module, whose value is passed when the
+ * module is instantiated as "module { name : value }". It is also exported when the statement has "out".
  *
  * @param text - The source being parsed.
- * @param cursor - The read position at "declare", advanced past the declaration.
+ * @param cursor - The read position at "let", advanced past the declaration.
+ * @param isOut - True if the statement also has the "out" modifier.
  * @returns The first problem found, or undefined if the declaration parsed.
  */
-export function parseDeclare(text: string, cursor: Cursor): Problem | undefined {
-  cursor.pos += "declare".length;
-  const keyword = peekName(text, cursor);
-  if (keyword === "let") {
-    return parseHostVariable(text, cursor);
-  }
-  if (keyword === "fn") {
-    return parseFunctionDeclaration(text, cursor);
-  }
-  return { offset: cursor.pos, expected: '"let" or "fn" after "declare"' };
-}
-
-/**
- * Parses "in let name : Type;", an input to a module. Its value is passed when the module is instantiated
- * as "module { name : value }".
- *
- * @param text - The source being parsed.
- * @param cursor - The read position at "in", advanced past the declaration.
- * @returns The first problem found, or undefined if the declaration parsed.
- */
-export function parseInput(text: string, cursor: Cursor): Problem | undefined {
+export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Problem | undefined {
   const declStart = cursor.pos;
-  cursor.pos += "in".length;
   if (peekName(text, cursor) !== "let") {
     return { offset: cursor.pos, expected: '"let" after "in"' };
   }
@@ -320,7 +300,7 @@ export function parseInput(text: string, cursor: Cursor): Problem | undefined {
   if (scope.depth !== 0) {
     return { offset: declStart, expected: '"in" only at the top level of a module' };
   }
-  const { inputs, inputsUsed } = cursor;
+  const { inputs, inputsUsed, exported: exportedValues } = cursor;
   const value = inputs.get(name);
   if (value === undefined) {
     return { offset: declStart, expected: `a value passed for input "${name}"` };
@@ -332,5 +312,8 @@ export function parseInput(text: string, cursor: Cursor): Problem | undefined {
   const { vars } = scope;
   vars.set(name, { value, mutable: false, depth: scope.depth, type: annotation.value });
   inputsUsed.add(name);
+  if (isOut) {
+    exportedValues.set(name, value);
+  }
   return undefined;
 }

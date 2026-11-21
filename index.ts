@@ -40,16 +40,10 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import {
-  parseExportDeclaration,
-  parseExternValue,
-  parseUnboundName,
-  unreadable,
-  parseDeclareStatement,
-} from "./src/parse/imports";
+import { parseExternValue, parseUnboundName, unreadable, parseModifiedStatement } from "./src/parse/imports";
 import { parseDestructuring, parseExternLet } from "./src/parse/destructure";
 import { callExternal } from "./src/host";
-import { parseCallStatement, parseFunctionDeclaration, parseInput, parseVoidBody } from "./src/parse/functions";
+import { parseCallStatement, parseFunctionDeclaration, parseVoidBody } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/parse/arrays";
 import { parsePostfix } from "./src/parse/postfix";
@@ -577,18 +571,12 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
   }
-  if (name === "in" && allowDeclaration) {
-    return { matched: true, problem: parseInput(text, cursor) };
-  }
-  if (name === "out" && allowDeclaration) {
-    return { matched: true, problem: parseExportDeclaration(text, cursor, parseDeclaration) };
-  }
   if (name === "extern" && allowDeclaration) {
     cursor.pos += "extern".length;
     return { matched: true, problem: parseExternLet(text, cursor, parseInitializer) };
   }
-  if (name === "declare" && allowDeclaration) {
-    return { matched: true, problem: parseDeclareStatement(text, cursor, parseDeclaration) };
+  if ((name === "out" || name === "in" || name === "declare") && allowDeclaration) {
+    return { matched: true, problem: parseModifiedStatement(text, cursor, parseDeclaration) };
   }
   if (name === "struct" && allowDeclaration) {
     return { matched: true, problem: parseStructDeclaration(text, cursor, RESERVED_WORDS) };
