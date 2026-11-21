@@ -44,3 +44,7 @@ test("an object and a struct may share a name, and an object is not passed as th
     false,
   );
 });
+
+test('interpretTuff("object Singleton {\\n}\\n\\n&Singleton == &Singleton") => 1', () => {
+  expect(interpretTuff("object Singleton {\n}\n\n&Singleton == &Singleton")).toEqual({ ok: true, value: 1 });
+});
