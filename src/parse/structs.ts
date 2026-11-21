@@ -1,13 +1,13 @@
 import { peek, peekName, peekStart, consumeListSeparator, type Problem } from "../lexing";
+import { parseTypeAnnotation } from "./annotations";
 import {
   bindTypeParams,
   instanceName,
   newTypeScope,
-  parseTypeAnnotation,
   parseTypeArguments,
   parseTypeParameters,
   substituteTypeParams,
-} from "./annotations";
+} from "./generics";
 import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
 import { type Cursor, type StructDef, type Value } from "../types";
 import { err, ok, type Result } from "../result";
@@ -143,7 +143,7 @@ export function parseStructLiteral(
   let structName = name;
   let declared: ReadonlyMap<string, string> = def.fields;
   if (typeParams.length > 0) {
-    const args = parseTypeArguments(text, cursor, name, typeParams.length);
+    const args = parseTypeArguments(text, cursor, name, typeParams.length, parseTypeAnnotation);
     if (!args.ok) {
       return err(args.error);
     }

@@ -15,7 +15,8 @@ import {
   lookupStruct,
   OUTLIVES_MESSAGE,
 } from "../scope";
-import { parseNumberSuffix, parseTypeArguments } from "../parse/annotations";
+import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
+import { parseTypeArguments } from "../parse/generics";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
 import { callExternal } from "../host";
 import { instantiateFunction, parseVoidBody } from "../parse/functions";
@@ -187,8 +188,9 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     }
     const callee = lookupFunction(cursor.scope, name);
     const calleeTypeParams = callee?.typeParams ?? [];
-    if (following === "<" && callee !== undefined && calleeTypeParams.length > 0) {
-      return parseGenericCall(text, cursor, name, start, callee, grammar);
+    const shadowed = lookup(cursor.scope, name) !== undefined;
+    if (following === "<" && callee !== undefined && calleeTypeParams.length > 0 && !shadowed) {
+      return parseValueCall(text, cursor, name, start, callee, grammar);
     }
     if (following === "(") {
       if (callee === undefined) {
@@ -554,33 +556,37 @@ function parseLoop(text: string, cursor: Cursor, start: number, grammar: Grammar
 }
 
 /**
- * Parses "<Type, ...>" type arguments after a generic function's name, then the call itself.
+ * Parses a call to a function, with type arguments first if the function is generic. Used for calls
+ * whose value is discarded, so a Void function is allowed.
  *
  * @param text - The source being parsed.
- * @param cursor - The read position at "<", advanced past the call.
+ * @param cursor - The read position after the name, at "<" or "(".
  * @param name - The function's name, for error reporting.
  * @param start - Offset of the name, for error reporting.
- * @param callee - The generic function being called.
+ * @param fn - The function being called.
  * @param grammar - The statement entry points.
  * @returns An Ok result with the call's value, or an Err result with the first problem found.
  */
-function parseGenericCall(
+export function parseFunctionCall(
   text: string,
   cursor: Cursor,
   name: string,
   start: number,
-  callee: FunctionDef,
+  fn: FunctionDef,
   grammar: Grammar,
 ): Result<Value, Problem> {
-  const { typeParams } = callee;
-  const args = parseTypeArguments(text, cursor, name, typeParams.length);
+  const { typeParams } = fn;
+  if (typeParams.length === 0) {
+    return parseCall(text, cursor, name, start, fn, grammar);
+  }
+  const args = parseTypeArguments(text, cursor, name, typeParams.length, parseTypeAnnotation);
   if (!args.ok) {
     return err(args.error);
   }
   if (peek(text, cursor) !== "(") {
     return err({ offset: cursor.pos, expected: `"("` });
   }
-  return parseValueCall(text, cursor, name, start, instantiateFunction(callee, args.value), grammar);
+  return parseCall(text, cursor, name, start, instantiateFunction(fn, args.value), grammar);
 }
 
 /**
@@ -605,7 +611,7 @@ function parseValueCall(
   if (fn.returnType === "Void") {
     return err({ offset: start, expected: "a value (a Void function has none; call it as a statement)" });
   }
-  return parseCall(text, cursor, name, start, fn, grammar);
+  return parseFunctionCall(text, cursor, name, start, fn, grammar);
 }
 
 /**

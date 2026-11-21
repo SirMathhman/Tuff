@@ -1,12 +1,6 @@
 import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
-import {
-  bindTypeParams,
-  newTypeScope,
-  parseTypeAndSemicolon,
-  parseTypeAnnotation,
-  parseTypeParameters,
-  substituteTypeParams,
-} from "./annotations";
+import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
+import { bindTypeParams, newTypeScope, parseTypeParameters, substituteTypeParams } from "./generics";
 import { checkTypedValue, findFunctionBodyEnd, lookup, lookupFunction } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
 import { type Binding, type Cursor, type FunctionDef, type Param, type Value } from "../types";

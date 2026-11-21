@@ -18,8 +18,30 @@ import { parseDestructuring, parseExternLet } from "../parse/destructure";
 import { parseCallStatement, parseFunctionDeclaration, parseActualFn, parseExpectFn } from "../parse/functions";
 import { RESERVED_WORDS } from "../keywords";
 import { parseStructDeclaration } from "../parse/structs";
-import { parseCall, parseCondition, parseExpression, parseFactor } from "./expression";
+import { parseCondition, parseExpression, parseFactor, parseFunctionCall } from "./expression";
 import { findVariable, inBreakContext, MAX_LOOP_ITERATIONS, type Grammar } from "./grammar";
+
+/**
+ * Reports whether the name at the cursor starts a statement call to a Void function: the name is a Void function,
+ * followed by "(", or by "<" when the function is generic.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the name.
+ * @param name - The name at the cursor, or "" if there is none.
+ * @returns True if a statement call to a Void function starts here.
+ */
+function isVoidCallAhead(text: string, cursor: Cursor, name: string): boolean {
+  if (name === "") {
+    return false;
+  }
+  const callee = lookupFunction(cursor.scope, name);
+  if (callee?.returnType !== "Void") {
+    return false;
+  }
+  const { typeParams } = callee;
+  const following = peekAfterName(text, cursor, name);
+  return typeParams.length > 0 ? following === "<" : following === "(";
+}
 
 const NOT_A_STATEMENT: StatementStep = { matched: false };
 
@@ -86,15 +108,11 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   if (name === "type" && allowDeclaration) {
     return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };
   }
-  if (
-    name !== "" &&
-    peekAfterName(text, cursor, name) === "(" &&
-    lookupFunction(cursor.scope, name)?.returnType === "Void"
-  ) {
+  if (isVoidCallAhead(text, cursor, name)) {
     return {
       matched: true,
       problem: parseCallStatement(text, cursor, name, (source, position, callName, start, fn) =>
-        parseCall(source, position, callName, start, fn, grammar),
+        parseFunctionCall(source, position, callName, start, fn, grammar),
       ),
     };
   }
