@@ -7,9 +7,12 @@ import {
   isObject,
   lookup,
   lookupNamespace,
+  findFrame,
+  framesOutward,
   MAX_CALL_DEPTH,
   newScope,
   snapshotScope,
+  unreadable,
 } from "../scope";
 import {
   type Cursor,
@@ -23,7 +26,7 @@ import {
   type Value,
 } from "../types";
 import { type CallParser, findBlockEnd, parseCallAndSemicolon } from "./functions";
-import { parseModuleInputs, unreadable } from "./imports";
+import { parseModuleInputs } from "./imports";
 
 /** Parses one value from the cursor, such as an instance's input. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
@@ -471,13 +474,7 @@ export function parseObjectCallStatement(
  * @returns The nearest export scope, or undefined if there is none.
  */
 function nearestExportScope(scope: Scope): Scope | undefined {
-  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
-    const { exports } = current;
-    if (exports !== undefined) {
-      return current;
-    }
-  }
-  return undefined;
+  return findFrame(scope, (frame) => frame.exports !== undefined);
 }
 
 /**
@@ -529,13 +526,7 @@ function thisSnapshot(scope: Scope): StructValue {
  * @returns The function's name, or "this".
  */
 function enclosingFunctionName(scope: Scope): string {
-  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
-    const { functionName } = current;
-    if (functionName !== undefined) {
-      return functionName;
-    }
-  }
-  return "this";
+  return findFrame(scope, (frame) => frame.functionName !== undefined)?.functionName ?? "this";
 }
 
 /**
@@ -578,12 +569,7 @@ export function parseThisMember(text: string, cursor: Cursor, start: number): Re
  * @returns The call's scope, or undefined if no enclosing call has that name.
  */
 function callScopeNamed(scope: Scope, name: string): Scope | undefined {
-  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
-    if (current.functionName === name) {
-      return current;
-    }
-  }
-  return undefined;
+  return findFrame(scope, (frame) => frame.functionName === name);
 }
 
 /**
@@ -619,14 +605,11 @@ export function parseCallThis(text: string, cursor: Cursor, start: number, name:
   }
   // The call's variables are those of every frame from here out to the call; an inner frame shadows an outer one.
   const fields = new Map<string, Value>();
-  for (let frame: Scope | undefined = cursor.scope; frame !== undefined; frame = frame.parent) {
+  for (const frame of framesOutward(cursor.scope, (current) => current === call)) {
     for (const [key, binding] of frame.vars) {
       if (!fields.has(key) && unreadable(binding, start, key) === undefined) {
         fields.set(key, binding.value);
       }
-    }
-    if (frame === call) {
-      break;
     }
   }
   return ok({ structName: name, fields });

@@ -14,12 +14,13 @@ import {
   isReference,
   lookupStruct,
   lookupTemplate,
+  unreadable,
   MAX_CALL_DEPTH,
   OUTLIVES_MESSAGE,
 } from "../scope";
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
 import { parseTypeArguments } from "../parse/generics";
-import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
+import { parseExternValue, parseUnboundName } from "../parse/imports";
 import {
   isCallThisAhead,
   isNamespaceAccess,

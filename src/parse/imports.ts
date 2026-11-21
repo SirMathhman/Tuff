@@ -1,5 +1,5 @@
 import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
-import { type Binding, type Cursor, type ModuleExports, type Value } from "../types";
+import { type Cursor, type ModuleExports, type Value } from "../types";
 import { parseFunctionDeclaration, parseHostVariable, parseInputLet } from "./functions";
 import { err, ok, type Result } from "../result";
 
@@ -351,23 +351,4 @@ function readModulePath(text: string, cursor: Cursor, first: string): string {
     path = path + "/" + segment;
   }
   return path;
-}
-
-/**
- * Reports why a variable cannot be read as a plain value, if it cannot: an extern function, or an
- * extern value that has no type yet.
- *
- * @param binding - The variable being read.
- * @param start - Offset of the name, for error reporting.
- * @param name - The variable's name.
- * @returns The problem found, or undefined if the variable can be read.
- */
-export function unreadable(binding: Binding, start: number, name: string): Problem | undefined {
-  if (binding.host !== undefined) {
-    return { offset: start, expected: `a call to extern function "${name}" (it cannot be read as a value)` };
-  }
-  if (binding.extern === true && binding.type === undefined) {
-    return { offset: start, expected: `a type for extern "${name}" (declare it with declare let ${name} : T)` };
-  }
-  return undefined;
 }

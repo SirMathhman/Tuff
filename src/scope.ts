@@ -251,6 +251,57 @@ export function typeNameClash(scope: Scope, name: string): string | undefined {
 }
 
 /**
+ * Reports why a variable cannot be read as a plain value, if it cannot: an extern function, or an
+ * extern value that has no type yet.
+ *
+ * @param binding - The variable being read.
+ * @param start - Offset of the name, for error reporting.
+ * @param name - The variable's name.
+ * @returns The problem found, or undefined if the variable can be read.
+ */
+export function unreadable(binding: Binding, start: number, name: string): Problem | undefined {
+  if (binding.host !== undefined) {
+    return { offset: start, expected: `a call to extern function "${name}" (it cannot be read as a value)` };
+  }
+  if (binding.extern === true && binding.type === undefined) {
+    return { offset: start, expected: `a type for extern "${name}" (declare it with declare let ${name} : T)` };
+  }
+  return undefined;
+}
+
+/**
+ * Lists the frames from a scope outward through its parents, innermost first. The walk stops after the first frame
+ * for which stop returns true, and that frame is the last one listed.
+ *
+ * @param scope - The frame to start from.
+ * @param stop - Returns true for the frame where the walk ends.
+ * @returns The frames visited.
+ */
+export function framesOutward(scope: Scope, stop: (frame: Scope) => boolean = () => false): Scope[] {
+  const frames: Scope[] = [];
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    frames.push(current);
+    if (stop(current)) {
+      break;
+    }
+  }
+  return frames;
+}
+
+/**
+ * Finds the nearest frame, from a scope outward, for which a predicate holds.
+ *
+ * @param scope - The frame to start from.
+ * @param match - Returns true for the frame being sought.
+ * @returns The nearest matching frame, or undefined if none matches.
+ */
+export function findFrame(scope: Scope, match: (frame: Scope) => boolean): Scope | undefined {
+  const frames = framesOutward(scope, match);
+  const last = frames[frames.length - 1];
+  return last !== undefined && match(last) ? last : undefined;
+}
+
+/**
  * Finds a namespace declared in the given scope or the scopes enclosing it.
  *
  * @param scope - The innermost scope to search first.
