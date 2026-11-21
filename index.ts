@@ -280,7 +280,8 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (name === "loop") {
       return parseLoop(text, cursor, start);
     }
-    if (peek(text, cursor) === "{" && lookupStruct(cursor.scope, name) !== undefined) {
+    const structDef = lookupStruct(cursor.scope, name);
+    if (structDef !== undefined && (peek(text, cursor) === "{" || peek(text, cursor) === "<")) {
       return parseStructLiteral(text, cursor, name, start, parseExpression);
     }
     if (peek(text, cursor) === "(") {

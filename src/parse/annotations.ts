@@ -45,6 +45,15 @@ export function parseTypeAnnotation(text: string, cursor: Cursor): Result<string
     return ok(`${prefix}${array.value}`);
   }
   const typeName = peekName(text, cursor);
+  const typeParams = lookupStruct(cursor.scope, typeName)?.typeParams ?? [];
+  if (typeParams.length > 0 && lookupType(cursor.scope, typeName) === undefined) {
+    cursor.pos += typeName.length;
+    const args = parseTypeArguments(text, cursor, typeName, typeParams.length);
+    if (!args.ok) {
+      return err(args.error);
+    }
+    return ok(`${prefix}${instanceName(typeName, args.value)}`);
+  }
   const resolved = resolveTypeName(cursor.scope, typeName);
   if (resolved === undefined) {
     return err({
@@ -55,6 +64,84 @@ export function parseTypeAnnotation(text: string, cursor: Cursor): Result<string
   }
   cursor.pos += typeName.length;
   return ok(`${prefix}${resolved}`);
+}
+
+/**
+ * Builds the name of an instance of a generic struct, such as "Wrapper<I32>" from "Wrapper" and ["I32"].
+ *
+ * @param base - The generic struct's name.
+ * @param args - The normalized type arguments, in order.
+ * @returns The instance's name.
+ */
+export function instanceName(base: string, args: readonly string[]): string {
+  return `${base}<${args.join(", ")}>`;
+}
+
+/**
+ * Parses "<Type, ...>", the type arguments that instantiate a generic struct, and consumes them.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "<", advanced past ">".
+ * @param name - The generic struct's name, for error reporting.
+ * @param count - The number of type parameters the struct declares.
+ * @returns An Ok result with the normalized argument types, or an Err result with the first problem found.
+ */
+export function parseTypeArguments(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  count: number,
+): Result<string[], Problem> {
+  const start = peekStart(text, cursor);
+  if (peek(text, cursor) !== "<") {
+    return err({ offset: start, expected: `type arguments for ${name}, such as ${name}<I32>` });
+  }
+  const args = parseAngleList(text, cursor, parseTypeAnnotation);
+  if (!args.ok) {
+    return args;
+  }
+  const { value: types } = args;
+  if (types.length !== count) {
+    return err({ offset: start, expected: `${count} type argument${count === 1 ? "" : "s"} for ${name}` });
+  }
+  return args;
+}
+
+/**
+ * Parses "<item, ...>", a non-empty list of items between angle brackets, and consumes the brackets.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "<", advanced past ">".
+ * @param parseItem - Parses one item, advancing the cursor past it.
+ * @returns An Ok result with the items in order, or an Err result with the first problem found.
+ */
+export function parseAngleList<T>(
+  text: string,
+  cursor: Cursor,
+  parseItem: (text: string, cursor: Cursor) => Result<T, Problem>,
+): Result<T[], Problem> {
+  if (peek(text, cursor) !== "<") {
+    return err({ offset: cursor.pos, expected: `"<"` });
+  }
+  cursor.pos++;
+  const items: T[] = [];
+  let separator = ",";
+  while (separator === ",") {
+    const item = parseItem(text, cursor);
+    if (!item.ok) {
+      return err(item.error);
+    }
+    items.push(item.value);
+    separator = peek(text, cursor);
+    if (separator === ",") {
+      cursor.pos++;
+    }
+  }
+  if (separator !== ">") {
+    return err({ offset: cursor.pos, expected: `"," or ">"` });
+  }
+  cursor.pos++;
+  return ok(items);
 }
 
 /**

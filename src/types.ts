@@ -48,8 +48,13 @@ export interface StructValue {
 export interface StructDef {
   /**
    * The declared type of each field, keyed by field name, in declaration order.
+   * A type parameter appears by its name, such as "T".
    */
   readonly fields: ReadonlyMap<string, string>;
+  /**
+   * The type parameters named in "struct Name<T, ...>", in order; empty for a struct that is not generic.
+   */
+  readonly typeParams: readonly string[];
 }
 /**
  * An array made with "[a, b, c]". Its elements all have the same kind, and it is read with "name[index]".

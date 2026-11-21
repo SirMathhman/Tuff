@@ -146,6 +146,19 @@ test("interpretTuff('struct Wrapper { value : I32 } let temp = Wrapper { value :
   });
 });
 
+test("interpretTuff generic struct with explicit type arguments => 100", () => {
+  expect(
+    interpretTuff(`
+struct Wrapper<T> {
+  field : T
+}
+
+let instance : Wrapper<I32> = Wrapper<I32> { field : 100 };
+instance.field
+`),
+  ).toEqual({ ok: true, value: 100 });
+});
+
 test("interpretTuff struct literal missing a field is an error", () => {
   expect(interpretTuff("struct P { x : I32, y : I32 } let p = P { x : 1 }; p.x").ok).toBe(false);
 });

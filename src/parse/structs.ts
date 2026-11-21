@@ -1,18 +1,85 @@
 import { peek, peekName, peekStart, consumeListSeparator, type Problem } from "../lexing";
-import { parseTypeAnnotation } from "./annotations";
-import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
-import { type Cursor, type Value } from "../types";
+import { instanceName, parseAngleList, parseTypeAnnotation, parseTypeArguments } from "./annotations";
+import { checkTypedValue, isDeclarableType, lookupStruct, newScope } from "../scope";
+import { type Cursor, type StructDef, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as a field's value. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
 
 /**
- * Parses "struct Name { field : Type, ... }", which declares a struct type in the current scope.
+ * Parses "<T, ...>", the type parameters of a generic struct, and consumes them.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "<", advanced past ">".
+ * @param reserved - Words that cannot be used as type parameter names.
+ * @returns An Ok result with the parameter names, or an Err result with the first problem found.
+ */
+function parseTypeParameters(text: string, cursor: Cursor, reserved: ReadonlySet<string>): Result<string[], Problem> {
+  const names: string[] = [];
+  return parseAngleList(text, cursor, (source, position) => {
+    const start = peekStart(source, position);
+    const param = peekName(source, position);
+    if (param === "" || reserved.has(param) || isDeclarableType(param) || names.includes(param)) {
+      return err({ offset: start, expected: "a type parameter name not already used" });
+    }
+    position.pos += param.length;
+    names.push(param);
+    return ok(param);
+  });
+}
+
+/**
+ * Parses the fields of a struct declaration, from after "{" through "}", and consumes the "}".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position after "{", advanced past "}".
+ * @param name - The struct's name, for error reporting.
+ * @param reserved - Words that cannot be used as field names.
+ * @returns An Ok result with each field's declared type, or an Err result with the first problem found.
+ */
+function parseFieldDeclarations(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  reserved: ReadonlySet<string>,
+): Result<Map<string, string>, Problem> {
+  const fields = new Map<string, string>();
+  while (peek(text, cursor) !== "}") {
+    const fieldStart = peekStart(text, cursor);
+    const field = peekName(text, cursor);
+    if (field === "" || reserved.has(field)) {
+      return err({ offset: fieldStart, expected: `a field name or "}"` });
+    }
+    cursor.pos += field.length;
+    if (peek(text, cursor) !== ":") {
+      return err({ offset: cursor.pos, expected: `":" and a type for field "${field}"` });
+    }
+    cursor.pos++;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return err(annotation.error);
+    }
+    if (fields.has(field)) {
+      return err({ offset: fieldStart, expected: `a field name not already used in ${name}` });
+    }
+    fields.set(field, annotation.value);
+    const separator = consumeListSeparator(text, cursor, "}");
+    if (separator !== undefined) {
+      return err(separator);
+    }
+  }
+  cursor.pos++;
+  return ok(fields);
+}
+
+/**
+ * Parses "struct Name { field : Type, ... }" or "struct Name<T, ...> { field : Type, ... }", which declares a
+ * struct type in the current scope. Within a generic struct, each type parameter is a type name in its fields.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "struct", advanced past the declaration.
- * @param reserved - Words that cannot be used as struct or field names.
+ * @param reserved - Words that cannot be used as struct, field or type parameter names.
  * @returns The first problem found, or undefined if the declaration parsed.
  */
 export function parseStructDeclaration(
@@ -27,48 +94,56 @@ export function parseStructDeclaration(
     return { offset: nameStart, expected: "a struct name" };
   }
   cursor.pos += name.length;
+  let typeParams: string[] = [];
+  if (peek(text, cursor) === "<") {
+    const params = parseTypeParameters(text, cursor, reserved);
+    if (!params.ok) {
+      return params.error;
+    }
+    typeParams = params.value;
+  }
   if (peek(text, cursor) !== "{") {
     return { offset: cursor.pos, expected: `"{"` };
   }
   cursor.pos++;
-  const fields = new Map<string, string>();
-  while (peek(text, cursor) !== "}") {
-    const fieldStart = peekStart(text, cursor);
-    const field = peekName(text, cursor);
-    if (field === "" || reserved.has(field)) {
-      return { offset: fieldStart, expected: `a field name or "}"` };
-    }
-    cursor.pos += field.length;
-    if (peek(text, cursor) !== ":") {
-      return { offset: cursor.pos, expected: `":" and a type for field "${field}"` };
-    }
-    cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return annotation.error;
-    }
-    if (fields.has(field)) {
-      return { offset: fieldStart, expected: `a field name not already used in ${name}` };
-    }
-    fields.set(field, annotation.value);
-    const separator = consumeListSeparator(text, cursor, "}");
-    if (separator !== undefined) {
-      return separator;
-    }
+  const outer = cursor.scope;
+  const paramScope = newScope(outer);
+  const { types: paramTypes } = paramScope;
+  for (const param of typeParams) {
+    paramTypes.set(param, param);
   }
-  cursor.pos++;
-  const { scope } = cursor;
-  const { structs } = scope;
-  structs.set(name, { fields });
+  cursor.scope = paramScope;
+  const fields = parseFieldDeclarations(text, cursor, name, reserved);
+  cursor.scope = outer;
+  if (!fields.ok) {
+    return fields.error;
+  }
+  const { structs } = outer;
+  structs.set(name, { fields: fields.value, typeParams });
   return undefined;
 }
 
 /**
- * Parses "Name { field : value, ... }", a struct value. Every field of the struct must be given
- * exactly once, and each value must have the field's declared type.
+ * Replaces each type parameter in a field's type with the type argument it is instantiated with.
+ *
+ * @param def - The generic struct.
+ * @param args - The normalized type arguments, in the same order as the struct's type parameters.
+ * @returns The field types of the instance, keyed by field name.
+ */
+function instantiateFields(def: StructDef, args: readonly string[]): Map<string, string> {
+  const { typeParams, fields } = def;
+  const bindings = new Map(typeParams.map((param, index) => [param, args[index] ?? param]));
+  return new Map(
+    [...fields].map(([field, type]) => [field, type.replace(/[A-Za-z_]\w*/g, (token) => bindings.get(token) ?? token)]),
+  );
+}
+
+/**
+ * Parses "Name { field : value, ... }", a struct value, or "Name<Type, ...> { field : value, ... }" for a generic
+ * struct. Every field of the struct must be given exactly once, and each value must have the field's declared type.
  *
  * @param text - The source being parsed.
- * @param cursor - The read position at "{", advanced past the literal.
+ * @param cursor - The read position after the name, advanced past the literal.
  * @param name - The struct's name, already read.
  * @param start - Offset of the name, for error reporting.
  * @param parseValue - Parses a field's value.
@@ -85,7 +160,20 @@ export function parseStructLiteral(
   if (def === undefined) {
     return err({ offset: start, expected: `a struct named "${name}"` });
   }
-  const { fields: declared } = def;
+  const { typeParams } = def;
+  let structName = name;
+  let declared: ReadonlyMap<string, string> = def.fields;
+  if (typeParams.length > 0) {
+    const args = parseTypeArguments(text, cursor, name, typeParams.length);
+    if (!args.ok) {
+      return err(args.error);
+    }
+    structName = instanceName(name, args.value);
+    declared = instantiateFields(def, args.value);
+  }
+  if (peek(text, cursor) !== "{") {
+    return err({ offset: cursor.pos, expected: `"{"` });
+  }
   cursor.pos++;
   const given = new Map<string, Value>();
   while (peek(text, cursor) !== "}") {
@@ -93,7 +181,7 @@ export function parseStructLiteral(
     const field = peekName(text, cursor);
     const fieldType = declared.get(field);
     if (fieldType === undefined) {
-      return err({ offset: fieldStart, expected: `a field of ${name}` });
+      return err({ offset: fieldStart, expected: `a field of ${structName}` });
     }
     if (given.has(field)) {
       return err({ offset: fieldStart, expected: `field "${field}" given only once` });
@@ -124,9 +212,9 @@ export function parseStructLiteral(
   for (const field of declared.keys()) {
     const value = given.get(field);
     if (value === undefined) {
-      return err({ offset: start, expected: `a value for field "${field}" of ${name}` });
+      return err({ offset: start, expected: `a value for field "${field}" of ${structName}` });
     }
     fields.set(field, value);
   }
-  return ok({ structName: name, fields });
+  return ok({ structName, fields });
 }
