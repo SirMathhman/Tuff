@@ -456,9 +456,25 @@ export function parseObjectCallStatement(
 }
 
 /**
- * Parses ".name" after "this", which reads a name of the current scope. Inside an object body, the name must be one
- * the object exports, the same rule as "Name.name" from outside. Elsewhere it must be a variable declared directly
- * in the current scope.
+ * Finds the nearest scope that exports names, walking outward from the given scope.
+ *
+ * @param scope - The scope to start from.
+ * @returns The nearest export scope, or undefined if there is none.
+ */
+function nearestExportScope(scope: Scope): Scope | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { exports } = current;
+    if (exports !== undefined) {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Parses ".name" after "this", which reads a name of the current scope. Inside an object body, including a block
+ * nested in one, the name must be one the object exports, the same rule as "Name.name" from outside. Elsewhere it
+ * must be a variable declared directly in the current scope.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position just after "this", advanced past the name.
@@ -475,16 +491,17 @@ export function parseThisMember(text: string, cursor: Cursor, start: number): Re
     return err({ offset: cursor.pos, expected: `a name after "this."` });
   }
   cursor.pos += member.length;
-  const { scope } = cursor;
-  const { objectBody, exports, vars } = scope;
-  if (objectBody === true) {
-    const exported = exports?.get(member);
+  const owner = nearestExportScope(cursor.scope);
+  if (owner !== undefined && owner.objectBody === true) {
+    const { exports: ownerExports } = owner;
+    const exported = ownerExports?.get(member);
     const value = exported === undefined ? undefined : exportedValue(exported);
     if (value === undefined) {
       return err({ offset: start, expected: `a name this object exports (no "${member}" is exported)` });
     }
     return ok(value);
   }
+  const { vars } = cursor.scope;
   const binding = vars.get(member);
   if (binding === undefined) {
     return err({ offset: start, expected: `a variable declared in this scope (no "${member}" is declared here)` });
