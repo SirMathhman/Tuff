@@ -1,6 +1,6 @@
 import { peek, peekName, peekStart, type Problem } from "../lexing";
 import { isArray, isStruct } from "../scope";
-import { type Cursor, type Value } from "../types";
+import { type Cursor, type HostValue, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as an index expression. */
@@ -95,10 +95,20 @@ function parseField(text: string, cursor: Cursor, start: number, base: Value): R
   if (!isStruct(base)) {
     return err({ offset: start, expected: `a struct before "."` });
   }
-  const { structName, fields } = base;
-  const value = fields.get(field);
+  const { structName, fields, live } = base;
+  const value = live === undefined ? fields.get(field) : liveNumber(live(field));
   if (value === undefined) {
     return err({ offset: fieldStart, expected: `a field of ${structName} named "${field}"` });
   }
   return ok(value);
+}
+
+/**
+ * Keeps a host value only if it can be read as a Tuff value: a number or a boolean.
+ *
+ * @param host - The host's current value for a field, or undefined.
+ * @returns The value, or undefined if it is missing or a function.
+ */
+function liveNumber(host?: HostValue): Value | undefined {
+  return typeof host === "number" || typeof host === "boolean" ? host : undefined;
 }

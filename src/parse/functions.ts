@@ -2,7 +2,7 @@ import { peek, peekName, type Problem } from "../lexing";
 import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
 import { checkTypedValue, findFunctionBodyEnd, lookup, lookupFunction } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
-import { type Cursor, type FunctionDef, type Param, type Value } from "../types";
+import { type Binding, type Cursor, type FunctionDef, type Param, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /** Parses a call's argument list and body, as the call parser in the interpreter does. */
@@ -117,14 +117,16 @@ function declareHostFunction(text: string, cursor: Cursor, signature: HostSignat
   if (returnType === undefined) {
     return { offset: declStart, expected: `a return type for host function "${name}"` };
   }
-  const { hostValues } = cursor;
-  if (typeof hostValues.get(name) !== "function") {
+  const { hostValues, scope } = cursor;
+  const earlier = lookup(scope, name);
+  const hosted = hostValues.get(name);
+  const host = earlier !== undefined && earlier.host !== undefined ? earlier.host : hosted;
+  if (typeof host !== "function") {
     return { offset: declStart, expected: `a host function named "${name}" to be provided` };
   }
   cursor.pos++;
-  const { scope } = cursor;
   const { functions } = scope;
-  functions.set(name, { params, returnType, bodyStart: -1, bodyEnd: -1, scope, external: true });
+  functions.set(name, { params, returnType, bodyStart: -1, bodyEnd: -1, scope, external: true, host });
   return undefined;
 }
 
@@ -174,7 +176,7 @@ export function parseHostVariable(text: string, cursor: Cursor): Problem | undef
   const earlier = lookup(scope, name);
   const { hostValues } = cursor;
   const hosted = hostValues.get(name);
-  if (earlier !== undefined && earlier.extern !== true) {
+  if (earlier !== undefined && (earlier.extern !== true || earlier.host !== undefined)) {
     return { offset: declStart, expected: "an earlier extern binding of the same name to type" };
   }
   const value = earlier !== undefined ? earlier.value : hosted;
@@ -185,7 +187,12 @@ export function parseHostVariable(text: string, cursor: Cursor): Problem | undef
   if (problem !== undefined) {
     return problem;
   }
-  vars.set(name, { value, mutable: false, depth: scope.depth, type, extern: true });
+  const binding: Binding = { value, mutable: false, depth: scope.depth, type, extern: true };
+  if (earlier !== undefined) {
+    const source = earlier;
+    Object.defineProperty(binding, "value", { get: () => source.value, enumerable: true });
+  }
+  vars.set(name, binding);
   return undefined;
 }
 

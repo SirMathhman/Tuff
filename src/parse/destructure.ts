@@ -1,7 +1,7 @@
 import { peek, peekName, consumeListSeparator, type Problem } from "../lexing";
 import { checkDeclaration, isStruct } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
-import { type Cursor, type Value } from "../types";
+import { type Binding, type Cursor, type HostValue, type Value } from "../types";
 import { type Result } from "../result";
 
 /** Parses "= expression;", checking the value with the given check before it is accepted. */
@@ -60,7 +60,7 @@ export function parseDestructuring(
     if (!isStruct(value)) {
       return { offset, expected: `a struct to destructure` };
     }
-    const { fields, native } = value;
+    const { fields, native, live } = value;
     const mismatch = names.find((name) => externNames.has(name) !== (native === true));
     if (mismatch !== undefined) {
       return {
@@ -68,7 +68,7 @@ export function parseDestructuring(
         expected: native === true ? "extern on each field of an extern module" : "no extern on fields of a Tuff module",
       };
     }
-    const missing = names.find((name) => !fields.has(name));
+    const missing = names.find((name) => !fields.has(name) && (live === undefined || live(name) === undefined));
     if (missing !== undefined) {
       return { offset, expected: `a struct with a field named "${missing}"` };
     }
@@ -80,13 +80,54 @@ export function parseDestructuring(
   if (!isStruct(init.value)) {
     return { offset: start, expected: `a struct to destructure` };
   }
-  const { fields } = init.value;
+  const { fields, live } = init.value;
   const { vars } = scope;
   for (const name of names) {
+    const hosted = live === undefined ? undefined : live(name);
     const fieldValue = fields.get(name);
-    if (fieldValue !== undefined) {
-      vars.set(name, { value: fieldValue, mutable, depth, extern: externNames.has(name) });
+    if (typeof hosted === "function") {
+      vars.set(name, { value: 0, mutable, depth, extern: true, host: hosted });
+    } else if (fieldValue !== undefined) {
+      vars.set(name, liveBinding(name, fieldValue, mutable, depth, externNames.has(name), live));
     }
   }
   return undefined;
+}
+
+/**
+ * Makes a binding for a struct or native module field. For a native module the binding reads the host's
+ * current value each time it is used, so changes made by the host are seen.
+ *
+ * @param name - The field's name.
+ * @param initial - The value when the field was destructured.
+ * @param mutable - True if the binding may be assigned.
+ * @param depth - The depth of the scope the binding is declared in.
+ * @param isExtern - True if the field was destructured with "extern".
+ * @param live - Reads the host's current value for a native module field.
+ * @returns The binding.
+ */
+function liveBinding(
+  name: string,
+  initial: Value,
+  mutable: boolean,
+  depth: number,
+  isExtern: boolean,
+  live?: (field: string) => HostValue | undefined,
+): Binding {
+  let last = initial;
+  const binding: Binding = { value: initial, mutable, depth, extern: isExtern };
+  if (live !== undefined) {
+    const read = live;
+    Object.defineProperty(binding, "value", {
+      get: () => {
+        const current = read(name);
+        if (typeof current === "number" || typeof current === "boolean") {
+          last = current;
+        }
+        return last;
+      },
+      enumerable: true,
+    });
+  }
+  return binding;
 }

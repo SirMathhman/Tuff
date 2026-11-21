@@ -27,6 +27,12 @@ export function callHostFunction(
   }
   const result = host(...plain);
   const { returnType = "" } = fn;
+  if (returnType === "Void") {
+    return ok(0);
+  }
+  if (typeof result !== "number" && typeof result !== "boolean") {
+    return err({ offset: start, expected: "a number or boolean from the host function" });
+  }
   const problem = checkTypedValue(result, start, returnType);
   return problem === undefined ? ok(result) : err(problem);
 }

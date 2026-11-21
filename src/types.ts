@@ -23,6 +23,8 @@ export interface Reference {
    */
   readonly mutable: boolean;
 }
+/** Reads a native module field's current value from the host, or undefined if it has none. */
+export type LiveRead = (field: string) => HostValue | undefined;
 /**
  * A struct value, built with "Name { field : value, ... }" and read with "value.field".
  */
@@ -37,6 +39,8 @@ export interface StructValue {
   readonly fields: ReadonlyMap<string, Value>;
   /** True if the value is a native module; its fields must be destructured with "extern". */
   readonly native?: boolean;
+  /** For a native module: reads a field's current value from the host. */
+  readonly live?: LiveRead;
 }
 /**
  * A struct declared with "struct". Each field has a declared type.
@@ -62,6 +66,8 @@ export interface ArrayValue {
 export interface Binding {
   /** True if the binding was made by an "extern let" declaration. */
   readonly extern?: boolean;
+  /** For an extern function: the host's implementation, called by name. */
+  readonly host?: HostFunction;
   /**
    * The variable's current value.
    */
@@ -105,7 +111,7 @@ export type HostValue = number | boolean | HostFunction;
 /**
  * A function the host supplies to a Tuff program: it takes numbers and booleans and returns one of them.
  */
-export type HostFunction = (...args: (number | boolean)[]) => number | boolean;
+export type HostFunction = (...args: (number | boolean)[]) => number | boolean | void;
 /** A parameter of a function declared with "fn". */
 export interface Param {
   /** The parameter's name. */
@@ -127,6 +133,8 @@ export interface FunctionDef {
   readonly scope: Scope;
   /** True if the function was declared with "extern fn" and its body is supplied by the host. */
   readonly external: boolean;
+  /** For an extern function: the host's implementation. */
+  readonly host?: HostFunction;
 }
 /**
  * Mutable read position shared by the parsing functions.
@@ -161,8 +169,15 @@ export interface Cursor {
   /** The values this module exports with "out let", keyed by name. */
   readonly exported: Map<string, Value>;
 }
-/** Finds a module by name and returns the values it exports, or an error if it fails to load. */
-export type ModuleLoader = (name: string, native: boolean) => Result<ReadonlyMap<string, Value>, string> | undefined;
+/** A module's exported values, plus a live reader for a native module's current host values. */
+export interface ModuleExports {
+  /** The exported values, keyed by name. */
+  readonly values: ReadonlyMap<string, Value>;
+  /** For a native module: the host's current value for a field, or undefined if it has none. */
+  readonly live?: LiveRead;
+}
+/** Finds a module by name and returns its exports, or an error if it fails to load. */
+export type ModuleLoader = (name: string, native: boolean) => Result<ModuleExports, string> | undefined;
 /**
  * The value a "break" produced, which ends the enclosing loop.
  */

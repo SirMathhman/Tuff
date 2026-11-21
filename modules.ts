@@ -1,6 +1,6 @@
 import { interpretModule, interpretTuff } from "./index";
 import { err, ok, type Result } from "./src/result";
-import { type HostValue, type ModuleLoader, type Value } from "./src/types";
+import { type HostValue, type ModuleExports, type ModuleLoader, type Value } from "./src/types";
 
 /**
  * Interprets the entry modules in order, each from its source text, and returns the value of the last one.
@@ -19,7 +19,7 @@ export function interpretModules(
   if (entries.length === 0) {
     return err("What: no modules to run. Where: the entry list. Why: it is empty. Fix: list at least one module name.");
   }
-  const cache = new Map<string, Result<ReadonlyMap<string, Value>, string>>();
+  const cache = new Map<string, Result<ModuleExports, string>>();
   const loading = new Set<string>();
   const loadModule: ModuleLoader = (name, native) => {
     if (native) {
@@ -41,7 +41,7 @@ export function interpretModules(
     loading.add(name);
     const loaded = interpretModule(source, loadModule);
     loading.delete(name);
-    const result = loaded.ok ? loaded : err(`In module "${name}": ${loaded.error}`);
+    const result = loaded.ok ? ok({ values: loaded.value }) : err(`In module "${name}": ${loaded.error}`);
     cache.set(name, result);
     return result;
   };
@@ -65,28 +65,26 @@ export function interpretModules(
 }
 
 /**
- * Exposes a native JavaScript module as Tuff values. Only numbers and booleans can be read as values.
+ * Exposes a native JavaScript module. Numbers and booleans are readable values, and read live from the host;
+ * functions are reached through "extern fn".
  *
  * @param hostModules - The native modules the host supplies, keyed by name.
  * @param name - The module name.
- * @returns The module's values, an Err result if a field is a function, or undefined if there is no such native module.
+ * @returns The module's exports, or undefined if there is no such native module.
  */
 function nativeExports(
   hostModules: ReadonlyMap<string, ReadonlyMap<string, HostValue>>,
   name: string,
-): Result<ReadonlyMap<string, Value>, string> | undefined {
+): Result<ModuleExports, string> | undefined {
   const native = hostModules.get(name);
   if (native === undefined) {
     return undefined;
   }
   const values = new Map<string, Value>();
   for (const [field, value] of native) {
-    if (typeof value === "function") {
-      return err(
-        `What: native function "${field}" in module "${name}". Where: the module's values. Why: functions cannot be read as values yet. Fix: export a number or boolean instead.`,
-      );
+    if (typeof value !== "function") {
+      values.set(field, value);
     }
-    values.set(field, value);
   }
-  return ok(values);
+  return ok({ values, live: (field) => native.get(field) });
 }

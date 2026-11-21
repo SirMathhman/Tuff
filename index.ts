@@ -40,7 +40,7 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import { parseExportDeclaration, parseExternValue, parseUnboundName } from "./src/parse/imports";
+import { parseExportDeclaration, parseExternValue, parseUnboundName, unreadable } from "./src/parse/imports";
 import { parseDestructuring } from "./src/parse/destructure";
 import { callHostFunction } from "./src/host";
 import { parseCallStatement, parseFunctionDeclaration, parseHostVariable, parseVoidBody } from "./src/parse/functions";
@@ -286,8 +286,9 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     if (binding === undefined) {
       return parseUnboundName(text, cursor, start, name);
     }
-    if (binding.extern === true && binding.type === undefined) {
-      return err({ offset: start, expected: `a type for extern "${name}" (declare it with extern let ${name} : T)` });
+    const problem = unreadable(binding, start, name);
+    if (problem !== undefined) {
+      return err(problem);
     }
     return parsePostfix(text, cursor, start, binding.value, parseExpression);
   }
@@ -1334,9 +1335,8 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err(argumentProblem);
   }
   if (fn.external) {
-    const { hostValues } = cursor;
-    const host = hostValues.get(name);
-    if (typeof host !== "function") {
+    const { host } = fn;
+    if (host === undefined) {
       return err({ offset: start, expected: `a host function named "${name}" to be provided` });
     }
     return callHostFunction(host, args, start, fn);

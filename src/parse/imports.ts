@@ -1,5 +1,5 @@
 import { peek, peekName, type Problem } from "../lexing";
-import { type Cursor, type Value } from "../types";
+import { type Binding, type Cursor, type ModuleExports, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /**
@@ -27,7 +27,7 @@ export function parseModuleMember(
   if (!loaded.ok) {
     return loaded;
   }
-  const { value: moduleExports } = loaded;
+  const { values: moduleExports } = loaded.value;
   const exported = moduleExports.get(member);
   if (exported === undefined) {
     return err({ offset: start, expected: `a name exported from "${moduleName}" (declare it with "out let")` });
@@ -92,7 +92,8 @@ export function parseModuleValue(
   if (!loaded.ok) {
     return loaded;
   }
-  return ok({ structName: moduleName, fields: loaded.value, native });
+  const { values, live } = loaded.value;
+  return ok({ structName: moduleName, fields: values, native, live });
 }
 
 /**
@@ -109,7 +110,7 @@ function loadExports(
   start: number,
   moduleName: string,
   native: boolean,
-): Result<ReadonlyMap<string, Value>, Problem> {
+): Result<ModuleExports, Problem> {
   const loaded = cursor.modules(moduleName, native);
   if (loaded === undefined) {
     return err({ offset: start, expected: `a variable or module in scope (no "${moduleName}" is defined)` });
@@ -152,4 +153,23 @@ export function parseUnboundName(text: string, cursor: Cursor, start: number, na
     return parseModuleMember(text, cursor, start, name);
   }
   return parseModuleValue(cursor, start, name, false);
+}
+
+/**
+ * Reports why a variable cannot be read as a plain value, if it cannot: an extern function, or an
+ * extern value that has no type yet.
+ *
+ * @param binding - The variable being read.
+ * @param start - Offset of the name, for error reporting.
+ * @param name - The variable's name.
+ * @returns The problem found, or undefined if the variable can be read.
+ */
+export function unreadable(binding: Binding, start: number, name: string): Problem | undefined {
+  if (binding.host !== undefined) {
+    return { offset: start, expected: `a call to extern function "${name}" (it cannot be read as a value)` };
+  }
+  if (binding.extern === true && binding.type === undefined) {
+    return { offset: start, expected: `a type for extern "${name}" (declare it with extern let ${name} : T)` };
+  }
+  return undefined;
 }
