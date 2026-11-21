@@ -22,3 +22,10 @@ test("a function may name its own return type, and bare this has that struct typ
 test("a function may not take the name of a type alias in its scope", () => {
   expect(interpretTuff("type Foo = I32; fn Foo() : Foo => 5; Foo()").ok).toBe(false);
 });
+
+test("inside a function, Name.this is a snapshot of that call's variables", () => {
+  expect(interpretTuff("fn Wrapper() : Wrapper => {\n  let x = 1;\n  Wrapper.this\n}\n\nWrapper().x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});

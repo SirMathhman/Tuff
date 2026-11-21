@@ -20,7 +20,14 @@ import {
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
 import { parseTypeArguments } from "../parse/generics";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
-import { isNamespaceAccess, parseInstance, parseNamespaceMember, parseThisMember } from "../parse/namespaces";
+import {
+  isCallThisAhead,
+  isNamespaceAccess,
+  parseCallThis,
+  parseInstance,
+  parseNamespaceMember,
+  parseThisMember,
+} from "../parse/namespaces";
 import { callExternal } from "../host";
 import { instantiateFunction, parseVoidBody } from "../parse/functions";
 import { parseArrayLiteral } from "../parse/arrays";
@@ -210,6 +217,9 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     }
     if (isNamespaceAccess(text, cursor, name)) {
       return parseNamespaceMember(text, cursor, start, name);
+    }
+    if (isCallThisAhead(text, cursor, name)) {
+      return parseCallThis(text, cursor, start, name);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {

@@ -569,3 +569,65 @@ export function parseThisMember(text: string, cursor: Cursor, start: number): Re
   }
   return ok(value);
 }
+
+/**
+ * Finds the scope of the nearest call of a function with the given name, walking outward from a scope.
+ *
+ * @param scope - The scope to start from.
+ * @param name - The function's name.
+ * @returns The call's scope, or undefined if no enclosing call has that name.
+ */
+function callScopeNamed(scope: Scope, name: string): Scope | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    if (current.functionName === name) {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Reports whether ".this" follows a name that is an enclosing function call, such as "Wrapper.this" inside fn Wrapper.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position just after the name.
+ * @param name - The name that was read.
+ * @returns True if the name is followed by ".this" and names an enclosing call.
+ */
+export function isCallThisAhead(text: string, cursor: Cursor, name: string): boolean {
+  return (
+    text.startsWith(".this", cursor.pos) &&
+    !/[A-Za-z0-9_]/.test(text.charAt(cursor.pos + ".this".length)) &&
+    callScopeNamed(cursor.scope, name) !== undefined
+  );
+}
+
+/**
+ * Parses ".this" after the name of an enclosing function call: a snapshot of the variables of that call.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at ".this", advanced past it.
+ * @param start - Offset of the name, for error reporting.
+ * @param name - The function's name.
+ * @returns An Ok result with the snapshot, or an Err result with the first problem found.
+ */
+export function parseCallThis(text: string, cursor: Cursor, start: number, name: string): Result<Value, Problem> {
+  cursor.pos += ".this".length;
+  const call = callScopeNamed(cursor.scope, name);
+  if (call === undefined) {
+    return err({ offset: start, expected: `a call of "${name}" enclosing this point` });
+  }
+  // The call's variables are those of every frame from here out to the call; an inner frame shadows an outer one.
+  const fields = new Map<string, Value>();
+  for (let frame: Scope | undefined = cursor.scope; frame !== undefined; frame = frame.parent) {
+    for (const [key, binding] of frame.vars) {
+      if (!fields.has(key) && unreadable(binding, start, key) === undefined) {
+        fields.set(key, binding.value);
+      }
+    }
+    if (frame === call) {
+      break;
+    }
+  }
+  return ok({ structName: name, fields });
+}

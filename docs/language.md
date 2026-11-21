@@ -253,6 +253,8 @@ let b = Box { foo : 3 };
 
 - Bare `this`, with no `.name` after it, is a snapshot value: a struct named after the function it is written in (`this` outside any function). Its fields are the names `this.name` can read at that point, each with its value at that moment. Inside an object body those are the exported names, so private names do not leak. It can be bound with `let`, returned from a function, and read with `.name`. A function may name its own return type, so `fn Wrapper() : Wrapper => { let x = 1; this }` is valid.
 
+- Inside a function, `Name.this`, where `Name` is that function, is a snapshot of the variables of the current call, from the current point outward to the call. Inner variables shadow outer ones. It is a struct named after the function.
+
 `this` is a reserved word.
 
 ## Modules
