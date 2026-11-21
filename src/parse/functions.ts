@@ -1,5 +1,12 @@
-import { peek, peekName, type Problem } from "../lexing";
-import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
+import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
+import {
+  bindTypeParams,
+  newTypeScope,
+  parseTypeAndSemicolon,
+  parseTypeAnnotation,
+  parseTypeParameters,
+  substituteTypeParams,
+} from "./annotations";
 import { checkTypedValue, findFunctionBodyEnd, lookup, lookupFunction } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
 import { type Binding, type Cursor, type FunctionDef, type Param, type Value } from "../types";
@@ -13,6 +20,13 @@ type CallParser = (
   start: number,
   fn: FunctionDef,
 ) => Result<Value, Problem>;
+/** The parsed parameters and return type of a function's signature. */
+interface Signature {
+  /** The parameters, in order. */
+  readonly params: Param[];
+  /** The declared return type, if any. */
+  readonly returnType?: string;
+}
 /** The parsed signature of a function declared with "declare fn". */
 interface HostSignature {
   /** The function name. */
@@ -41,43 +55,26 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
     return { offset: cursor.pos, expected: "a function name" };
   }
   cursor.pos += name.length;
-  if (peek(text, cursor) !== "(") {
-    return { offset: cursor.pos, expected: `"("` };
+  let typeParams: string[] = [];
+  if (peek(text, cursor) === "<") {
+    const parsed = parseTypeParameters(text, cursor, RESERVED_WORDS);
+    if (!parsed.ok) {
+      return parsed.error;
+    }
+    typeParams = parsed.value;
   }
-  cursor.pos++;
-  const params: Param[] = [];
-  while (peek(text, cursor) !== ")") {
-    const paramName = peekName(text, cursor);
-    if (paramName === "" || RESERVED_WORDS.has(paramName)) {
-      return { offset: cursor.pos, expected: `a parameter name or ")"` };
-    }
-    cursor.pos += paramName.length;
-    if (peek(text, cursor) !== ":") {
-      return { offset: cursor.pos, expected: `": " and a type for parameter "${paramName}"` };
-    }
-    cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return annotation.error;
-    }
-    params.push({ name: paramName, type: annotation.value });
-    if (peek(text, cursor) === ",") {
-      cursor.pos++;
-    } else if (peek(text, cursor) !== ")") {
-      return { offset: cursor.pos, expected: `"," or ")"` };
-    }
+  const signature = parseSignature(text, cursor, typeParams);
+  if (!signature.ok) {
+    return signature.error;
   }
-  cursor.pos++;
-  let returnType: string | undefined;
-  if (peek(text, cursor) === ":") {
-    cursor.pos++;
-    const annotation = parseTypeAnnotation(text, cursor);
-    if (!annotation.ok) {
-      return annotation.error;
-    }
-    returnType = annotation.value;
-  }
+  const { params, returnType } = signature.value;
   if (peek(text, cursor) === ";") {
+    if (typeParams.length > 0) {
+      return {
+        offset: declStart,
+        expected: "a body for a generic fn (declare fn and expect fn take no type parameters)",
+      };
+    }
     if (precededByWord(text, declStart, "expect")) {
       return declareExpectFunction(text, cursor, { name, params, returnType, declStart });
     }
@@ -103,8 +100,104 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
   }
   const { scope } = cursor;
   const { functions } = scope;
-  functions.set(name, { params, returnType, bodyStart, bodyEnd, scope, external: false, source: text });
+  functions.set(name, {
+    typeParams,
+    params,
+    returnType,
+    bodyStart,
+    bodyEnd,
+    scope,
+    external: false,
+    source: text,
+  });
   return undefined;
+}
+
+/**
+ * Parses "(params) : Type", the signature of a function. The function's type parameters are in scope while the
+ * signature is parsed, so that its annotations may name them.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "(", advanced past the signature.
+ * @param typeParams - The function's type parameter names, in order.
+ * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
+ */
+function parseSignature(text: string, cursor: Cursor, typeParams: readonly string[]): Result<Signature, Problem> {
+  const outer = cursor.scope;
+  cursor.scope = newTypeScope(outer, bindTypeParams(typeParams, typeParams));
+  const signature = parseParamsAndReturn(text, cursor);
+  cursor.scope = outer;
+  return signature;
+}
+
+/**
+ * Parses the parameter list and the optional return type of a function signature.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "(", advanced past the signature.
+ * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
+ */
+function parseParamsAndReturn(text: string, cursor: Cursor): Result<Signature, Problem> {
+  if (peek(text, cursor) !== "(") {
+    return err({ offset: cursor.pos, expected: `"("` });
+  }
+  cursor.pos++;
+  const params: Param[] = [];
+  while (peek(text, cursor) !== ")") {
+    const paramName = peekName(text, cursor);
+    if (paramName === "" || RESERVED_WORDS.has(paramName)) {
+      return err({ offset: cursor.pos, expected: `a parameter name or ")"` });
+    }
+    cursor.pos += paramName.length;
+    if (peek(text, cursor) !== ":") {
+      return err({ offset: cursor.pos, expected: `": " and a type for parameter "${paramName}"` });
+    }
+    cursor.pos++;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return err(annotation.error);
+    }
+    params.push({ name: paramName, type: annotation.value });
+    const separator = consumeListSeparator(text, cursor, ")");
+    if (separator !== undefined) {
+      return err(separator);
+    }
+  }
+  cursor.pos++;
+  let returnType: string | undefined;
+  if (peek(text, cursor) === ":") {
+    cursor.pos++;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return err(annotation.error);
+    }
+    returnType = annotation.value;
+  }
+  return ok({ params, returnType });
+}
+
+/**
+ * Instantiates a generic function with type arguments. Each type parameter is replaced by its argument in the
+ * parameter and return types, and it is an alias for that argument in the scope the body is parsed in, so
+ * annotations inside the body see the argument. A function that is not generic is returned unchanged.
+ *
+ * @param fn - The function being called.
+ * @param args - The normalized type arguments, in the same order as the function's type parameters.
+ * @returns The instantiated function, with no type parameters left.
+ */
+export function instantiateFunction(fn: FunctionDef, args: readonly string[]): FunctionDef {
+  const { typeParams, params, returnType, scope } = fn;
+  if (typeParams.length === 0) {
+    return fn;
+  }
+  const bindings = bindTypeParams(typeParams, args);
+  return {
+    ...fn,
+    typeParams: [],
+    params: params.map((param) => ({ name: param.name, type: substituteTypeParams(param.type, bindings) })),
+    returnType: returnType === undefined ? undefined : substituteTypeParams(returnType, bindings),
+    scope: newTypeScope(scope, bindings),
+  };
 }
 
 /**
@@ -132,7 +225,16 @@ function declareHostFunction(text: string, cursor: Cursor, signature: HostSignat
   }
   cursor.pos++;
   const { functions } = scope;
-  functions.set(name, { params, returnType, bodyStart: -1, bodyEnd: -1, scope, external: true, host });
+  functions.set(name, {
+    typeParams: [],
+    params,
+    returnType,
+    bodyStart: -1,
+    bodyEnd: -1,
+    scope,
+    external: true,
+    host,
+  });
   return undefined;
 }
 

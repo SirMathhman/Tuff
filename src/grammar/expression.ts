@@ -15,10 +15,10 @@ import {
   lookupStruct,
   OUTLIVES_MESSAGE,
 } from "../scope";
-import { parseNumberSuffix } from "../parse/annotations";
+import { parseNumberSuffix, parseTypeArguments } from "../parse/annotations";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
 import { callExternal } from "../host";
-import { parseVoidBody } from "../parse/functions";
+import { instantiateFunction, parseVoidBody } from "../parse/functions";
 import { parseArrayLiteral } from "../parse/arrays";
 import { parsePostfix } from "../parse/postfix";
 import { parseStructLiteral } from "../parse/structs";
@@ -185,15 +185,19 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
         parseExpression(source, position, grammar),
       );
     }
-    if (peek(text, cursor) === "(") {
-      const fn = lookupFunction(cursor.scope, name);
-      if (fn === undefined) {
+    const callee = lookupFunction(cursor.scope, name);
+    const calleeTypeParams = callee?.typeParams ?? [];
+    if (following === "<" && callee !== undefined && calleeTypeParams.length > 0) {
+      return parseGenericCall(text, cursor, name, start, callee, grammar);
+    }
+    if (following === "(") {
+      if (callee === undefined) {
         return err({ offset: start, expected: `a function in scope (no "${name}" is defined)` });
       }
-      if (fn.returnType === "Void") {
-        return err({ offset: start, expected: "a value (a Void function has none; call it as a statement)" });
+      if (calleeTypeParams.length > 0) {
+        return err({ offset: start, expected: `type arguments for ${name}, such as ${name}<I32>` });
       }
-      return parseCall(text, cursor, name, start, fn, grammar);
+      return parseValueCall(text, cursor, name, start, callee, grammar);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
@@ -547,6 +551,61 @@ function parseLoop(text: string, cursor: Cursor, start: number, grammar: Grammar
       return err({ offset: start, expected: `a loop that breaks within ${MAX_LOOP_ITERATIONS} iterations` });
     }
   }
+}
+
+/**
+ * Parses "<Type, ...>" type arguments after a generic function's name, then the call itself.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "<", advanced past the call.
+ * @param name - The function's name, for error reporting.
+ * @param start - Offset of the name, for error reporting.
+ * @param callee - The generic function being called.
+ * @param grammar - The statement entry points.
+ * @returns An Ok result with the call's value, or an Err result with the first problem found.
+ */
+function parseGenericCall(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  start: number,
+  callee: FunctionDef,
+  grammar: Grammar,
+): Result<Value, Problem> {
+  const { typeParams } = callee;
+  const args = parseTypeArguments(text, cursor, name, typeParams.length);
+  if (!args.ok) {
+    return err(args.error);
+  }
+  if (peek(text, cursor) !== "(") {
+    return err({ offset: cursor.pos, expected: `"("` });
+  }
+  return parseValueCall(text, cursor, name, start, instantiateFunction(callee, args.value), grammar);
+}
+
+/**
+ * Parses the call of a function that returns a value, which may not be a Void function.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "(", advanced past the call.
+ * @param name - The function's name, for error reporting.
+ * @param start - Offset of the name, for error reporting.
+ * @param fn - The function being called, with any type arguments already applied.
+ * @param grammar - The statement entry points.
+ * @returns An Ok result with the call's value, or an Err result with the first problem found.
+ */
+function parseValueCall(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  start: number,
+  fn: FunctionDef,
+  grammar: Grammar,
+): Result<Value, Problem> {
+  if (fn.returnType === "Void") {
+    return err({ offset: start, expected: "a value (a Void function has none; call it as a statement)" });
+  }
+  return parseCall(text, cursor, name, start, fn, grammar);
 }
 
 /**

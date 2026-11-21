@@ -1,33 +1,19 @@
 import { peek, peekName, peekStart, consumeListSeparator, type Problem } from "../lexing";
-import { instanceName, parseAngleList, parseTypeAnnotation, parseTypeArguments } from "./annotations";
-import { checkTypedValue, isDeclarableType, lookupStruct, newScope } from "../scope";
+import {
+  bindTypeParams,
+  instanceName,
+  newTypeScope,
+  parseTypeAnnotation,
+  parseTypeArguments,
+  parseTypeParameters,
+  substituteTypeParams,
+} from "./annotations";
+import { checkTypedValue, isDeclarableType, lookupStruct } from "../scope";
 import { type Cursor, type StructDef, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as a field's value. */
 type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
-
-/**
- * Parses "<T, ...>", the type parameters of a generic struct, and consumes them.
- *
- * @param text - The source being parsed.
- * @param cursor - The read position at "<", advanced past ">".
- * @param reserved - Words that cannot be used as type parameter names.
- * @returns An Ok result with the parameter names, or an Err result with the first problem found.
- */
-function parseTypeParameters(text: string, cursor: Cursor, reserved: ReadonlySet<string>): Result<string[], Problem> {
-  const names: string[] = [];
-  return parseAngleList(text, cursor, (source, position) => {
-    const start = peekStart(source, position);
-    const param = peekName(source, position);
-    if (param === "" || reserved.has(param) || isDeclarableType(param) || names.includes(param)) {
-      return err({ offset: start, expected: "a type parameter name not already used" });
-    }
-    position.pos += param.length;
-    names.push(param);
-    return ok(param);
-  });
-}
 
 /**
  * Parses the fields of a struct declaration, from after "{" through "}", and consumes the "}".
@@ -107,12 +93,7 @@ export function parseStructDeclaration(
   }
   cursor.pos++;
   const outer = cursor.scope;
-  const paramScope = newScope(outer);
-  const { types: paramTypes } = paramScope;
-  for (const param of typeParams) {
-    paramTypes.set(param, param);
-  }
-  cursor.scope = paramScope;
+  cursor.scope = newTypeScope(outer, bindTypeParams(typeParams, typeParams));
   const fields = parseFieldDeclarations(text, cursor, name, reserved);
   cursor.scope = outer;
   if (!fields.ok) {
@@ -132,10 +113,8 @@ export function parseStructDeclaration(
  */
 function instantiateFields(def: StructDef, args: readonly string[]): Map<string, string> {
   const { typeParams, fields } = def;
-  const bindings = new Map(typeParams.map((param, index) => [param, args[index] ?? param]));
-  return new Map(
-    [...fields].map(([field, type]) => [field, type.replace(/[A-Za-z_]\w*/g, (token) => bindings.get(token) ?? token)]),
-  );
+  const bindings = bindTypeParams(typeParams, args);
+  return new Map([...fields].map(([field, type]) => [field, substituteTypeParams(type, bindings)]));
 }
 
 /**

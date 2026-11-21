@@ -126,6 +126,8 @@ export interface Param {
 }
 /** A function declared with "fn". Its body is re-parsed from text on each call. */
 export interface FunctionDef {
+  /** The type parameters named in "fn name<T, ...>"; empty for a function that is not generic. */
+  readonly typeParams: readonly string[];
   /** Parameters, in order. */
   readonly params: readonly Param[];
   /** Declared return type, such as "I32"; undefined if the function has none. */

@@ -159,6 +159,10 @@ instance.field
   ).toEqual({ ok: true, value: 100 });
 });
 
+test("interpretTuff generic function with explicit type argument => 100", () => {
+  expect(interpretTuff("fn pass<T>(value : T) : T => value;\npass<I32>(100)")).toEqual({ ok: true, value: 100 });
+});
+
 test("interpretTuff struct literal missing a field is an error", () => {
   expect(interpretTuff("struct P { x : I32, y : I32 } let p = P { x : 1 }; p.x").ok).toBe(false);
 });

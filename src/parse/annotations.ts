@@ -1,5 +1,5 @@
 import { peek, peekName, peekStart, type Problem } from "../lexing";
-import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "../scope";
+import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType, newScope } from "../scope";
 import { type Cursor, type Scope } from "../types";
 import { err, ok, type Result } from "../result";
 
@@ -142,6 +142,71 @@ export function parseAngleList<T>(
   }
   cursor.pos++;
   return ok(items);
+}
+
+/**
+ * Parses "<T, ...>", the type parameters of a generic struct or function, and consumes them.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "<", advanced past ">".
+ * @param reserved - Words that cannot be used as type parameter names.
+ * @returns An Ok result with the parameter names, or an Err result with the first problem found.
+ */
+export function parseTypeParameters(
+  text: string,
+  cursor: Cursor,
+  reserved: ReadonlySet<string>,
+): Result<string[], Problem> {
+  const names: string[] = [];
+  return parseAngleList(text, cursor, (source, position) => {
+    const start = peekStart(source, position);
+    const param = peekName(source, position);
+    if (param === "" || reserved.has(param) || isDeclarableType(param) || names.includes(param)) {
+      return err({ offset: start, expected: "a type parameter name not already used" });
+    }
+    position.pos += param.length;
+    names.push(param);
+    return ok(param);
+  });
+}
+
+/**
+ * Pairs each type parameter with the type argument it stands for. A parameter without an argument stands for itself.
+ *
+ * @param params - The type parameter names, in order.
+ * @param args - The normalized type arguments, in the same order.
+ * @returns The bindings, keyed by parameter name.
+ */
+export function bindTypeParams(params: readonly string[], args: readonly string[]): Map<string, string> {
+  return new Map(params.map((param, index) => [param, args[index] ?? param]));
+}
+
+/**
+ * Creates a scope nested in the given one, in which each bound name is a type alias for its binding.
+ * Annotations parsed in this scope see the bound names as the types they stand for.
+ *
+ * @param parent - The enclosing scope.
+ * @param bindings - The type aliases to declare, keyed by name.
+ * @returns The new scope.
+ */
+export function newTypeScope(parent: Scope, bindings: ReadonlyMap<string, string>): Scope {
+  const scope = newScope(parent);
+  const { types } = scope;
+  for (const [name, type] of bindings) {
+    types.set(name, type);
+  }
+  return scope;
+}
+
+/**
+ * Replaces each name in a type string that is bound, such as "T" in "Wrapper<T>", with what it is bound to.
+ *
+ * @param type - The normalized type string.
+ * @param bindings - The replacements, keyed by name.
+ * @returns The type with the replacements applied.
+ */
+export function substituteTypeParams(type: string, bindings: ReadonlyMap<string, string>): string {
+  return type.replace(/[A-Za-z_]\w*/g, (token) => bindings.get(token) ?? token);
 }
 
 /**
