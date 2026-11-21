@@ -7,7 +7,7 @@ import { type Binding, type Cursor, type FunctionDef, type Param, type Value } f
 import { err, ok, type Result } from "../result";
 
 /** Parses a call's argument list and body, as the call parser in the interpreter does. */
-type CallParser = (
+export type CallParser = (
   text: string,
   cursor: Cursor,
   name: string,
@@ -359,6 +359,28 @@ export function parseCallStatement(
   if (fn === undefined) {
     return { offset: start, expected: `a function in scope (no "${name}" is defined)` };
   }
+  return parseCallAndSemicolon(text, cursor, name, start, fn, parseCallFn);
+}
+
+/**
+ * Parses the call of a function used as a statement, and the ";" that ends it, and discards the result.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position just after the function's name, advanced past the ";".
+ * @param name - The function's name, for error reporting.
+ * @param start - Offset of the name, for error reporting.
+ * @param fn - The function being called.
+ * @param parseCallFn - Parses the call's arguments and body.
+ * @returns The first problem found, or undefined if the statement parsed.
+ */
+export function parseCallAndSemicolon(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  start: number,
+  fn: FunctionDef,
+  parseCallFn: CallParser,
+): Problem | undefined {
   const call = parseCallFn(text, cursor, name, start, fn);
   if (!call.ok) {
     return call.error;

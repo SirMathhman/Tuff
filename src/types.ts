@@ -41,6 +41,10 @@ export interface StructValue {
   readonly native?: boolean;
   /** For a native module: reads a field's current value from the host. */
   readonly live?: LiveRead;
+  /** For an object: the bindings of its exported names, read live so that later assignments are seen. */
+  readonly cells?: ReadonlyMap<string, Binding>;
+  /** For an object: the functions it exports with "out fn", called as "Name.fn()". */
+  readonly functions?: ReadonlyMap<string, FunctionDef>;
 }
 /**
  * A struct declared with "struct". Each field has a declared type.
@@ -117,6 +121,8 @@ export interface Scope {
    * body. Undefined for every other scope.
    */
   readonly exports?: Map<string, Value>;
+  /** The functions an object body exports with "out fn"; undefined for every scope that is not an object body. */
+  readonly exportedFunctions?: Map<string, FunctionDef>;
 }
 /** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
 export type HostValue = number | boolean | HostFunction;

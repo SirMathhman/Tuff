@@ -192,6 +192,24 @@ Singleton.x        // 1
 - `Singleton.hidden` is an error when `hidden` is not declared with `out`.
 - An object cannot share a name with a namespace or a variable declared earlier in the same scope. A `let` that comes after an object with the same name is not yet an error; it replaces the object.
 - Objects are read with `.`. The `::` form is for namespaces only.
+- An object can export functions with `out fn`, which are called as a statement with `Name.fn();`. The function is declared `: Void` and runs in the object's scope, so it can read and assign the object's names.
+- An `out let mut` field is shared: a function that assigns it changes the value that `Name.field` reads.
+
+```
+object Singleton {
+  out let mut x = 0;
+
+  out fn increment() : Void => {
+    x += 1;
+  }
+}
+
+Singleton.increment();
+Singleton.increment();
+Singleton.x        // 2
+```
+
+Functions exported with `out fn` are only available in an object body. A module or namespace cannot export a function.
 
 ## Modules
 

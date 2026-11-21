@@ -1,7 +1,8 @@
-import { peek, peekName, peekStart, type Problem } from "../lexing";
+import { peek, peekName, peekStart, type Position, type Problem } from "../lexing";
 import { err, ok, type Result } from "../result";
-import { claimNamespace, claimObject, lookupNamespace, newScope } from "../scope";
-import { type Cursor, type Scope, type Value } from "../types";
+import { claimNamespace, claimObject, isStruct, lookup, lookupNamespace, newScope } from "../scope";
+import { type Binding, type Cursor, type FunctionDef, type Scope, type Value } from "../types";
+import { type CallParser, parseCallAndSemicolon } from "./functions";
 
 /** Parses the statements and closing brace of a body, running them in the scope it is given. */
 type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undefined;
@@ -12,7 +13,7 @@ type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undef
 type Claim = (scope: Scope, name: string) => string | undefined;
 
 /** Binds a parsed body's exports under its name in the scope that declares it. */
-type Bind = (scope: Scope, name: string, exports: Map<string, Value>) => void;
+type Bind = (scope: Scope, name: string, exports: Map<string, Value>, body: Scope) => void;
 
 /**
  * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The name is claimed before
@@ -24,6 +25,7 @@ type Bind = (scope: Scope, name: string, exports: Map<string, Value>) => void;
  * @param keyword - The word that starts the declaration.
  * @param reserved - Words that cannot be used as names.
  * @param claim - Checks that the name may be declared in the scope, before the body runs.
+ * @param functionsExported - True if the body may export functions with "out fn".
  * @param parseBody - Parses the body after its opening brace, in the scope it is given.
  * @param bind - Binds the exports under the name in the enclosing scope.
  * @returns The first problem found, or undefined if the declaration parsed and was bound.
@@ -34,6 +36,7 @@ function parseExportingBlock(
   keyword: string,
   reserved: ReadonlySet<string>,
   claim: Claim,
+  functionsExported: boolean,
   parseBody: ParseBody,
   bind: Bind,
 ): Problem | undefined {
@@ -54,11 +57,16 @@ function parseExportingBlock(
   cursor.pos++;
   const { scope: outer } = cursor;
   const exports = new Map<string, Value>();
-  const problem = parseBody(text, cursor, { ...newScope(outer), exports });
+  const body: Scope = {
+    ...newScope(outer),
+    exports,
+    ...(functionsExported ? { exportedFunctions: new Map<string, FunctionDef>() } : {}),
+  };
+  const problem = parseBody(text, cursor, body);
   if (problem !== undefined) {
     return problem;
   }
-  bind(outer, name, exports);
+  bind(outer, name, exports, body);
   return undefined;
 }
 
@@ -78,15 +86,25 @@ export function parseNamespaceDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(text, cursor, "namespace", reserved, claimNamespace, parseBody, (scope, name, exports) => {
-    const { namespaces } = scope;
-    namespaces.set(name, exports);
-  });
+  return parseExportingBlock(
+    text,
+    cursor,
+    "namespace",
+    reserved,
+    claimNamespace,
+    false,
+    parseBody,
+    (scope, name, exports) => {
+      const { namespaces } = scope;
+      namespaces.set(name, exports);
+    },
+  );
 }
 
 /**
  * Parses "object Name { statements }", which declares a variable in the current scope whose value is a struct of
- * the body's exports. Its exports are read as "Name.name", the same as a module's.
+ * the body's exports. Its exports are read as "Name.name", the same as a module's, and its "out fn" functions are
+ * called as "Name.fn()".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "object", advanced past the declaration.
@@ -100,10 +118,29 @@ export function parseObjectDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(text, cursor, "object", reserved, claimObject, parseBody, (scope, name, exports) => {
-    const { vars } = scope;
-    vars.set(name, { value: { structName: name, fields: exports }, mutable: false, depth: scope.depth });
-  });
+  return parseExportingBlock(
+    text,
+    cursor,
+    "object",
+    reserved,
+    claimObject,
+    true,
+    parseBody,
+    (scope, name, exports, body) => {
+      const { vars } = scope;
+      const cells = new Map<string, Binding>();
+      const { vars: bodyVars } = body;
+      for (const key of exports.keys()) {
+        const cell = bodyVars.get(key);
+        if (cell !== undefined) {
+          cells.set(key, cell);
+        }
+      }
+      const { exportedFunctions } = body;
+      const value = { structName: name, fields: exports, cells, functions: exportedFunctions };
+      vars.set(name, { value, mutable: false, depth: scope.depth });
+    },
+  );
 }
 
 /**
@@ -146,4 +183,74 @@ export function parseNamespaceMember(
     return err({ offset: start, expected: `a name exported from namespace "${name}" (declare it with "out let")` });
   }
   return ok(exported);
+}
+
+/**
+ * Returns the functions an object variable exports, if the name is a variable holding an object.
+ *
+ * @param scope - The scope to search for the variable.
+ * @param name - The variable's name.
+ * @returns The object's exported functions, or undefined if the name is not an object.
+ */
+function objectFunctions(scope: Scope, name: string): ReadonlyMap<string, FunctionDef> | undefined {
+  const binding = lookup(scope, name);
+  if (binding === undefined) {
+    return undefined;
+  }
+  const { value } = binding;
+  return isStruct(value) ? value.functions : undefined;
+}
+
+/**
+ * Reports whether a statement starts with "Name.fn(" where Name is an object that exports fn.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the name, which has not been consumed.
+ * @param name - The name at the cursor.
+ * @returns True if the statement is a call to a function exported by an object.
+ */
+export function isObjectCallAhead(text: string, cursor: Cursor, name: string): boolean {
+  const functions = objectFunctions(cursor.scope, name);
+  if (functions === undefined) {
+    return false;
+  }
+  const probe: Position = { pos: cursor.pos + name.length };
+  if (peek(text, probe) !== ".") {
+    return false;
+  }
+  probe.pos++;
+  const member = peekName(text, probe);
+  probe.pos += member.length;
+  return functions.has(member) && peek(text, probe) === "(";
+}
+
+/**
+ * Parses "Name.fn(...);" where Name is an object and fn is a Void function it exports, and discards its result.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the object name, advanced past the ";".
+ * @param name - The object's name.
+ * @param parseCall - Parses the call's arguments and body.
+ * @returns The first problem found, or undefined if the statement parsed.
+ */
+export function parseObjectCallStatement(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  parseCall: CallParser,
+): Problem | undefined {
+  const start = cursor.pos;
+  cursor.pos += name.length;
+  peek(text, cursor);
+  cursor.pos++;
+  const member = peekName(text, cursor);
+  cursor.pos += member.length;
+  const fn = objectFunctions(cursor.scope, name)?.get(member);
+  if (fn === undefined) {
+    return { offset: start, expected: `a function exported by "${name}"` };
+  }
+  if (fn.returnType !== "Void") {
+    return { offset: start, expected: `a Void function, since "${name}.${member}" is called as a statement` };
+  }
+  return parseCallAndSemicolon(text, cursor, member, start, fn, parseCall);
 }

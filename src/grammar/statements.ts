@@ -18,7 +18,12 @@ import { parseDestructuring, parseExternLet } from "../parse/destructure";
 import { parseCallStatement, parseFunctionDeclaration, parseActualFn, parseExpectFn } from "../parse/functions";
 import { RESERVED_WORDS } from "../keywords";
 import { parseStructDeclaration } from "../parse/structs";
-import { parseNamespaceDeclaration, parseObjectDeclaration } from "../parse/namespaces";
+import {
+  isObjectCallAhead,
+  parseNamespaceDeclaration,
+  parseObjectCallStatement,
+  parseObjectDeclaration,
+} from "../parse/namespaces";
 import { parseCondition, parseExpression, parseFactor, parseFunctionCall } from "./expression";
 import { findVariable, inBreakContext, MAX_LOOP_ITERATIONS, type Grammar } from "./grammar";
 
@@ -124,6 +129,14 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name === "type" && allowDeclaration) {
     return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };
+  }
+  if (name !== "" && isObjectCallAhead(text, cursor, name)) {
+    return {
+      matched: true,
+      problem: parseObjectCallStatement(text, cursor, name, (source, position, callName, start, fn) =>
+        parseFunctionCall(source, position, callName, start, fn, grammar),
+      ),
+    };
   }
   if (isVoidCallAhead(text, cursor, name)) {
     return {

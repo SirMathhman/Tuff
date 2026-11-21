@@ -77,6 +77,9 @@ export function parseModifiedStatement(
   }
   const keyword = peekName(text, cursor);
   if (keyword === "fn") {
+    if (out && !declared) {
+      return parseExportedFunction(text, cursor);
+    }
     if (!declared || out) {
       return { offset: cursor.pos, expected: '"declare fn" (a function is declared, not exported)' };
     }
@@ -89,6 +92,36 @@ export function parseModifiedStatement(
     return exportLet(text, cursor, declared, parseDeclaration);
   }
   return declared ? parseHostVariable(text, cursor) : parseDeclaration(text, cursor);
+}
+
+/**
+ * Parses "out fn name(...) => body;" in the body of an object, which declares the function and exports it so that
+ * "Name.name()" calls it. Only an object body exports functions.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "fn", advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+function parseExportedFunction(text: string, cursor: Cursor): Problem | undefined {
+  const { scope } = cursor;
+  const { exportedFunctions, functions } = scope;
+  if (exportedFunctions === undefined) {
+    return { offset: cursor.pos, expected: '"out fn" only in the body of an object' };
+  }
+  peek(text, cursor);
+  const declStart = cursor.pos;
+  cursor.pos += "fn".length;
+  const name = peekName(text, cursor);
+  cursor.pos = declStart;
+  const problem = parseFunctionDeclaration(text, cursor);
+  if (problem !== undefined) {
+    return problem;
+  }
+  const fn = functions.get(name);
+  if (fn !== undefined) {
+    exportedFunctions.set(name, fn);
+  }
+  return undefined;
 }
 
 /**
@@ -136,6 +169,9 @@ function exportLet(
   }
   const letStart = cursor.pos;
   cursor.pos += "let".length;
+  if (peekName(text, cursor) === "mut") {
+    cursor.pos += "mut".length;
+  }
   const exportedName = peekName(text, cursor);
   cursor.pos = letStart;
   const problem = declared ? parseHostVariable(text, cursor) : parseDeclaration(text, cursor);

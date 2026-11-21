@@ -95,8 +95,15 @@ function parseField(text: string, cursor: Cursor, start: number, base: Value): R
   if (!isStruct(base)) {
     return err({ offset: start, expected: `a struct before "."` });
   }
-  const { structName, fields, live } = base;
-  const value = live === undefined ? fields.get(field) : liveNumber(live(field));
+  const { structName, fields, live, cells } = base;
+  let value: Value | undefined;
+  if (cells !== undefined) {
+    value = cells.get(field)?.value;
+  } else if (live === undefined) {
+    value = fields.get(field);
+  } else {
+    value = liveNumber(live(field));
+  }
   if (value === undefined) {
     return err({ offset: fieldStart, expected: `a field of ${structName} named "${field}"` });
   }
