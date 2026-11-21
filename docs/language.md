@@ -222,6 +222,25 @@ Singleton.x        // 2
 
 Functions exported with `out fn` are only available in an object body. A module or namespace cannot export a function.
 
+### Templates
+
+An object whose body declares an input with `in let` is a template. A template is not a value of its own. Each instance is built with `Name { input : value, ... }`, and its body runs with those inputs. Every input the body declares must be given, and no other input may be given.
+
+```
+object Box {
+  in let foo : I32;
+  out let doubled = foo + foo;
+}
+
+let b = Box { foo : 3 };
+&Box { foo : 3 } == &Box { foo : 3 }   // 1: instances with equal inputs are equal
+&Box { foo : 3 } == &Box { foo : 4 }   // 0
+```
+
+- `&Name { ... }` builds an instance and makes a reference to it. The instance lives in the enclosing scope, so the reference may not outlive that scope.
+- Two references to instances of the same template are equal when their inputs are equal. Other references to objects are equal only to the same object.
+- A template's body is run for each instance, so its errors are reported when an instance is built, not when the template is declared.
+
 ## Modules
 
 A program can use other modules. Each module is its own source text, loaded by name through `interpretModules`. Within a module, `out let` exports a name, and `in let` declares an input that the importing program passes in.

@@ -79,6 +79,28 @@ export interface ObjectValue {
   readonly name: string;
   /** The names the object body exports, keyed by name. */
   readonly exports: ReadonlyMap<string, Export>;
+  /** For an instance of a template: the template's name. Undefined for an object that is not an instance. */
+  readonly template?: string;
+  /** For an instance of a template: the values passed for its inputs, keyed by input name. */
+  readonly inputs?: ReadonlyMap<string, Value>;
+}
+/** Parses the statements and closing brace of an object body, in the scope it is given. */
+export type ObjectBodyParser = (text: string, cursor: Cursor, scope: Scope) => Problem | undefined;
+/**
+ * An object declared with inputs, "object Name { in let f : T; ... }". It is not evaluated when declared. Each
+ * instance, "Name { f : v }", parses the body again with its inputs.
+ */
+export interface ObjectTemplate {
+  /** The template's name. */
+  readonly name: string;
+  /** The scope the template was declared in; each instance's body is nested in it. */
+  readonly scope: Scope;
+  /** The source the body was declared in. */
+  readonly text: string;
+  /** Offset just after the body's opening "{". */
+  readonly bodyStart: number;
+  /** Parses the body from its opening brace's successor, in the scope it is given. */
+  readonly parseBody: ObjectBodyParser;
 }
 /**
  * A struct declared with "struct". Each field has a declared type.
@@ -157,6 +179,8 @@ export interface Scope {
   readonly exports?: Map<string, Export>;
   /** True for an object body: its "out let" names are exported as live cells, and it may export functions. */
   readonly objectBody?: boolean;
+  /** Object templates declared directly in this scope, keyed by name. */
+  readonly templates: Map<string, ObjectTemplate>;
 }
 /** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
 export type HostValue = number | boolean | HostFunction;

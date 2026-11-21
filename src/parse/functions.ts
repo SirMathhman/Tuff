@@ -305,7 +305,7 @@ export function parseHostVariable(text: string, cursor: Cursor): Problem | undef
  * @param start - Offset of the opening "{".
  * @returns The offset of the matching "}", or -1 if the block is never closed.
  */
-function findBlockEnd(text: string, start: number): number {
+export function findBlockEnd(text: string, start: number): number {
   let depth = 0;
   for (let pos = start; pos < text.length; pos++) {
     const char = text.charAt(pos);
@@ -422,8 +422,8 @@ export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Pro
   }
   const { scope } = cursor;
   const { exports } = scope;
-  if (scope.depth !== 0 || exports === undefined) {
-    return { offset: declStart, expected: '"in" only at the top level of a module' };
+  if ((scope.depth !== 0 && scope.objectBody !== true) || exports === undefined) {
+    return { offset: declStart, expected: '"in" only at the top level of a module or in an object body' };
   }
   const { inputs, inputsUsed } = cursor;
   const value = inputs.get(name);

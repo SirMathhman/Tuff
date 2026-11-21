@@ -299,7 +299,7 @@ export function parseUnboundName(
  * @param parseValue - Parses an input's value.
  * @returns An Ok result with the inputs, or an Err result with the first problem found.
  */
-function parseModuleInputs(
+export function parseModuleInputs(
   text: string,
   cursor: Cursor,
   parseValue: ParseValue,

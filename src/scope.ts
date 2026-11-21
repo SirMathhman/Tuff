@@ -16,6 +16,7 @@ import {
   type HostValue,
   type ModuleLoader,
   type Export,
+  type ObjectTemplate,
   type ObjectValue,
 } from "./types";
 import { findTopLevel, type Problem } from "./lexing";
@@ -91,6 +92,7 @@ export function newScope(parent?: Scope): Scope {
     types: new Map(),
     structs: new Map(),
     namespaces: new Map(),
+    templates: new Map(),
     parent,
     depth: parent === undefined ? 0 : parent.depth + 1,
   };
@@ -104,8 +106,8 @@ export function newScope(parent?: Scope): Scope {
  * @returns The reason the name is taken, or undefined if it may be declared.
  */
 export function claimNamespace(scope: Scope, name: string): string | undefined {
-  const { namespaces, vars } = scope;
-  if (namespaces.has(name)) {
+  const { namespaces, vars, templates } = scope;
+  if (namespaces.has(name) || templates.has(name)) {
     return `a namespace name not already declared in this scope`;
   }
   if (vars.has(name)) {
@@ -122,14 +124,52 @@ export function claimNamespace(scope: Scope, name: string): string | undefined {
  * @returns The reason the name is taken, or undefined if it may be declared.
  */
 export function claimObject(scope: Scope, name: string): string | undefined {
-  const { namespaces, vars } = scope;
+  const { namespaces, vars, templates } = scope;
   if (namespaces.has(name)) {
     return `an object name not already used by a namespace in this scope`;
   }
-  if (vars.has(name)) {
+  if (vars.has(name) || templates.has(name)) {
     return `an object name not already declared in this scope`;
   }
   return undefined;
+}
+
+/**
+ * Finds an object template declared in the given scope or the scopes enclosing it.
+ *
+ * @param scope - The innermost scope to search first.
+ * @param name - The template's name.
+ * @returns The template, or undefined if no template with that name is in scope.
+ */
+export function lookupTemplate(scope: Scope, name: string): ObjectTemplate | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { templates } = current;
+    const found = templates.get(name);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Reports whether two values that a pair of references point to are equal under "==". Two instances of the same
+ * template are equal when their inputs are equal; any other pair of values is equal only if it is the same value.
+ *
+ * @param left - The value one reference points to.
+ * @param right - The value the other reference points to.
+ * @returns True if the pointees are equal.
+ */
+export function pointeesEqual(left: Value, right: Value): boolean {
+  if (!isObject(left) || !isObject(right) || left.template === undefined || left.template !== right.template) {
+    return left === right;
+  }
+  const { inputs: leftInputs } = left;
+  const { inputs: rightInputs } = right;
+  if (leftInputs === undefined || rightInputs === undefined || leftInputs.size !== rightInputs.size) {
+    return false;
+  }
+  return [...leftInputs].every(([name, value]) => rightInputs.get(name) === value);
 }
 
 /**
@@ -597,7 +637,7 @@ export function valuesEqual(left: Value, right: Value, offset: number): Result<b
     if (typeof leftPointee !== typeof rightPointee) {
       return err({ offset, expected: `references to values of the same type on each side of "=="` });
     }
-    return ok(leftPointee === rightPointee);
+    return ok(pointeesEqual(leftPointee, rightPointee));
   }
   return ok(left === right);
 }

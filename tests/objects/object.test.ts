@@ -48,3 +48,14 @@ test("an object and a struct may share a name, and an object is not passed as th
 test('interpretTuff("object Singleton {\\n}\\n\\n&Singleton == &Singleton") => 1', () => {
   expect(interpretTuff("object Singleton {\n}\n\n&Singleton == &Singleton")).toEqual({ ok: true, value: 1 });
 });
+
+test("references to instances of one template are equal when their inputs are equal, and not otherwise", () => {
+  const template = "object Singleton {\n  in let foo : I32;\n}\n\n";
+  expect(
+    interpretTuff(`${template}let x = &Singleton { foo : 3 };\nlet y = &Singleton { foo : 4 };\n&x == &y`),
+  ).toEqual({
+    ok: true,
+    value: 0,
+  });
+  expect(interpretTuff(`${template}&Singleton { foo : 3 } == &Singleton { foo : 3 }`)).toEqual({ ok: true, value: 1 });
+});

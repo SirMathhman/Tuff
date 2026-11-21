@@ -1,11 +1,21 @@
 import { peek, peekName, peekStart, type Position, type Problem } from "../lexing";
 import { err, ok, type Result } from "../result";
 import { claimNamespace, claimObject, exportedValue, isObject, lookup, lookupNamespace, newScope } from "../scope";
-import { type Cursor, type Export, type FunctionDef, type ObjectValue, type Scope, type Value } from "../types";
-import { type CallParser, parseCallAndSemicolon } from "./functions";
+import {
+  type Cursor,
+  type Export,
+  type FunctionDef,
+  type ObjectBodyParser,
+  type ObjectTemplate,
+  type ObjectValue,
+  type Scope,
+  type Value,
+} from "../types";
+import { type CallParser, findBlockEnd, parseCallAndSemicolon } from "./functions";
+import { parseModuleInputs } from "./imports";
 
-/** Parses the statements and closing brace of a body, running them in the scope it is given. */
-type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undefined;
+/** Parses one value from the cursor, such as an instance's input. */
+type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
 
 /**
  * Checks whether a name may be declared in a scope, given the kind of declaration. Returns the reason it may not.
@@ -28,6 +38,37 @@ interface BlockOptions {
 }
 
 /**
+ * Reads "keyword Name" at the cursor, and checks that the name may be declared.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the keyword, advanced past the name.
+ * @param keyword - The word that starts the declaration.
+ * @param reserved - Words that cannot be used as names.
+ * @param claim - Checks that the name may be declared in the scope.
+ * @returns An Ok result with the name, or an Err result with the first problem found.
+ */
+function readDeclaredName(
+  text: string,
+  cursor: Cursor,
+  keyword: string,
+  reserved: ReadonlySet<string>,
+  claim: Claim,
+): Result<string, Problem> {
+  cursor.pos += keyword.length;
+  const nameStart = peekStart(text, cursor);
+  const name = peekName(text, cursor);
+  if (name === "" || reserved.has(name)) {
+    return err({ offset: nameStart, expected: `a ${keyword} name` });
+  }
+  const reason = claim(cursor.scope, name);
+  if (reason !== undefined) {
+    return err({ offset: nameStart, expected: reason });
+  }
+  cursor.pos += name.length;
+  return ok(name);
+}
+
+/**
  * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The name is claimed before
  * the body runs, so a rejected declaration runs no code. The body runs in its own scope, and the names it declares
  * with "out" are its exports; they are then bound under the name.
@@ -43,21 +84,15 @@ function parseExportingBlock(
   text: string,
   cursor: Cursor,
   options: BlockOptions,
-  parseBody: ParseBody,
+  parseBody: ObjectBodyParser,
   bind: Bind,
 ): Problem | undefined {
   const { keyword, reserved, claim, objectBody } = options;
-  cursor.pos += keyword.length;
-  const nameStart = peekStart(text, cursor);
-  const name = peekName(text, cursor);
-  if (name === "" || reserved.has(name)) {
-    return { offset: nameStart, expected: `a ${keyword} name` };
+  const named = readDeclaredName(text, cursor, keyword, reserved, claim);
+  if (!named.ok) {
+    return named.error;
   }
-  const reason = claim(cursor.scope, name);
-  if (reason !== undefined) {
-    return { offset: nameStart, expected: reason };
-  }
-  cursor.pos += name.length;
+  const { value: name } = named;
   if (peek(text, cursor) !== "{") {
     return { offset: cursor.pos, expected: `"{"` };
   }
@@ -86,7 +121,7 @@ export function parseNamespaceDeclaration(
   text: string,
   cursor: Cursor,
   reserved: ReadonlySet<string>,
-  parseBody: ParseBody,
+  parseBody: ObjectBodyParser,
 ): Problem | undefined {
   const options: BlockOptions = { keyword: "namespace", reserved, claim: claimNamespace, objectBody: false };
   return parseExportingBlock(text, cursor, options, parseBody, (scope, name, exports) => {
@@ -96,9 +131,98 @@ export function parseNamespaceDeclaration(
 }
 
 /**
+ * Reports whether an object body declares an input, "in let". The body's own level is checked; nested blocks and
+ * comments are skipped.
+ *
+ * @param text - The source being parsed.
+ * @param open - Offset of the body's opening "{".
+ * @returns True if the body declares an input.
+ */
+function declaresInputs(text: string, open: number): boolean {
+  let depth = 0;
+  for (let pos = open; pos < text.length; pos++) {
+    if (text.startsWith("//", pos)) {
+      pos = text.indexOf("\n", pos);
+      if (pos < 0) {
+        return false;
+      }
+    } else if (text.startsWith("/*", pos)) {
+      const close = text.indexOf("*/", pos + 2);
+      if (close < 0) {
+        return false;
+      }
+      pos = close + 1;
+    } else {
+      const char = text.charAt(pos);
+      if (char === "{") {
+        depth++;
+      } else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          return false;
+        }
+      } else if (depth === 1 && isInputKeyword(text, pos)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Reports whether "in let" starts at the given offset, as whole words.
+ *
+ * @param text - The source being parsed.
+ * @param pos - The offset to check.
+ * @returns True if "in let" starts here.
+ */
+function isInputKeyword(text: string, pos: number): boolean {
+  if (!text.startsWith("in", pos) || /[A-Za-z0-9_]/.test(text.charAt(pos - 1))) {
+    return false;
+  }
+  const pattern = /in\s+let\b/y;
+  pattern.lastIndex = pos;
+  return pattern.test(text);
+}
+
+/**
+ * Parses "object Name { in let ... }", which declares a template. Its body is not run now: each instance runs it
+ * again, with the instance's inputs.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "object", advanced past the declaration.
+ * @param reserved - Words that cannot be used as object names.
+ * @param parseBody - Parses the body after its opening brace, in the scope it is given.
+ * @param open - Offset of the body's opening "{".
+ * @returns The first problem found, or undefined if the template was declared.
+ */
+function parseObjectTemplate(
+  text: string,
+  cursor: Cursor,
+  reserved: ReadonlySet<string>,
+  parseBody: ObjectBodyParser,
+  open: number,
+): Problem | undefined {
+  const named = readDeclaredName(text, cursor, "object", reserved, claimObject);
+  if (!named.ok) {
+    return named.error;
+  }
+  const { value: name } = named;
+  const close = findBlockEnd(text, open);
+  if (close < 0) {
+    return { offset: open, expected: `"}" ending the object body` };
+  }
+  const { templates } = cursor.scope;
+  const template: ObjectTemplate = { name, scope: cursor.scope, text, bodyStart: open + 1, parseBody };
+  templates.set(name, template);
+  cursor.pos = close + 1;
+  return undefined;
+}
+
+/**
  * Parses "object Name { statements }", which declares a variable in the current scope whose value is an object of
  * the body's exports. Its exports are read as "Name.name", the same as a module's, and its "out fn" functions are
- * called as "Name.fn()".
+ * called as "Name.fn()". A body that declares an input, "in let", makes a template instead; see parseObjectTemplate.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "object", advanced past the declaration.
@@ -110,14 +234,74 @@ export function parseObjectDeclaration(
   text: string,
   cursor: Cursor,
   reserved: ReadonlySet<string>,
-  parseBody: ParseBody,
+  parseBody: ObjectBodyParser,
 ): Problem | undefined {
+  const open = objectBodyOpen(text, cursor);
+  if (open !== undefined && declaresInputs(text, open)) {
+    return parseObjectTemplate(text, cursor, reserved, parseBody, open);
+  }
   const options: BlockOptions = { keyword: "object", reserved, claim: claimObject, objectBody: true };
   return parseExportingBlock(text, cursor, options, parseBody, (scope, name, exports) => {
     const { vars } = scope;
     const value: ObjectValue = { kind: "object", name, exports };
     vars.set(name, { value, mutable: false, depth: scope.depth });
   });
+}
+
+/**
+ * Finds the "{" that opens the body of the object declaration at the cursor, without consuming anything.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "object".
+ * @returns The offset of the "{", or undefined if the declaration has no body there.
+ */
+function objectBodyOpen(text: string, cursor: Cursor): number | undefined {
+  const probe: Position = { pos: cursor.pos + "object".length };
+  peek(text, probe);
+  probe.pos += peekName(text, probe).length;
+  return peek(text, probe) === "{" ? probe.pos : undefined;
+}
+
+/**
+ * Parses "Name { input : value, ... }", which builds an instance of an object template: the template's body runs
+ * with the given inputs. Every input the body declares with "in let" must be given, and no other input may be.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "{", advanced past the inputs.
+ * @param name - The template's name, for error reporting.
+ * @param start - Offset of the name, for error reporting.
+ * @param template - The template being instantiated.
+ * @param parseValue - Parses an input's value.
+ * @returns An Ok result with the new object, or an Err result with the first problem found.
+ */
+export function parseInstance(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  start: number,
+  template: ObjectTemplate,
+  parseValue: ParseValue,
+): Result<Value, Problem> {
+  const inputs = parseModuleInputs(text, cursor, parseValue);
+  if (!inputs.ok) {
+    return err(inputs.error);
+  }
+  const { value: inputValues } = inputs;
+  const exports = new Map<string, Export>();
+  const body: Scope = { ...newScope(template.scope), exports, objectBody: true };
+  const inputsUsed = new Set<string>();
+  const bodyCursor: Cursor = { ...cursor, pos: template.bodyStart, scope: body, inputs: inputValues, inputsUsed };
+  const problem = template.parseBody(template.text, bodyCursor, body);
+  if (problem !== undefined) {
+    return err(problem);
+  }
+  for (const input of inputValues.keys()) {
+    if (!inputsUsed.has(input)) {
+      return err({ offset: start, expected: `an "in let ${input}" declaration in object "${name}"` });
+    }
+  }
+  const value: ObjectValue = { kind: "object", name, exports, template: name, inputs: inputValues };
+  return ok(value);
 }
 
 /**

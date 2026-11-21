@@ -1,6 +1,6 @@
 import { err, ok, type Result } from "../result";
 import { peek, peekName, peekOperator, type Problem } from "../lexing";
-import { type Cursor, type FunctionDef, type Value } from "../types";
+import { type Binding, type Cursor, type FunctionDef, type ObjectTemplate, type Value } from "../types";
 import {
   lookup,
   lookupFunction,
@@ -13,12 +13,13 @@ import {
   valuesEqual,
   isReference,
   lookupStruct,
+  lookupTemplate,
   OUTLIVES_MESSAGE,
 } from "../scope";
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
 import { parseTypeArguments } from "../parse/generics";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
-import { isNamespaceAccess, parseNamespaceMember } from "../parse/namespaces";
+import { isNamespaceAccess, parseInstance, parseNamespaceMember } from "../parse/namespaces";
 import { callExternal } from "../host";
 import { instantiateFunction, parseVoidBody } from "../parse/functions";
 import { parseArrayLiteral } from "../parse/arrays";
@@ -151,7 +152,7 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     return parseParenthesized(text, cursor, grammar);
   }
   if (next === "&") {
-    return parseReference(text, cursor);
+    return parseReference(text, cursor, grammar);
   }
   if (next === "[") {
     return parseArrayLiteral(text, cursor, (source, position) => parseExpression(source, position, grammar));
@@ -181,6 +182,12 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     const structDef = lookupStruct(cursor.scope, name);
     const typeParams = structDef?.typeParams ?? [];
     const following = peek(text, cursor);
+    const template = lookupTemplate(cursor.scope, name);
+    if (template !== undefined && following === "{" && lookup(cursor.scope, name) === undefined) {
+      return parseInstance(text, cursor, name, start, template, (source, position) =>
+        parseExpression(source, position, grammar),
+      );
+    }
     const genericLiteral = following === "<" && typeParams.length > 0 && lookup(cursor.scope, name) === undefined;
     if (structDef !== undefined && (following === "{" || genericLiteral)) {
       return parseStructLiteral(text, cursor, name, start, (source, position) =>
@@ -329,17 +336,23 @@ function parseBranch(text: string, cursor: Cursor, dead: boolean, grammar: Gramm
  *
  * @param text - The source being parsed.
  * @param cursor - The read position, advanced past the reference.
+ * @param grammar - The statement entry points.
  * @returns An Ok result with the reference, or an Err result with the first problem found.
  */
-function parseReference(text: string, cursor: Cursor): Result<Value, Problem> {
+function parseReference(text: string, cursor: Cursor, grammar: Grammar): Result<Value, Problem> {
   cursor.pos++;
   let mutable = false;
   if (peekName(text, cursor) === "mut") {
     cursor.pos += "mut".length;
     mutable = true;
   }
-  if (peekName(text, cursor) === "") {
+  const typeName = peekName(text, cursor);
+  if (typeName === "") {
     return err({ offset: cursor.pos, expected: `a variable name after "&"` });
+  }
+  const template = lookupTemplate(cursor.scope, typeName);
+  if (template !== undefined && lookup(cursor.scope, typeName) === undefined) {
+    return referenceToInstance(text, cursor, typeName, template, mutable, grammar);
   }
   const found = findVariable(text, cursor);
   if (!found.ok) {
@@ -705,4 +718,42 @@ export function parseCall(
     return err(resultProblem);
   }
   return ok(body.value);
+}
+
+/**
+ * Parses "Name { input : value, ... }" after "&", which builds a new instance of an object template and makes a
+ * reference to it. The instance is stored in the current scope, so the reference may not outlive that scope.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the template's name, advanced past the instance.
+ * @param name - The template's name.
+ * @param template - The template being instantiated.
+ * @param mutable - True if the reference was written with "&mut".
+ * @param grammar - The statement entry points.
+ * @returns An Ok result with the reference, or an Err result with the first problem found.
+ */
+function referenceToInstance(
+  text: string,
+  cursor: Cursor,
+  name: string,
+  template: ObjectTemplate,
+  mutable: boolean,
+  grammar: Grammar,
+): Result<Value, Problem> {
+  const start = cursor.pos;
+  cursor.pos += name.length;
+  if (peek(text, cursor) !== "{") {
+    return err({ offset: start, expected: `"{" after "${name}" (an object template takes its inputs in braces)` });
+  }
+  const instance = parseInstance(text, cursor, name, start, template, (source, position) =>
+    parseExpression(source, position, grammar),
+  );
+  if (!instance.ok) {
+    return instance;
+  }
+  const { scope } = cursor;
+  const { depth, vars } = scope;
+  const binding: Binding = { value: instance.value, mutable, depth };
+  vars.set(`${name}@${start}`, binding);
+  return ok({ target: binding, mutable });
 }
