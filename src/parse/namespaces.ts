@@ -472,6 +472,36 @@ function nearestExportScope(scope: Scope): Scope | undefined {
 }
 
 /**
+ * Builds the value of bare "this": an object whose exports are the names "this.name" can read at this point, each
+ * as a snapshot of its current value. Inside an object body these are the object's exports; elsewhere they are the
+ * variables declared directly in the current scope.
+ *
+ * @param scope - The scope "this" is written in.
+ * @returns The snapshot object.
+ */
+function thisSnapshot(scope: Scope): ObjectValue {
+  const owner = nearestExportScope(scope);
+  const exports = new Map<string, Export>();
+  if (owner !== undefined && owner.objectBody === true) {
+    const { exports: ownerExports } = owner;
+    for (const [name, exported] of ownerExports ?? []) {
+      const value = exportedValue(exported);
+      if (value !== undefined) {
+        exports.set(name, { kind: "value", value });
+      }
+    }
+  } else {
+    const { vars } = scope;
+    for (const [name, binding] of vars) {
+      if (unreadable(binding, 0, name) === undefined) {
+        exports.set(name, { kind: "value", value: binding.value });
+      }
+    }
+  }
+  return { kind: "object", name: "this", exports };
+}
+
+/**
  * Parses ".name" after "this", which reads a name of the current scope. Inside an object body, including a block
  * nested in one, the name must be one the object exports, the same rule as "Name.name" from outside. Elsewhere it
  * must be a variable declared directly in the current scope.
@@ -483,7 +513,7 @@ function nearestExportScope(scope: Scope): Scope | undefined {
  */
 export function parseThisMember(text: string, cursor: Cursor, start: number): Result<Value, Problem> {
   if (peek(text, cursor) !== ".") {
-    return err({ offset: cursor.pos, expected: `"." after "this"` });
+    return ok(thisSnapshot(cursor.scope));
   }
   cursor.pos++;
   const member = peekName(text, cursor);

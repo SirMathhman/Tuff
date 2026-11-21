@@ -126,6 +126,8 @@ id<I32>(4)                        // 4
 
 Calls may nest, up to a depth of 100. Functions declared with `fn` may be called before their declaration in the same block.
 
+A call's result can be read with `.name` or `[index]`, as in `Wrapper().x`.
+
 ## Structs
 
 A struct is a named set of typed fields. Generic structs take type parameters the same way generic functions do.
@@ -248,6 +250,8 @@ let b = Box { foo : 3 };
 - Outside an object body, it reads a variable declared directly in the current scope, so `let x = 1; this.x` is `1`. It does not read a variable declared in an enclosing scope.
 - Inside an object body, including a block nested in the body, it reads a name the object exports with `out`, the same rule as `Name.name` from outside. `this.p` for a name that is not exported is an error.
 - Inside a namespace body, it reads any variable declared directly in that body, including names the namespace does not export. This is intended.
+
+- Bare `this`, with no `.name` after it, is a snapshot value: an object whose names are the names `this.name` can read at that point, each with its value at that moment. Inside an object body those are the exported names, so private names do not leak. It can be bound with `let`, returned from a function, and read with `.name`.
 
 `this` is a reserved word.
 

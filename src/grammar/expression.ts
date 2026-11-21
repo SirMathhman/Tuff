@@ -197,7 +197,7 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     const calleeTypeParams = callee?.typeParams ?? [];
     const shadowed = lookup(cursor.scope, name) !== undefined;
     if (following === "<" && callee !== undefined && calleeTypeParams.length > 0 && !shadowed) {
-      return parseValueCall(text, cursor, name, start, callee, grammar);
+      return withFieldAccess(text, cursor, start, parseValueCall(text, cursor, name, start, callee, grammar), grammar);
     }
     if (following === "(") {
       if (callee === undefined) {
@@ -206,7 +206,7 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
       if (calleeTypeParams.length > 0) {
         return err({ offset: start, expected: `type arguments for ${name}, such as ${name}<I32>` });
       }
-      return parseValueCall(text, cursor, name, start, callee, grammar);
+      return withFieldAccess(text, cursor, start, parseValueCall(text, cursor, name, start, callee, grammar), grammar);
     }
     if (isNamespaceAccess(text, cursor, name)) {
       return parseNamespaceMember(text, cursor, start, name);
@@ -755,4 +755,29 @@ function referenceToInstance(
   const binding: Binding = { value: instance.value, mutable, depth };
   vars.set(`${name}@${start}`, binding);
   return ok({ target: binding, mutable });
+}
+
+/**
+ * Applies field and index reads that follow a call's result, such as "Wrapper().x".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position after the call.
+ * @param start - Offset of the call's name, for error reporting.
+ * @param call - The call's result.
+ * @param grammar - The statement entry points.
+ * @returns An Ok result with the value after any reads, or the call's Err result.
+ */
+function withFieldAccess(
+  text: string,
+  cursor: Cursor,
+  start: number,
+  call: Result<Value, Problem>,
+  grammar: Grammar,
+): Result<Value, Problem> {
+  if (!call.ok) {
+    return call;
+  }
+  return parsePostfix(text, cursor, start, call.value, (source, position) =>
+    parseExpression(source, position, grammar),
+  );
 }
