@@ -241,6 +241,15 @@ let b = Box { foo : 3 };
 - Two references to instances of the same template are equal when their inputs are equal. Other references to objects are equal only to the same object. An input that is a number or boolean is compared by value. An input that is a reference is compared by what it points to, the same as `==` on references, so `&Box { r : &a } == &Box { r : &b }` is `1` when `a` and `b` hold the same number. Any other input is compared by identity.
 - A template's body is run for each instance, so its errors are reported when an instance is built, not when the template is declared.
 
+## This
+
+`this.name` reads a name of the current scope.
+
+- Outside an object body, it reads a variable declared directly in the current scope, so `let x = 1; this.x` is `1`. It does not read a variable declared in an enclosing scope.
+- Inside an object body, it reads a name the object exports with `out`, the same rule as `Name.name` from outside. `this.p` for a name that is not exported is an error.
+
+`this` is a reserved word.
+
 ## Modules
 
 A program can use other modules. Each module is its own source text, loaded by name through `interpretModules`. Within a module, `out let` exports a name, and `in let` declares an input that the importing program passes in.
