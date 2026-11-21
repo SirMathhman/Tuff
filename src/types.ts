@@ -110,6 +110,10 @@ export interface Scope {
   readonly types: Map<string, string>;
   /** Structs declared directly in this scope. */
   readonly structs: Map<string, StructDef>;
+  /** Namespaces declared directly in this scope, each mapping its "out" names to their values. */
+  readonly namespaces: Map<string, ReadonlyMap<string, Value>>;
+  /** The values a namespace body exports with "out let"; undefined for every scope that is not a namespace body. */
+  readonly exports?: Map<string, Value>;
 }
 /** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
 export type HostValue = number | boolean | HostFunction;

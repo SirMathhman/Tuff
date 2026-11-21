@@ -130,8 +130,9 @@ function exportLet(
   parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
 ): Problem | undefined {
   const { scope } = cursor;
-  if (scope.depth !== 0) {
-    return { offset: cursor.pos, expected: '"out" only at the top level of a module' };
+  const exports = scope.exports ?? (scope.depth === 0 ? cursor.exported : undefined);
+  if (exports === undefined) {
+    return { offset: cursor.pos, expected: '"out" only at the top level of a module or namespace' };
   }
   const letStart = cursor.pos;
   cursor.pos += "let".length;
@@ -144,8 +145,7 @@ function exportLet(
   const { vars } = scope;
   const binding = vars.get(exportedName);
   if (binding !== undefined) {
-    const { exported } = cursor;
-    exported.set(exportedName, binding.value);
+    exports.set(exportedName, binding.value);
   }
   return undefined;
 }

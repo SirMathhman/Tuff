@@ -18,6 +18,7 @@ export const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "fn",
   "type",
   "struct",
+  "namespace",
   "extern",
   "declare",
   "expect",

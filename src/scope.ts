@@ -88,9 +88,28 @@ export function newScope(parent?: Scope): Scope {
     functions: new Map(),
     types: new Map(),
     structs: new Map(),
+    namespaces: new Map(),
     parent,
     depth: parent === undefined ? 0 : parent.depth + 1,
   };
+}
+
+/**
+ * Finds a namespace declared in the given scope or the scopes enclosing it.
+ *
+ * @param scope - The innermost scope to search first.
+ * @param name - The namespace name to look up.
+ * @returns The namespace's exported values, or undefined if no namespace with that name is in scope.
+ */
+export function lookupNamespace(scope: Scope, name: string): ReadonlyMap<string, Value> | undefined {
+  for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
+    const { namespaces } = current;
+    const found = namespaces.get(name);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 /**

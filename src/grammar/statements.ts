@@ -1,6 +1,6 @@
 import { err, type Result } from "../result";
 import { peek, peekName, peekStart, peekAfterName, peekCompoundOperator, findTopLevel, type Problem } from "../lexing";
-import { type Cursor, type NamedVariable, type StatementStep, type Value } from "../types";
+import { type Cursor, type NamedVariable, type Scope, type StatementStep, type Value } from "../types";
 import {
   newScope,
   checkStore,
@@ -18,6 +18,7 @@ import { parseDestructuring, parseExternLet } from "../parse/destructure";
 import { parseCallStatement, parseFunctionDeclaration, parseActualFn, parseExpectFn } from "../parse/functions";
 import { RESERVED_WORDS } from "../keywords";
 import { parseStructDeclaration } from "../parse/structs";
+import { parseNamespaceDeclaration } from "../parse/namespaces";
 import { parseCondition, parseExpression, parseFactor, parseFunctionCall } from "./expression";
 import { findVariable, inBreakContext, MAX_LOOP_ITERATIONS, type Grammar } from "./grammar";
 
@@ -104,6 +105,14 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name === "struct" && allowDeclaration) {
     return { matched: true, problem: parseStructDeclaration(text, cursor, RESERVED_WORDS) };
+  }
+  if (name === "namespace" && allowDeclaration) {
+    return {
+      matched: true,
+      problem: parseNamespaceDeclaration(text, cursor, RESERVED_WORDS, (source, position, scope) =>
+        parseStatementsInScope(source, position, scope, grammar),
+      ),
+    };
   }
   if (name === "type" && allowDeclaration) {
     return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };
@@ -441,8 +450,26 @@ function parseStatementIf(text: string, cursor: Cursor, grammar: Grammar): Probl
 export function parseStatementBlock(text: string, cursor: Cursor, grammar: Grammar): Problem | undefined {
   peek(text, cursor);
   cursor.pos++;
+  return parseStatementsInScope(text, cursor, newScope(cursor.scope), grammar);
+}
+
+/**
+ * Parses the statements after an opening brace, running them in the given scope, then the closing brace.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position just after the opening brace, advanced past the closing brace.
+ * @param scope - The scope the statements run in; it is discarded after the closing brace.
+ * @param grammar - The statement entry points.
+ * @returns The first problem found, or undefined if the statements and the closing brace parsed.
+ */
+export function parseStatementsInScope(
+  text: string,
+  cursor: Cursor,
+  scope: Scope,
+  grammar: Grammar,
+): Problem | undefined {
   const outer = cursor.scope;
-  cursor.scope = newScope(outer);
+  cursor.scope = scope;
   const problem = parseStatementList(text, cursor, grammar);
   cursor.scope = outer;
   if (problem !== undefined) {

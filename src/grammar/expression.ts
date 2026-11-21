@@ -18,6 +18,7 @@ import {
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
 import { parseTypeArguments } from "../parse/generics";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
+import { isNamespaceAccess, parseNamespaceMember } from "../parse/namespaces";
 import { callExternal } from "../host";
 import { instantiateFunction, parseVoidBody } from "../parse/functions";
 import { parseArrayLiteral } from "../parse/arrays";
@@ -200,6 +201,9 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
         return err({ offset: start, expected: `type arguments for ${name}, such as ${name}<I32>` });
       }
       return parseValueCall(text, cursor, name, start, callee, grammar);
+    }
+    if (isNamespaceAccess(text, cursor, name)) {
+      return parseNamespaceMember(text, cursor, start, name);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {

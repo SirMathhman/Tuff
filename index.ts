@@ -59,6 +59,7 @@ export function parseStatements(text: string, cursor: Cursor): Problem | undefin
  *   block      := "{" statement* expression "}"
  *   statement  := "let" ["mut"] name "=" expression ";" | name "=" expression ";" | "*" factor "=" expression ";"
  *               | name ("+=" | "-=" | "*=") expression ";"   (numeric variables declared with "let mut")
+ *               | "namespace" name "{" statement* "}"   (only names declared with "out let" are read, as name::member)
  *               | "{" statement* "}"   (a block with no final expression)
  *               | "if" "(" expression ")" statement ["else" statement]   (branches are non-declaration statements)
  *               | "while" "(" expression ")" statement   (re-run until the condition is false, up to a limit)
@@ -67,7 +68,7 @@ export function parseStatements(text: string, cursor: Cursor): Problem | undefin
  *   expression := sum (("==" | "<") sum)*
  *   sum        := term (("+" | "-") term)*
  *   term       := factor ("*" factor)*
- *   factor     := number | "true" | "false" | name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
+ *   factor     := number | "true" | "false" | name | name "::" name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
  *               | "if" "(" expression ")" expression "else" expression
  *
  * Multiplication binds tighter than addition and subtraction, and parentheses
