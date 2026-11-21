@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { interpretTuff } from "../index";
+import { interpretTuff } from "../../index";
 
 test("interpretTuff('struct Point { x : I32, y : I32 } let { x, y } = Point { x : 3, y : 4 }; x + y') => 7", () => {
   expect(interpretTuff("struct Point { x : I32, y : I32 } let { x, y } = Point { x : 3, y : 4 }; x + y")).toEqual({

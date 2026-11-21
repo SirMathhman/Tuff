@@ -36,13 +36,14 @@ import {
   isReference,
   lookupStruct,
   OUTLIVES_MESSAGE,
+  newCursor,
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import { parseExportDeclaration, parseExternValue, parseModuleMember, parseModuleValue } from "./src/parse/imports";
+import { parseExportDeclaration, parseExternValue, parseUnboundName } from "./src/parse/imports";
 import { parseDestructuring } from "./src/parse/destructure";
 import { callHostFunction } from "./src/host";
-import { parseFunctionDeclaration, parseHostVariable } from "./src/parse/functions";
+import { parseCallStatement, parseFunctionDeclaration, parseHostVariable, parseVoidBody } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/parse/arrays";
 import { parsePostfix } from "./src/parse/postfix";
@@ -276,14 +277,17 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       if (fn === undefined) {
         return err({ offset: start, expected: `a function in scope (no "${name}" is defined)` });
       }
+      if (fn.returnType === "Void") {
+        return err({ offset: start, expected: "a value (a Void function has none; call it as a statement)" });
+      }
       return parseCall(text, cursor, name, start, fn);
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
-      if (peek(text, cursor) === ".") {
-        return parseModuleMember(text, cursor, start, name);
-      }
-      return parseModuleValue(cursor, start, name, false);
+      return parseUnboundName(text, cursor, start, name);
+    }
+    if (binding.extern === true && binding.type === undefined) {
+      return err({ offset: start, expected: `a type for extern "${name}" (declare it with extern let ${name} : T)` });
     }
     return parsePostfix(text, cursor, start, binding.value, parseExpression);
   }
@@ -585,6 +589,13 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name === "type" && allowDeclaration) {
     return { matched: true, problem: parseTypeAlias(text, cursor, RESERVED_WORDS) };
+  }
+  if (
+    name !== "" &&
+    peekAfterName(text, cursor, name) === "(" &&
+    lookupFunction(cursor.scope, name)?.returnType === "Void"
+  ) {
+    return { matched: true, problem: parseCallStatement(text, cursor, name, parseCall) };
   }
   if (name !== "" && peekAfterName(text, cursor, name) === "=") {
     return { matched: true, problem: parseAssignment(text, cursor) };
@@ -1346,7 +1357,8 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   cursor.scope = callScope;
   cursor.pos = fn.bodyStart;
   cursor.callDepth++;
-  const body = parseExpression(text, cursor);
+  const body =
+    fn.returnType === "Void" ? parseVoidBody(text, cursor, parseStatementBlock) : parseExpression(text, cursor);
   const endsAtSemicolon = peek(text, cursor) === ";";
   cursor.callDepth--;
   cursor.scope = savedScope;
@@ -1354,34 +1366,15 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
   if (!body.ok) {
     return body;
   }
-  if (!endsAtSemicolon) {
+  if (!endsAtSemicolon && text.charAt(fn.bodyStart) !== "{") {
     return err({ offset: start, expected: `a function body that is a single expression` });
   }
-  const resultProblem = checkDeclaration(body.value, start, savedScope.depth, returnType);
+  const resultProblem =
+    returnType === "Void" ? undefined : checkDeclaration(body.value, start, savedScope.depth, returnType);
   if (resultProblem !== undefined) {
     return err(resultProblem);
   }
   return ok(body.value);
-}
-
-/**
- * Creates the parse state for a source text, with an empty scope and no exports yet.
- *
- * @param hostValues - Values and functions the host supplies.
- * @param modules - Loads imported modules by name.
- * @returns A fresh cursor at the start of the text.
- */
-function newCursor(hostValues: ReadonlyMap<string, HostValue>, modules: ModuleLoader): Cursor {
-  return {
-    pos: 0,
-    scope: newScope(undefined),
-    dead: false,
-    breakable: false,
-    callDepth: 0,
-    hostValues,
-    modules,
-    exported: new Map(),
-  };
 }
 
 /**

@@ -30,11 +30,16 @@ export function parseDestructuring(
   const start = cursor.pos;
   cursor.pos++;
   const names: string[] = [];
+  const externNames = new Set<string>();
   while (peek(text, cursor) !== "}") {
-    if (peekName(text, cursor) === "extern") {
+    const isExtern = peekName(text, cursor) === "extern";
+    if (isExtern) {
       cursor.pos += "extern".length;
     }
     const name = peekName(text, cursor);
+    if (isExtern) {
+      externNames.add(name);
+    }
     if (name === "" || RESERVED_WORDS.has(name)) {
       return { offset: cursor.pos, expected: `a field name or "}"` };
     }
@@ -55,7 +60,14 @@ export function parseDestructuring(
     if (!isStruct(value)) {
       return { offset, expected: `a struct to destructure` };
     }
-    const { fields } = value;
+    const { fields, native } = value;
+    const mismatch = names.find((name) => externNames.has(name) !== (native === true));
+    if (mismatch !== undefined) {
+      return {
+        offset,
+        expected: native === true ? "extern on each field of an extern module" : "no extern on fields of a Tuff module",
+      };
+    }
     const missing = names.find((name) => !fields.has(name));
     if (missing !== undefined) {
       return { offset, expected: `a struct with a field named "${missing}"` };
@@ -73,7 +85,7 @@ export function parseDestructuring(
   for (const name of names) {
     const fieldValue = fields.get(name);
     if (fieldValue !== undefined) {
-      vars.set(name, { value: fieldValue, mutable, depth });
+      vars.set(name, { value: fieldValue, mutable, depth, extern: externNames.has(name) });
     }
   }
   return undefined;

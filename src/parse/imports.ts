@@ -1,4 +1,4 @@
-import { peekName, type Problem } from "../lexing";
+import { peek, peekName, type Problem } from "../lexing";
 import { type Cursor, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
@@ -92,7 +92,7 @@ export function parseModuleValue(
   if (!loaded.ok) {
     return loaded;
   }
-  return ok({ structName: moduleName, fields: loaded.value });
+  return ok({ structName: moduleName, fields: loaded.value, native });
 }
 
 /**
@@ -135,4 +135,21 @@ export function parseExternValue(text: string, cursor: Cursor, start: number): R
   }
   cursor.pos += moduleName.length;
   return parseModuleValue(cursor, start, moduleName, true);
+}
+
+/**
+ * Handles a name that is not a variable: "name.member" reads a Tuff module's export, and a bare name
+ * yields the module as a value.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position after the name.
+ * @param start - Offset of the name, for error reporting.
+ * @param name - The name that is not a variable.
+ * @returns An Ok result with the value, or an Err result with the first problem found.
+ */
+export function parseUnboundName(text: string, cursor: Cursor, start: number, name: string): Result<Value, Problem> {
+  if (peek(text, cursor) === ".") {
+    return parseModuleMember(text, cursor, start, name);
+  }
+  return parseModuleValue(cursor, start, name, false);
 }

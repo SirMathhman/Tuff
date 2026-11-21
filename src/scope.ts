@@ -13,6 +13,8 @@ import {
   type StructValue,
   type StructDef,
   type Param,
+  type HostValue,
+  type ModuleLoader,
 } from "./types";
 import { findTopLevel, type Problem } from "./lexing";
 import { ok, err, type Result } from "./result";
@@ -199,7 +201,7 @@ export function isIntegerType(typeName: string): boolean {
  * @returns True if the name is a declarable type.
  */
 export function isDeclarableType(typeName: string): boolean {
-  return isIntegerType(typeName) || typeName === "Bool";
+  return isIntegerType(typeName) || typeName === "Bool" || typeName === "Void";
 }
 
 /**
@@ -489,4 +491,24 @@ export function valuesEqual(left: Value, right: Value, offset: number): Result<b
     return ok(leftPointee === rightPointee);
   }
   return ok(left === right);
+}
+
+/**
+ * Creates the parse state for a source text, with an empty scope and no exports yet.
+ *
+ * @param hostValues - Values and functions the host supplies.
+ * @param modules - Loads imported modules by name.
+ * @returns A fresh cursor at the start of the text.
+ */
+export function newCursor(hostValues: ReadonlyMap<string, HostValue>, modules: ModuleLoader): Cursor {
+  return {
+    pos: 0,
+    scope: newScope(undefined),
+    dead: false,
+    breakable: false,
+    callDepth: 0,
+    hostValues,
+    modules,
+    exported: new Map(),
+  };
 }

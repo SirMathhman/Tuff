@@ -35,6 +35,8 @@ export interface StructValue {
    * The field values, keyed by field name, in declaration order.
    */
   readonly fields: ReadonlyMap<string, Value>;
+  /** True if the value is a native module; its fields must be destructured with "extern". */
+  readonly native?: boolean;
 }
 /**
  * A struct declared with "struct". Each field has a declared type.
