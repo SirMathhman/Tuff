@@ -495,6 +495,9 @@ export function parseThisMember(text: string, cursor: Cursor, start: number): Re
   if (owner !== undefined && owner.objectBody === true) {
     const { exports: ownerExports } = owner;
     const exported = ownerExports?.get(member);
+    if (exported?.kind === "function") {
+      return err({ offset: start, expected: `a call to "this.${member}()" (a function is called, not read)` });
+    }
     const value = exported === undefined ? undefined : exportedValue(exported);
     if (value === undefined) {
       return err({ offset: start, expected: `a name this object exports (no "${member}" is exported)` });

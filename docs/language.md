@@ -247,6 +247,7 @@ let b = Box { foo : 3 };
 
 - Outside an object body, it reads a variable declared directly in the current scope, so `let x = 1; this.x` is `1`. It does not read a variable declared in an enclosing scope.
 - Inside an object body, including a block nested in the body, it reads a name the object exports with `out`, the same rule as `Name.name` from outside. `this.p` for a name that is not exported is an error.
+- Inside a namespace body, it reads any variable declared directly in that body, including names the namespace does not export. This is intended.
 
 `this` is a reserved word.
 
