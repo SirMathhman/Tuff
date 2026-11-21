@@ -18,3 +18,7 @@ test("a function may name its own return type, and bare this has that struct typ
     value: 1,
   });
 });
+
+test("a function may not take the name of a type alias in its scope", () => {
+  expect(interpretTuff("type Foo = I32; fn Foo() : Foo => 5; Foo()").ok).toBe(false);
+});

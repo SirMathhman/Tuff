@@ -1,4 +1,5 @@
 import { peek, peekName, peekStart, type Problem } from "../lexing";
+import { typeNameClash } from "../scope";
 import { isDeclarableType, fitsIntegerType, lookupStruct, lookupType } from "../scope";
 import { type Cursor, type Scope } from "../types";
 import { err, ok, type Result } from "../result";
@@ -131,6 +132,10 @@ export function parseTypeAlias(text: string, cursor: Cursor, reserved: ReadonlyS
   const name = peekName(text, cursor);
   if (name === "" || reserved.has(name)) {
     return { offset: nameStart, expected: "a type name" };
+  }
+  const clash = typeNameClash(cursor.scope, name);
+  if (clash !== undefined) {
+    return { offset: nameStart, expected: clash };
   }
   cursor.pos += name.length;
   if (peek(text, cursor) !== "=") {

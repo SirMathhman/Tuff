@@ -1,4 +1,5 @@
 import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
+import { functionNameClash } from "../scope";
 import { parseTypeAndSemicolon, parseTypeAnnotation } from "./annotations";
 import { bindTypeParams, newTypeScope, parseTypeParameters, substituteTypeParams } from "./generics";
 import { checkTypedValue, findFunctionBodyEnd, lookup, lookupFunction } from "../scope";
@@ -48,6 +49,10 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
   if (name === "" || RESERVED_WORDS.has(name)) {
     return { offset: cursor.pos, expected: "a function name" };
   }
+  const clash = functionNameClash(cursor.scope, name);
+  if (clash !== undefined) {
+    return { offset: cursor.pos, expected: clash };
+  }
   cursor.pos += name.length;
   let typeParams: string[] = [];
   if (peek(text, cursor) === "<") {
@@ -56,6 +61,9 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
       return parsed.error;
     }
     typeParams = parsed.value;
+  }
+  if (typeParams.includes(name)) {
+    return { offset: declStart, expected: `a type parameter not named like the function "${name}"` };
   }
   const signature = parseSignature(text, cursor, typeParams, name);
   if (!signature.ok) {
@@ -114,7 +122,7 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
  * @param text - The source being parsed.
  * @param cursor - The read position at "(", advanced past the signature.
  * @param typeParams - The function's type parameter names, in order.
- * @param fnName - The function's name; a return type written as this name is the struct its "this" builds.
+ * @param fnName - The function's name, bound as a type alias for itself so a return type may be written as it.
  * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
  */
 function parseSignature(
@@ -124,8 +132,10 @@ function parseSignature(
   fnName: string,
 ): Result<Signature, Problem> {
   const outer = cursor.scope;
-  cursor.scope = newTypeScope(outer, bindTypeParams(typeParams, typeParams));
-  const signature = parseParamsAndReturn(text, cursor, fnName);
+  const bindings = bindTypeParams(typeParams, typeParams);
+  bindings.set(fnName, fnName);
+  cursor.scope = newTypeScope(outer, bindings);
+  const signature = parseParamsAndReturn(text, cursor);
   cursor.scope = outer;
   return signature;
 }
@@ -135,10 +145,9 @@ function parseSignature(
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "(", advanced past the signature.
- * @param fnName - The function's name; a return type written as this name is the struct its "this" builds.
  * @returns An Ok result with the parameters and return type, or an Err result with the first problem found.
  */
-function parseParamsAndReturn(text: string, cursor: Cursor, fnName: string): Result<Signature, Problem> {
+function parseParamsAndReturn(text: string, cursor: Cursor): Result<Signature, Problem> {
   if (peek(text, cursor) !== "(") {
     return err({ offset: cursor.pos, expected: `"("` });
   }
@@ -168,17 +177,11 @@ function parseParamsAndReturn(text: string, cursor: Cursor, fnName: string): Res
   let returnType: string | undefined;
   if (peek(text, cursor) === ":") {
     cursor.pos++;
-    if (peekName(text, cursor) === fnName) {
-      // A function's own name is its return type: the struct its "this" builds.
-      cursor.pos += fnName.length;
-      returnType = fnName;
-    } else {
-      const annotation = parseTypeAnnotation(text, cursor);
-      if (!annotation.ok) {
-        return err(annotation.error);
-      }
-      returnType = annotation.value;
+    const annotation = parseTypeAnnotation(text, cursor);
+    if (!annotation.ok) {
+      return err(annotation.error);
     }
+    returnType = annotation.value;
   }
   return ok({ params, returnType });
 }

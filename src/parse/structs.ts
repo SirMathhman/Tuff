@@ -1,4 +1,5 @@
 import { peek, peekName, peekStart, consumeListSeparator, type Problem } from "../lexing";
+import { typeNameClash } from "../scope";
 import { parseTypeAnnotation } from "./annotations";
 import {
   bindTypeParams,
@@ -78,6 +79,10 @@ export function parseStructDeclaration(
   const name = peekName(text, cursor);
   if (name === "" || reserved.has(name) || isDeclarableType(name)) {
     return { offset: nameStart, expected: "a struct name" };
+  }
+  const clash = typeNameClash(cursor.scope, name);
+  if (clash !== undefined) {
+    return { offset: nameStart, expected: clash };
   }
   cursor.pos += name.length;
   let typeParams: string[] = [];

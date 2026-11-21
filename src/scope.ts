@@ -220,6 +220,37 @@ export function pointeesEqual(left: Value, right: Value): boolean {
 }
 
 /**
+ * Reports why a function cannot take a name, given the structs and type aliases visible from its scope.
+ *
+ * @param scope - The scope the function would be declared in.
+ * @param name - The function name.
+ * @returns The reason the name is taken, or undefined if it may be used.
+ */
+export function functionNameClash(scope: Scope, name: string): string | undefined {
+  if (lookupStruct(scope, name) !== undefined) {
+    return `a function name not already used by a struct in scope`;
+  }
+  if (lookupType(scope, name) !== undefined) {
+    return `a function name not already used by a type in scope`;
+  }
+  return undefined;
+}
+
+/**
+ * Reports why a struct or type alias cannot take a name, given the functions visible from its scope.
+ *
+ * @param scope - The scope the struct or alias would be declared in.
+ * @param name - The struct or alias name.
+ * @returns The reason the name is taken, or undefined if it may be used.
+ */
+export function typeNameClash(scope: Scope, name: string): string | undefined {
+  if (lookupFunction(scope, name) !== undefined) {
+    return `a type name not already used by a function in scope`;
+  }
+  return undefined;
+}
+
+/**
  * Finds a namespace declared in the given scope or the scopes enclosing it.
  *
  * @param scope - The innermost scope to search first.
