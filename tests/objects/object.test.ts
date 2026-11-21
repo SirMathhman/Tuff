@@ -59,3 +59,31 @@ test("references to instances of one template are equal when their inputs are eq
   });
   expect(interpretTuff(`${template}&Singleton { foo : 3 } == &Singleton { foo : 3 }`)).toEqual({ ok: true, value: 1 });
 });
+
+test("a template whose body builds an instance of itself is an error, not a stack overflow", () => {
+  const result = interpretTuff("object B { in let n : I32; out let x = B { n : n }; } B { n : 1 }");
+  expect(result.ok).toBe(false);
+  expect(result.ok ? "" : result.error).toContain("nested within");
+});
+
+test("a template that builds an instance of itself through & is an error, not a stack overflow", () => {
+  const result = interpretTuff("object B { in let n : I32; out let x = B { n : n }; } &B { n : 1 }");
+  expect(result.ok).toBe(false);
+  expect(result.ok ? "" : result.error).toContain("nested within");
+});
+
+test("a template body cannot read a name declared after the template", () => {
+  expect(
+    interpretTuff(
+      "object Box { in let foo : I32; out let d = foo + k; } let k = 10; &Box { foo : 1 } == &Box { foo : 1 }",
+    ).ok,
+  ).toBe(false);
+});
+
+test("references to equal numbers passed as template inputs make equal instances", () => {
+  expect(
+    interpretTuff(
+      "let a = 1; let b = 1; object Box { in let r : &I32; out let d = 1; } &Box { r : &a } == &Box { r : &b }",
+    ),
+  ).toEqual({ ok: true, value: 1 });
+});
