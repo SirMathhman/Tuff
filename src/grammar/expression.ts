@@ -20,7 +20,7 @@ import {
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
 import { parseTypeArguments } from "../parse/generics";
 import { parseExternValue, parseUnboundName, unreadable } from "../parse/imports";
-import { isNamespaceAccess, parseInstance, parseNamespaceMember } from "../parse/namespaces";
+import { isNamespaceAccess, parseInstance, parseNamespaceMember, parseThisMember } from "../parse/namespaces";
 import { callExternal } from "../host";
 import { instantiateFunction, parseVoidBody } from "../parse/functions";
 import { parseArrayLiteral } from "../parse/arrays";
@@ -162,6 +162,9 @@ export function parseFactor(text: string, cursor: Cursor, grammar: Grammar): Res
     cursor.pos += name.length;
     if (name === "true" || name === "false") {
       return ok(name === "true");
+    }
+    if (name === "this") {
+      return parseThisMember(text, cursor, start);
     }
     if (name === "extern") {
       return parseExternValue(text, cursor, start);
