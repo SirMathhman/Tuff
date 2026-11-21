@@ -153,6 +153,50 @@ export function lookupTemplate(scope: Scope, name: string): ObjectTemplate | und
 }
 
 /**
+ * Maximum nesting of function and template calls, so unbounded recursion is reported as an error.
+ */
+export const MAX_CALL_DEPTH = 100;
+
+/**
+ * Copies a scope's declarations into a new scope with the same parent. The copy holds the same bindings, so a
+ * "let mut" variable stays shared with the original, but a name declared in the original afterwards is not visible
+ * in the copy.
+ *
+ * @param scope - The scope to copy.
+ * @returns The copy.
+ */
+export function snapshotScope(scope: Scope): Scope {
+  return {
+    ...scope,
+    vars: new Map(scope.vars),
+    functions: new Map(scope.functions),
+    types: new Map(scope.types),
+    structs: new Map(scope.structs),
+    namespaces: new Map(scope.namespaces),
+    templates: new Map(scope.templates),
+  };
+}
+
+/**
+ * Reports whether two inputs of an object template are equal. A reference is compared by what it points to, the
+ * same as "==" on references; any other value is compared by identity.
+ *
+ * @param left - The input in one instance.
+ * @param right - The input in the other instance.
+ * @returns True if the inputs are equal.
+ */
+function sameInput(left: Value, right: Value): boolean {
+  if (isReference(left) && isReference(right)) {
+    const { target: leftTarget } = left;
+    const { target: rightTarget } = right;
+    const { value: leftValue } = leftTarget;
+    const { value: rightValue } = rightTarget;
+    return pointeesEqual(leftValue, rightValue);
+  }
+  return left === right;
+}
+
+/**
  * Reports whether two values that a pair of references point to are equal under "==". Two instances of the same
  * template are equal when their inputs are equal; any other pair of values is equal only if it is the same value.
  *
@@ -169,7 +213,10 @@ export function pointeesEqual(left: Value, right: Value): boolean {
   if (leftInputs === undefined || rightInputs === undefined || leftInputs.size !== rightInputs.size) {
     return false;
   }
-  return [...leftInputs].every(([name, value]) => rightInputs.get(name) === value);
+  return [...leftInputs].every(([name, value]) => {
+    const right = rightInputs.get(name);
+    return right !== undefined && sameInput(value, right);
+  });
 }
 
 /**

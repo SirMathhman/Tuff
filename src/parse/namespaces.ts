@@ -1,6 +1,16 @@
 import { peek, peekName, peekStart, type Position, type Problem } from "../lexing";
 import { err, ok, type Result } from "../result";
-import { claimNamespace, claimObject, exportedValue, isObject, lookup, lookupNamespace, newScope } from "../scope";
+import {
+  claimNamespace,
+  claimObject,
+  exportedValue,
+  isObject,
+  lookup,
+  lookupNamespace,
+  MAX_CALL_DEPTH,
+  newScope,
+  snapshotScope,
+} from "../scope";
 import {
   type Cursor,
   type Export,
@@ -212,8 +222,11 @@ function parseObjectTemplate(
   if (close < 0) {
     return { offset: open, expected: `"}" ending the object body` };
   }
+  const snapshot = snapshotScope(cursor.scope);
+  const template: ObjectTemplate = { name, scope: snapshot, text, bodyStart: open + 1, parseBody };
+  const { templates: snapshotTemplates } = snapshot;
+  snapshotTemplates.set(name, template);
   const { templates } = cursor.scope;
-  const template: ObjectTemplate = { name, scope: cursor.scope, text, bodyStart: open + 1, parseBody };
   templates.set(name, template);
   cursor.pos = close + 1;
   return undefined;
@@ -282,6 +295,9 @@ export function parseInstance(
   template: ObjectTemplate,
   parseValue: ParseValue,
 ): Result<Value, Problem> {
+  if (cursor.callDepth >= MAX_CALL_DEPTH) {
+    return err({ offset: start, expected: `an object instance nested within ${MAX_CALL_DEPTH} levels` });
+  }
   const inputs = parseModuleInputs(text, cursor, parseValue);
   if (!inputs.ok) {
     return err(inputs.error);
@@ -290,7 +306,15 @@ export function parseInstance(
   const exports = new Map<string, Export>();
   const body: Scope = { ...newScope(template.scope), exports, objectBody: true };
   const inputsUsed = new Set<string>();
-  const bodyCursor: Cursor = { ...cursor, pos: template.bodyStart, scope: body, inputs: inputValues, inputsUsed };
+  const callDepth = cursor.callDepth + 1;
+  const bodyCursor: Cursor = {
+    ...cursor,
+    pos: template.bodyStart,
+    scope: body,
+    inputs: inputValues,
+    inputsUsed,
+    callDepth,
+  };
   const problem = template.parseBody(template.text, bodyCursor, body);
   if (problem !== undefined) {
     return err(problem);

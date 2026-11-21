@@ -238,7 +238,7 @@ let b = Box { foo : 3 };
 ```
 
 - `&Name { ... }` builds an instance and makes a reference to it. The instance lives in the enclosing scope, so the reference may not outlive that scope.
-- Two references to instances of the same template are equal when their inputs are equal. Other references to objects are equal only to the same object.
+- Two references to instances of the same template are equal when their inputs are equal. Other references to objects are equal only to the same object. An input that is a number or boolean is compared by value. An input that is a reference is compared by what it points to, the same as `==` on references, so `&Box { r : &a } == &Box { r : &b }` is `1` when `a` and `b` hold the same number. Any other input is compared by identity.
 - A template's body is run for each instance, so its errors are reported when an instance is built, not when the template is declared.
 
 ## Modules
@@ -279,7 +279,7 @@ An error names what the interpreter found, where it was (line and column), what 
 
 ## Limits
 
-These limits are part of the language. The values are the interpreter's constants `MAX_LOOP_ITERATIONS` and `MAX_CALL_DEPTH`.
+These limits are part of the language. The values are the interpreter's constants `MAX_LOOP_ITERATIONS` and `MAX_CALL_DEPTH`. `MAX_CALL_DEPTH` counts function calls and the instances of object templates built while another is running, so a template that builds itself stops with an error.
 
 - Number literals are non-negative whole numbers.
 - A loop runs at most 10000 times.

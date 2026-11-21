@@ -14,6 +14,7 @@ import {
   isReference,
   lookupStruct,
   lookupTemplate,
+  MAX_CALL_DEPTH,
   OUTLIVES_MESSAGE,
 } from "../scope";
 import { parseNumberSuffix, parseTypeAnnotation } from "../parse/annotations";
@@ -26,11 +27,6 @@ import { parseArrayLiteral } from "../parse/arrays";
 import { parsePostfix } from "../parse/postfix";
 import { parseStructLiteral } from "../parse/structs";
 import { findVariable, inBreakContext, MAX_LOOP_ITERATIONS, type Grammar } from "./grammar";
-
-/**
- * Maximum nesting of function calls, so unbounded recursion is reported as an error.
- */
-const MAX_CALL_DEPTH = 100;
 
 /**
  * Parses an expression: sums compared with "==" or "<". The comparison yields 1 when
