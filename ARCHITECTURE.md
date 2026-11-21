@@ -41,7 +41,7 @@ Invariants:
 5. A name bound to a variable in any enclosing scope is never read as a generic struct or generic function. A `<` after it is a comparison.
 6. A name followed by `::` is resolved in this order: a namespace in scope, then a module path (`foo::lib`, see `src/parse/imports.ts`). A namespace in scope therefore shadows a module path that begins with the same name, and it is never read as a variable.
 7. A namespace's exports are fixed when its body finishes. They are the values of the names at that point, not live bindings, and nothing can assign to them from outside.
-8. A name is declared at most once in a scope, whether as a variable, a function, a struct, a type alias, or a namespace. A second declaration is an error, not a shadow. (Shadowing across nested scopes stays allowed.)
+8. A variable and a namespace cannot share a name in the same scope, in either order; the second declaration is an error, not a shadow. (Shadowing across nested scopes stays allowed.) Other kinds of declaration are not yet checked for duplicates; see Future Work.
 
 ## Structure
 
@@ -103,7 +103,7 @@ The file count limit (10 files per directory, `scripts/check-file-count.js`) app
 
 - **Exponential re-parsing of untaken branches.** Nested statement-level `if` branches are parsed twice (once to skip the dead branch, once to evaluate it) with dry runs (`dryRunStatementIf`, `skipStatementBranch`). Measured: nested depth 8 takes about 0.2 s, depth 12 takes about 55 s. A branch should be parsed once, with the dead flag controlling evaluation only.
 - **Stringly typed types.** Types are strings that are built, compared, and rewritten. `substituteTypeParams` (src/parse/generics.ts) substitutes type parameters by applying a regular expression to a type string, and both generic structs (`instantiateFields`, src/parse/structs.ts) and generic functions (`instantiateFunction`, src/parse/functions.ts) depend on it. This is correct only while every type string is canonical and no name is both a type parameter and part of another name in the same string. A structured type is needed.
-- **Namespace names shadow silently.** A `namespace foo` declared in a scope where `foo` is already a variable is accepted, and `foo::x` then reads the namespace. Invariant 8 is not yet enforced. A namespace also shadows a module path with the same first segment (Invariant 6), so a program that imports `foo::lib` after declaring `namespace foo` gets a namespace error, not a module load.
+- **Namespace names shadow module paths.** A namespace shadows a module path with the same first segment (Invariant 6), so a program that imports `foo::lib` after declaring `namespace foo` gets a namespace error, not a module load.
 - **Namespace bodies are copies.** The exports are snapshots taken at `out`. This is correct while nothing can assign through `Name::member`, but it would become a surprise if assignment to exports were ever added.
 - **Near-limit directories.** `tests/` contains 10 files, which is the maximum; the next test file in that directory fails `bun run files`.
 - **Host exceptions escape the interpreter.** Host functions are JavaScript and can throw. Nothing in `src/host.ts` catches them, so a throwing host function escapes `interpretTuff` instead of becoming a `Problem`. The boundary should convert host exceptions to structured errors.
@@ -117,7 +117,7 @@ See [docs/security.md](docs/security.md).
 - **Structured types.** Replace type strings with a discriminated union (`IntType`, `BoolType`, `ArrayType`, `ReferenceType`, `StructInstance` with a name and type arguments). Canonical names are derived from the union for display only. Substitution of type parameters becomes a structural map, not a regex.
 - **Single evaluation per branch.** Parse each branch once, with a dead flag. Remove the dry-run functions.
 - **Generic type aliases,** using the same type arguments as generic structs.
-- **Unique names per scope.** Enforce Invariant 8 when a declaration of any kind is added to a scope, with a structured error that names the earlier declaration.
+- **Unique names per scope.** Extend Invariant 8 to every kind of declaration (functions, structs, type aliases, and each other), with a structured error that names the earlier declaration.
 - **Structured errors.** Replace the string returned by `interpretTuff` with an error enum that carries the `Problem` and the module name, so hosts can act on the error without parsing text.
 - **Resource budgets.** A single step budget per `interpretTuff` call that counts parsed tokens and loop iterations, so nested loops cannot multiply the limits.
 

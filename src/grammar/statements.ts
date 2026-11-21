@@ -510,6 +510,10 @@ function parseDeclaration(text: string, cursor: Cursor, grammar: Grammar): Probl
   if (name === "" || RESERVED_WORDS.has(name)) {
     return { offset: cursor.pos, expected: "a variable name" };
   }
+  const { namespaces: namespacesHere } = cursor.scope;
+  if (namespacesHere.has(name)) {
+    return { offset: cursor.pos, expected: `a variable name not already used by a namespace in this scope` };
+  }
   cursor.pos += name.length;
   let type: string | undefined;
   if (peek(text, cursor) === ":") {

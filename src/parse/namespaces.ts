@@ -34,6 +34,10 @@ export function parseNamespaceDeclaration(
   if (namespaces.has(name)) {
     return { offset: nameStart, expected: `a namespace name not already declared in this scope` };
   }
+  const { vars } = outer;
+  if (vars.has(name)) {
+    return { offset: nameStart, expected: `a namespace name not already used by a variable in this scope` };
+  }
   if (peek(text, cursor) !== "{") {
     return { offset: cursor.pos, expected: `"{"` };
   }
