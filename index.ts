@@ -49,7 +49,7 @@ import {
 } from "./src/parse/imports";
 import { parseDestructuring, parseExternLet } from "./src/parse/destructure";
 import { callExternal } from "./src/host";
-import { parseCallStatement, parseFunctionDeclaration, parseVoidBody } from "./src/parse/functions";
+import { parseCallStatement, parseFunctionDeclaration, parseInput, parseVoidBody } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/parse/arrays";
 import { parsePostfix } from "./src/parse/postfix";
@@ -117,7 +117,7 @@ function parseProgram(
   hostValues: ReadonlyMap<string, HostValue>,
   modules: ModuleLoader,
 ): Result<number | boolean, Problem> {
-  const cursor = newCursor(hostValues, modules);
+  const cursor = newCursor(hostValues, modules, new Map());
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;
@@ -290,7 +290,7 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
     }
     const binding = lookup(cursor.scope, name);
     if (binding === undefined) {
-      return parseUnboundName(text, cursor, start, name);
+      return parseUnboundName(text, cursor, start, name, parseExpression);
     }
     const problem = unreadable(binding, start, name);
     if (problem !== undefined) {
@@ -549,7 +549,7 @@ function parseBlockBody(text: string, cursor: Cursor): Result<Value, Problem> {
  * @param cursor - The read position, advanced past the statements.
  * @returns The first problem found, or undefined if all statements parsed.
  */
-function parseStatements(text: string, cursor: Cursor): Problem | undefined {
+export function parseStatements(text: string, cursor: Cursor): Problem | undefined {
   hoistFunctions(text, cursor, parseFunctionDeclaration);
   while (true) {
     const step = parseOneStatement(text, cursor, true);
@@ -576,6 +576,9 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "in" && allowDeclaration) {
+    return { matched: true, problem: parseInput(text, cursor) };
   }
   if (name === "out" && allowDeclaration) {
     return { matched: true, problem: parseExportDeclaration(text, cursor, parseDeclaration) };
@@ -1373,25 +1376,4 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err(resultProblem);
   }
   return ok(body.value);
-}
-
-/**
- * Interprets a module: its declarations and statements, with no final expression. Returns the
- * values it exports with "out let".
- *
- * @param source - The module's source text.
- * @param modules - Loads the modules this one imports by name.
- * @returns An Ok result with the exported values, or an Err result describing the first problem.
- */
-export function interpretModule(source: string, modules: ModuleLoader): Result<ReadonlyMap<string, Value>, string> {
-  const cursor = newCursor(new Map(), modules);
-  const problem = parseStatements(source, cursor);
-  if (problem !== undefined) {
-    return err(describeUnsupported(source, problem));
-  }
-  skipSpaces(source, cursor);
-  if (cursor.pos < source.length) {
-    return err(describeUnsupported(source, { offset: cursor.pos, expected: "a declaration or the end of the module" }));
-  }
-  return ok(cursor.exported);
 }

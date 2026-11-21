@@ -5,16 +5,8 @@ test('interpretModules(["main"], { main: "1" }) => 1', () => {
   expect(interpretModules(["main"], new Map([["main", "1"]]))).toEqual({ ok: true, value: 1 });
 });
 
-test("interpretModules returns the value of the last entry", () => {
-  expect(
-    interpretModules(
-      ["a", "main"],
-      new Map([
-        ["a", "2"],
-        ["main", "1"],
-      ]),
-    ),
-  ).toEqual({ ok: true, value: 1 });
+test('interpretModules(["parent", "main"]) runs the module keyed "parent/main"', () => {
+  expect(interpretModules(["parent", "main"], new Map([["parent/main", "1"]]))).toEqual({ ok: true, value: 1 });
 });
 
 test("interpretModules with an unknown module is an error", () => {

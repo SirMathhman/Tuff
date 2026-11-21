@@ -287,3 +287,50 @@ export function parseDeclare(text: string, cursor: Cursor): Problem | undefined 
   }
   return { offset: cursor.pos, expected: '"let" or "fn" after "declare"' };
 }
+
+/**
+ * Parses "in let name : Type;", an input to a module. Its value is passed when the module is instantiated
+ * as "module { name : value }".
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "in", advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseInput(text: string, cursor: Cursor): Problem | undefined {
+  const declStart = cursor.pos;
+  cursor.pos += "in".length;
+  if (peekName(text, cursor) !== "let") {
+    return { offset: cursor.pos, expected: '"let" after "in"' };
+  }
+  cursor.pos += "let".length;
+  const name = peekName(text, cursor);
+  if (name === "" || RESERVED_WORDS.has(name)) {
+    return { offset: cursor.pos, expected: "an input name" };
+  }
+  cursor.pos += name.length;
+  if (peek(text, cursor) !== ":") {
+    return { offset: cursor.pos, expected: `":" and a type for input "${name}"` };
+  }
+  cursor.pos++;
+  const annotation = parseTypeAndSemicolon(text, cursor);
+  if (!annotation.ok) {
+    return annotation.error;
+  }
+  const { scope } = cursor;
+  if (scope.depth !== 0) {
+    return { offset: declStart, expected: '"in" only at the top level of a module' };
+  }
+  const { inputs, inputsUsed } = cursor;
+  const value = inputs.get(name);
+  if (value === undefined) {
+    return { offset: declStart, expected: `a value passed for input "${name}"` };
+  }
+  const problem = checkTypedValue(value, declStart, annotation.value);
+  if (problem !== undefined) {
+    return problem;
+  }
+  const { vars } = scope;
+  vars.set(name, { value, mutable: false, depth: scope.depth, type: annotation.value });
+  inputsUsed.add(name);
+  return undefined;
+}

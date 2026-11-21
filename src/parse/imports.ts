@@ -1,7 +1,10 @@
-import { peek, peekName, type Problem } from "../lexing";
+import { consumeListSeparator, peek, peekName, type Problem } from "../lexing";
 import { type Binding, type Cursor, type ModuleExports, type Value } from "../types";
 import { parseDeclare, parseHostVariable } from "./functions";
 import { err, ok, type Result } from "../result";
+
+/** Parses one value from the cursor, such as a module input. */
+type ParseValue = (text: string, cursor: Cursor) => Result<Value, Problem>;
 
 /**
  * Parses ".name" after a module name, and yields the value the module exports under that name.
@@ -24,7 +27,7 @@ export function parseModuleMember(
     return err({ offset: cursor.pos, expected: `a name exported by module "${moduleName}"` });
   }
   cursor.pos += member.length;
-  const loaded = loadExports(cursor, start, moduleName, false);
+  const loaded = loadExports(cursor, start, moduleName, false, new Map());
   if (!loaded.ok) {
     return loaded;
   }
@@ -88,6 +91,7 @@ export function parseExportDeclaration(
  * @param start - Offset of the module name, for error reporting.
  * @param moduleName - The name the source used for the module.
  * @param native - True if the name was written with "extern" and refers to a native module.
+ * @param inputs - The values passed to the module, by input name; empty for no inputs.
  * @returns An Ok result with the module value, or an Err result if no module with that name loads.
  */
 export function parseModuleValue(
@@ -95,8 +99,9 @@ export function parseModuleValue(
   start: number,
   moduleName: string,
   native: boolean,
+  inputs: ReadonlyMap<string, Value>,
 ): Result<Value, Problem> {
-  const loaded = loadExports(cursor, start, moduleName, native);
+  const loaded = loadExports(cursor, start, moduleName, native, inputs);
   if (!loaded.ok) {
     return loaded;
   }
@@ -111,6 +116,7 @@ export function parseModuleValue(
  * @param start - Offset of the module name, for error reporting.
  * @param moduleName - The name the source used for the module.
  * @param native - True if the name refers to a native module rather than a Tuff module.
+ * @param inputs - The values passed to the module, by input name.
  * @returns An Ok result with the exported values, or an Err result with the first problem found.
  */
 function loadExports(
@@ -118,8 +124,9 @@ function loadExports(
   start: number,
   moduleName: string,
   native: boolean,
+  inputs: ReadonlyMap<string, Value>,
 ): Result<ModuleExports, Problem> {
-  const loaded = cursor.modules(moduleName, native);
+  const loaded = cursor.modules(moduleName, native, inputs);
   if (loaded === undefined) {
     return err({ offset: start, expected: `a variable or module in scope (no "${moduleName}" is defined)` });
   }
@@ -143,7 +150,7 @@ export function parseExternValue(text: string, cursor: Cursor, start: number): R
     return err({ offset: cursor.pos, expected: `a module name after "extern"` });
   }
   cursor.pos += moduleName.length;
-  return parseModuleValue(cursor, start, moduleName, true);
+  return parseModuleValue(cursor, start, moduleName, true, new Map());
 }
 
 /**
@@ -154,13 +161,90 @@ export function parseExternValue(text: string, cursor: Cursor, start: number): R
  * @param cursor - The read position after the name.
  * @param start - Offset of the name, for error reporting.
  * @param name - The name that is not a variable.
+ * @param parseValue - Parses a module input value.
  * @returns An Ok result with the value, or an Err result with the first problem found.
  */
-export function parseUnboundName(text: string, cursor: Cursor, start: number, name: string): Result<Value, Problem> {
-  if (peek(text, cursor) === ".") {
-    return parseModuleMember(text, cursor, start, name);
+export function parseUnboundName(
+  text: string,
+  cursor: Cursor,
+  start: number,
+  name: string,
+  parseValue: ParseValue,
+): Result<Value, Problem> {
+  const path = readModulePath(text, cursor, name);
+  if (peek(text, cursor) === "{") {
+    const inputs = parseModuleInputs(text, cursor, parseValue);
+    if (!inputs.ok) {
+      return inputs;
+    }
+    return parseModuleValue(cursor, start, path, false, inputs.value);
   }
-  return parseModuleValue(cursor, start, name, false);
+  if (peek(text, cursor) === ".") {
+    return parseModuleMember(text, cursor, start, path);
+  }
+  return parseModuleValue(cursor, start, path, false, new Map());
+}
+
+/**
+ * Parses "{ name : value, ... }" after a module name: the inputs passed to that module.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "{", advanced past the inputs.
+ * @param parseValue - Parses an input's value.
+ * @returns An Ok result with the inputs, or an Err result with the first problem found.
+ */
+function parseModuleInputs(
+  text: string,
+  cursor: Cursor,
+  parseValue: ParseValue,
+): Result<ReadonlyMap<string, Value>, Problem> {
+  cursor.pos++;
+  const inputs = new Map<string, Value>();
+  while (peek(text, cursor) !== "}") {
+    const name = peekName(text, cursor);
+    if (name === "") {
+      return err({ offset: cursor.pos, expected: 'an input name or "}"' });
+    }
+    cursor.pos += name.length;
+    if (peek(text, cursor) !== ":") {
+      return err({ offset: cursor.pos, expected: `":" after input "${name}"` });
+    }
+    cursor.pos++;
+    const value = parseValue(text, cursor);
+    if (!value.ok) {
+      return value;
+    }
+    inputs.set(name, value.value);
+    const separator = consumeListSeparator(text, cursor, "}");
+    if (separator !== undefined) {
+      return err(separator);
+    }
+  }
+  cursor.pos++;
+  return ok(inputs);
+}
+
+/**
+ * Reads the rest of a module path written as "foo::bar::baz", after its first segment. The segments are
+ * joined with "/", which is how a module's source is keyed.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position just after the first segment, advanced past the rest of the path.
+ * @param first - The first segment, already read.
+ * @returns The module path, such as "foo/bar".
+ */
+function readModulePath(text: string, cursor: Cursor, first: string): string {
+  let path = first;
+  while (text.startsWith("::", cursor.pos)) {
+    cursor.pos += 2;
+    const segment = peekName(text, cursor);
+    if (segment === "") {
+      break;
+    }
+    cursor.pos += segment.length;
+    path = path + "/" + segment;
+  }
+  return path;
 }
 
 /**

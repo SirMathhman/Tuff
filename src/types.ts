@@ -168,6 +168,10 @@ export interface Cursor {
   readonly modules: ModuleLoader;
   /** The values this module exports with "out let", keyed by name. */
   readonly exported: Map<string, Value>;
+  /** The values passed to this module as inputs, by name. */
+  readonly inputs: ReadonlyMap<string, Value>;
+  /** The inputs this module declared with "in let". */
+  readonly inputsUsed: Set<string>;
 }
 /** A module's exported values, plus a live reader for a native module's current host values. */
 export interface ModuleExports {
@@ -177,7 +181,11 @@ export interface ModuleExports {
   readonly live?: LiveRead;
 }
 /** Finds a module by name and returns its exports, or an error if it fails to load. */
-export type ModuleLoader = (name: string, native: boolean) => Result<ModuleExports, string> | undefined;
+export type ModuleLoader = (
+  name: string,
+  native: boolean,
+  inputs: ReadonlyMap<string, Value>,
+) => Result<ModuleExports, string> | undefined;
 /**
  * The value a "break" produced, which ends the enclosing loop.
  */
