@@ -1,4 +1,4 @@
-import { peek, peekName, consumeListSeparator, type Problem } from "../lexing";
+import { peek, peekAfterName, peekName, consumeListSeparator, type Problem } from "../lexing";
 import { checkDeclaration, isStruct } from "../scope";
 import { RESERVED_WORDS } from "../keywords";
 import { type Binding, type Cursor, type HostValue, type Value } from "../types";
@@ -19,6 +19,7 @@ type Initializer = (
  * @param cursor - The read position at "{", advanced past the declaration.
  * @param mutable - True if the bindings were declared with "let mut".
  * @param parseInitializer - Parses the "= expression;" part and checks the value.
+ * @param allExtern - True if every name is extern, as in "extern let { ... } = ...".
  * @returns The first problem found, or undefined if the declaration parsed.
  */
 export function parseDestructuring(
@@ -26,6 +27,7 @@ export function parseDestructuring(
   cursor: Cursor,
   mutable: boolean,
   parseInitializer: Initializer,
+  allExtern: boolean,
 ): Problem | undefined {
   const start = cursor.pos;
   cursor.pos++;
@@ -45,6 +47,9 @@ export function parseDestructuring(
     }
     cursor.pos += name.length;
     names.push(name);
+    if (allExtern) {
+      externNames.add(name);
+    }
     const separator = consumeListSeparator(text, cursor, "}");
     if (separator !== undefined) {
       return separator;
@@ -130,4 +135,24 @@ function liveBinding(
     });
   }
   return binding;
+}
+
+/**
+ * Parses what follows "extern let": a pattern, "{ names } = expression;", whose names are all extern.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "let", advanced past the declaration.
+ * @param parseInitializer - Parses the "= expression;" part and checks the value.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseExternLet(text: string, cursor: Cursor, parseInitializer: Initializer): Problem | undefined {
+  if (peekName(text, cursor) !== "let") {
+    return { offset: cursor.pos, expected: '"let" after "extern"' };
+  }
+  if (peekAfterName(text, cursor, "let") !== "{") {
+    return { offset: cursor.pos, expected: 'a pattern after "extern let" (use "declare let" for one name)' };
+  }
+  cursor.pos += "let".length;
+  peek(text, cursor);
+  return parseDestructuring(text, cursor, false, parseInitializer, true);
 }

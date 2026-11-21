@@ -92,33 +92,33 @@ test("interpretTuff('let x : Bool = get(); fn get() => 1; x') is an error: get r
   expect(interpretTuff("let x : Bool = get(); fn get() => 1; x").ok).toBe(false);
 });
 
-test("interpretTuff('extern let foo : I32; foo') with host foo => 1", () => {
-  expect(interpretTuff("extern let foo : I32; foo", new Map<string, HostValue>([["foo", 1]]))).toEqual({
+test("interpretTuff('declare let foo : I32; foo') with host foo => 1", () => {
+  expect(interpretTuff("declare let foo : I32; foo", new Map<string, HostValue>([["foo", 1]]))).toEqual({
     ok: true,
     value: 1,
   });
 });
 
 test("interpretTuff host value missing is an error", () => {
-  expect(interpretTuff("extern let foo : I32; foo").ok).toBe(false);
+  expect(interpretTuff("declare let foo : I32; foo").ok).toBe(false);
 });
 
 test("interpretTuff host value of the wrong type is an error", () => {
-  expect(interpretTuff("extern let foo : I32; foo", new Map<string, HostValue>([["foo", true]])).ok).toBe(false);
+  expect(interpretTuff("declare let foo : I32; foo", new Map<string, HostValue>([["foo", true]])).ok).toBe(false);
 });
 
 test("interpretTuff host value cannot be reassigned", () => {
-  expect(interpretTuff("extern let foo : I32; foo = 2; foo", new Map<string, HostValue>([["foo", 1]])).ok).toBe(false);
+  expect(interpretTuff("declare let foo : I32; foo = 2; foo", new Map<string, HostValue>([["foo", 1]])).ok).toBe(false);
 });
 
-test("interpretTuff('extern fn get() : I32; get()') with host get => 1", () => {
-  expect(interpretTuff("extern fn get() : I32; get()", new Map([["get", () => 1]]))).toEqual({ ok: true, value: 1 });
+test("interpretTuff('declare fn get() : I32; get()') with host get => 1", () => {
+  expect(interpretTuff("declare fn get() : I32; get()", new Map([["get", () => 1]]))).toEqual({ ok: true, value: 1 });
 });
 
 test("interpretTuff host function receives its arguments", () => {
   expect(
     interpretTuff(
-      "extern fn add(a : I32, b : I32) : I32; add(2, 3)",
+      "declare fn add(a : I32, b : I32) : I32; add(2, 3)",
       new Map<string, HostFunction>([["add", (first, second) => Number(first) + Number(second)]]),
     ),
   ).toEqual({
@@ -128,11 +128,11 @@ test("interpretTuff host function receives its arguments", () => {
 });
 
 test("interpretTuff host function without a provided implementation is an error", () => {
-  expect(interpretTuff("extern fn get() : I32; get()").ok).toBe(false);
+  expect(interpretTuff("declare fn get() : I32; get()").ok).toBe(false);
 });
 
 test("interpretTuff host function result of the wrong type is an error", () => {
-  expect(interpretTuff("extern fn get() : I32; get()", new Map([["get", () => true]])).ok).toBe(false);
+  expect(interpretTuff("declare fn get() : I32; get()", new Map([["get", () => true]])).ok).toBe(false);
 });
 
 test("interpretTuff function without a body must be declared with in", () => {

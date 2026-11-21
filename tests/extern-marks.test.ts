@@ -4,9 +4,9 @@ import { type HostValue } from "../src/types";
 
 const native = new Map<string, ReadonlyMap<string, HostValue>>([["lib", new Map<string, HostValue>([["x", 2]])]]);
 
-test('interpretModules(["main"], { main: "let { x } = extern lib; extern let x : I32; x" }, native lib) is an error: fields of an extern module need extern', () => {
+test('interpretModules(["main"], { main: "let { x } = extern lib; declare let x : I32; x" }, native lib) is an error: fields of an extern module need extern', () => {
   expect(
-    interpretModules(["main"], new Map([["main", "let { x } = extern lib; extern let x : I32; x"]]), native).ok,
+    interpretModules(["main"], new Map([["main", "let { x } = extern lib; declare let x : I32; x"]]), native).ok,
   ).toBe(false);
 });
 

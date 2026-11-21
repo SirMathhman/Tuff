@@ -12,7 +12,7 @@ test("two typed externs of the same name in one scope is still an error", () => 
   expect(
     interpretModules(
       ["main"],
-      new Map([["main", "let { extern x } = extern lib; extern let x : I32; extern let x : I32; x"]]),
+      new Map([["main", "let { extern x } = extern lib; declare let x : I32; declare let x : I32; x"]]),
       native,
     ).ok,
   ).toBe(false);

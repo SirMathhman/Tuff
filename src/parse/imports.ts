@@ -1,5 +1,6 @@
 import { peek, peekName, type Problem } from "../lexing";
 import { type Binding, type Cursor, type ModuleExports, type Value } from "../types";
+import { parseDeclare, parseHostVariable } from "./functions";
 import { err, ok, type Result } from "../result";
 
 /**
@@ -50,17 +51,24 @@ export function parseExportDeclaration(
 ): Problem | undefined {
   const { scope } = cursor;
   if (scope.depth !== 0) {
-    return { offset: cursor.pos, expected: `"out" only at the top level of a module` };
+    return { offset: cursor.pos, expected: '"out" only at the top level of a module' };
+  }
+  const declared = peekName(text, cursor) === "declare";
+  if (declared) {
+    cursor.pos += "declare".length;
+  }
+  if (peekName(text, cursor) !== "out") {
+    return { offset: cursor.pos, expected: '"out" after "declare"' };
   }
   cursor.pos += "out".length;
   if (peekName(text, cursor) !== "let") {
-    return { offset: cursor.pos, expected: `"let" after "out"` };
+    return { offset: cursor.pos, expected: '"let" after "out"' };
   }
   const letStart = cursor.pos;
   cursor.pos += "let".length;
   const exportedName = peekName(text, cursor);
   cursor.pos = letStart;
-  const problem = parseDeclaration(text, cursor);
+  const problem = declared ? parseHostVariable(text, cursor) : parseDeclaration(text, cursor);
   if (problem !== undefined) {
     return problem;
   }
@@ -169,7 +177,28 @@ export function unreadable(binding: Binding, start: number, name: string): Probl
     return { offset: start, expected: `a call to extern function "${name}" (it cannot be read as a value)` };
   }
   if (binding.extern === true && binding.type === undefined) {
-    return { offset: start, expected: `a type for extern "${name}" (declare it with extern let ${name} : T)` };
+    return { offset: start, expected: `a type for extern "${name}" (declare it with declare let ${name} : T)` };
   }
   return undefined;
+}
+
+/**
+ * Parses a statement that starts with "declare": "declare out let ..." exports a declared value, and
+ * "declare let" or "declare fn" declare a single name.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "declare", advanced past the declaration.
+ * @param parseDeclaration - Parses a "let" declaration, for plain "out let".
+ * @returns The first problem found, or undefined if the statement parsed.
+ */
+export function parseDeclareStatement(
+  text: string,
+  cursor: Cursor,
+  parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
+): Problem | undefined {
+  const start = cursor.pos;
+  cursor.pos += "declare".length;
+  const next = peekName(text, cursor);
+  cursor.pos = start;
+  return next === "out" ? parseExportDeclaration(text, cursor, parseDeclaration) : parseDeclare(text, cursor);
 }

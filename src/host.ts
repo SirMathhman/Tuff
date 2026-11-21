@@ -1,6 +1,6 @@
 import { type Problem } from "./lexing";
-import { checkTypedValue } from "./scope";
-import { type FunctionDef, type HostFunction, type Value } from "./types";
+import { checkTypedValue, isSuppressed } from "./scope";
+import { type Cursor, type FunctionDef, type HostFunction, type Value } from "./types";
 import { err, ok, type Result } from "./result";
 
 /**
@@ -35,4 +35,31 @@ export function callHostFunction(
   }
   const problem = checkTypedValue(result, start, returnType);
   return problem === undefined ? ok(result) : err(problem);
+}
+
+/**
+ * Calls an extern function from a call expression. A call in a branch that is not taken does nothing.
+ *
+ * @param cursor - The parse state.
+ * @param name - The function's name, for error reporting.
+ * @param start - Offset of the call, for error reporting.
+ * @param args - The argument values.
+ * @param fn - The extern declaration being called.
+ * @returns An Ok result with the host's result (or a placeholder for a Void call), or an Err result.
+ */
+export function callExternal(
+  cursor: Cursor,
+  name: string,
+  start: number,
+  args: readonly Value[],
+  fn: FunctionDef,
+): Result<Value, Problem> {
+  if (isSuppressed(cursor)) {
+    return ok(0);
+  }
+  const { host } = fn;
+  if (host === undefined) {
+    return err({ offset: start, expected: 'a host function named "' + name + '" to be provided' });
+  }
+  return callHostFunction(host, args, start, fn);
 }

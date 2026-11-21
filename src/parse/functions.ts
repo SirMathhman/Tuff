@@ -13,7 +13,7 @@ type CallParser = (
   start: number,
   fn: FunctionDef,
 ) => Result<Value, Problem>;
-/** The parsed signature of a function declared with "extern fn". */
+/** The parsed signature of a function declared with "declare fn". */
 interface HostSignature {
   /** The function name. */
   readonly name: string;
@@ -102,7 +102,7 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
 }
 
 /**
- * Declares a function whose body the host supplies, written "extern fn name(params) : Type;".
+ * Declares a function whose body the host supplies, written "declare fn name(params) : Type;".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at the ";" after the signature, advanced past it.
@@ -111,8 +111,8 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
  */
 function declareHostFunction(text: string, cursor: Cursor, signature: HostSignature): Problem | undefined {
   const { name, params, returnType, declStart } = signature;
-  if (!precededByExtern(text, declStart)) {
-    return { offset: cursor.pos, expected: `"=>" and a body (a function without one is declared with "extern fn")` };
+  if (!precededByDeclare(text, declStart)) {
+    return { offset: cursor.pos, expected: `"=>" and a body (a function without one is declared with "declare fn")` };
   }
   if (returnType === undefined) {
     return { offset: declStart, expected: `a return type for host function "${name}"` };
@@ -137,14 +137,14 @@ function declareHostFunction(text: string, cursor: Cursor, signature: HostSignat
  * @param declStart - Offset of the declaration keyword.
  * @returns True if "extern" is the word before the declaration.
  */
-function precededByExtern(text: string, declStart: number): boolean {
+function precededByDeclare(text: string, declStart: number): boolean {
   const before = text.slice(0, declStart).trimEnd();
-  const charBefore = before.charAt(before.length - "extern".length - 1);
-  return before.endsWith("extern") && !/[A-Za-z0-9_]/.test(charBefore);
+  const charBefore = before.charAt(before.length - "declare".length - 1);
+  return before.endsWith("declare") && !/[A-Za-z0-9_]/.test(charBefore);
 }
 
 /**
- * Declares a variable whose value the host supplies, written "extern let name : Type;".
+ * Declares a variable whose value the host supplies, written "declare let name : Type;".
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at "let", advanced past the declaration.
@@ -266,4 +266,24 @@ export function parseCallStatement(
   }
   cursor.pos++;
   return undefined;
+}
+
+/**
+ * Parses what follows "declare": "let name : Type;" for a value or "fn name(params) : Type;" for a function,
+ * both supplied by an earlier extern binding or by the host.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "declare", advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseDeclare(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "declare".length;
+  const keyword = peekName(text, cursor);
+  if (keyword === "let") {
+    return parseHostVariable(text, cursor);
+  }
+  if (keyword === "fn") {
+    return parseFunctionDeclaration(text, cursor);
+  }
+  return { offset: cursor.pos, expected: '"let" or "fn" after "declare"' };
 }

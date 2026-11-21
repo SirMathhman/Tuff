@@ -66,7 +66,7 @@ export function interpretModules(
 
 /**
  * Exposes a native JavaScript module. Numbers and booleans are readable values, and read live from the host;
- * functions are reached through "extern fn".
+ * functions are reached through "declare fn".
  *
  * @param hostModules - The native modules the host supplies, keyed by name.
  * @param name - The module name.

@@ -64,7 +64,7 @@ export interface ArrayValue {
  * A variable's current value and whether it may be reassigned.
  */
 export interface Binding {
-  /** True if the binding was made by an "extern let" declaration. */
+  /** True if the binding was made by an "declare let" declaration. */
   readonly extern?: boolean;
   /** For an extern function: the host's implementation, called by name. */
   readonly host?: HostFunction;
@@ -131,7 +131,7 @@ export interface FunctionDef {
   readonly bodyEnd: number;
   /** The scope the function was declared in. */
   readonly scope: Scope;
-  /** True if the function was declared with "extern fn" and its body is supplied by the host. */
+  /** True if the function was declared with "declare fn" and its body is supplied by the host. */
   readonly external: boolean;
   /** For an extern function: the host's implementation. */
   readonly host?: HostFunction;

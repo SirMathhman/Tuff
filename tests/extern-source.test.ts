@@ -9,7 +9,7 @@ test("extern lib reads the native module, not the Tuff module of the same name",
     interpretModules(
       ["main"],
       new Map([
-        ["main", "let { extern x } = extern lib; extern let x : I32; x"],
+        ["main", "let { extern x } = extern lib; declare let x : I32; x"],
         ["lib", "out let x = 1;"],
       ]),
       native,

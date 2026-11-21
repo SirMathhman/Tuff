@@ -40,10 +40,16 @@ import {
 } from "./src/scope";
 import { parseNumberSuffix, parseTypeAlias, parseTypeAnnotation } from "./src/parse/annotations";
 import { hoistFunctions } from "./src/parse/hoisting";
-import { parseExportDeclaration, parseExternValue, parseUnboundName, unreadable } from "./src/parse/imports";
-import { parseDestructuring } from "./src/parse/destructure";
-import { callHostFunction } from "./src/host";
-import { parseCallStatement, parseFunctionDeclaration, parseHostVariable, parseVoidBody } from "./src/parse/functions";
+import {
+  parseExportDeclaration,
+  parseExternValue,
+  parseUnboundName,
+  unreadable,
+  parseDeclareStatement,
+} from "./src/parse/imports";
+import { parseDestructuring, parseExternLet } from "./src/parse/destructure";
+import { callExternal } from "./src/host";
+import { parseCallStatement, parseFunctionDeclaration, parseVoidBody } from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/parse/arrays";
 import { parsePostfix } from "./src/parse/postfix";
@@ -55,7 +61,7 @@ import { parseStructDeclaration, parseStructLiteral } from "./src/parse/structs"
  * @param tuffSource - The Tuff source text to interpret.
  * @param hostValues - Values and functions the host supplies, by name.
  * @param modules - Loads imported modules by name.
- * @param hostValues - Values and functions the host supplies, by name, for "extern let" and "extern fn" declarations.
+ * @param hostValues - Values and functions the host supplies, by name, for "declare let" and "declare fn" declarations.
  * @returns An Ok result with the numeric result of the program, or an Err result describing what is wrong, where, why, and how to fix it.
  */
 export function interpretTuff(
@@ -576,14 +582,10 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   }
   if (name === "extern" && allowDeclaration) {
     cursor.pos += "extern".length;
-    const keyword = peekName(text, cursor);
-    if (keyword === "let") {
-      return { matched: true, problem: parseHostVariable(text, cursor) };
-    }
-    if (keyword !== "fn") {
-      return { matched: true, problem: { offset: cursor.pos, expected: `"fn" or "let" after "extern"` } };
-    }
-    return { matched: true, problem: parseFunctionDeclaration(text, cursor) };
+    return { matched: true, problem: parseExternLet(text, cursor, parseInitializer) };
+  }
+  if (name === "declare" && allowDeclaration) {
+    return { matched: true, problem: parseDeclareStatement(text, cursor, parseDeclaration) };
   }
   if (name === "struct" && allowDeclaration) {
     return { matched: true, problem: parseStructDeclaration(text, cursor, RESERVED_WORDS) };
@@ -948,7 +950,7 @@ function parseDeclaration(text: string, cursor: Cursor): Problem | undefined {
     mutable = true;
   }
   if (peek(text, cursor) === "{") {
-    return parseDestructuring(text, cursor, mutable, parseInitializer);
+    return parseDestructuring(text, cursor, mutable, parseInitializer, false);
   }
   const name = peekName(text, cursor);
   if (name === "" || RESERVED_WORDS.has(name)) {
@@ -1335,11 +1337,7 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     return err(argumentProblem);
   }
   if (fn.external) {
-    const { host } = fn;
-    if (host === undefined) {
-      return err({ offset: start, expected: `a host function named "${name}" to be provided` });
-    }
-    return callHostFunction(host, args, start, fn);
+    return callExternal(cursor, name, start, args, fn);
   }
   if (cursor.callDepth >= MAX_CALL_DEPTH) {
     return err({ offset: start, expected: `a call nested within ${MAX_CALL_DEPTH} levels` });
