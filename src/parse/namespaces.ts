@@ -35,6 +35,14 @@ type Claim = (scope: Scope, name: string) => string | undefined;
 /** Binds a parsed body's exports under its name in the scope that declares it. */
 type Bind = (scope: Scope, name: string, exports: Map<string, Export>) => void;
 
+/** The names "this" can read at one point, and whether they are an object body's exports. */
+interface ReadableThis {
+  /** True inside an object body, where the names are the object's exports. */
+  readonly inObject: boolean;
+  /** The readable names, each as the export that "this" reads it through. */
+  readonly names: ReadonlyMap<string, Export>;
+}
+
 /** What distinguishes a namespace declaration from an object declaration. */
 interface BlockOptions {
   /** The word that starts the declaration. */
@@ -472,39 +480,50 @@ function nearestExportScope(scope: Scope): Scope | undefined {
 }
 
 /**
- * Builds the value of bare "this": an object whose exports are the names "this.name" can read at this point, each
- * as a snapshot of its current value. Inside an object body these are the object's exports; elsewhere they are the
- * variables declared directly in the current scope.
+ * Selects the names "this" can read at a scope: the exports of the enclosing object body, or else the variables
+ * declared directly in the scope. This is the one rule that both bare "this" and "this.name" use.
+ *
+ * @param scope - The scope "this" is written in.
+ * @returns The readable names.
+ */
+function readableThisNames(scope: Scope): ReadableThis {
+  const owner = nearestExportScope(scope);
+  if (owner !== undefined && owner.objectBody === true) {
+    const { exports } = owner;
+    return { inObject: true, names: exports ?? new Map<string, Export>() };
+  }
+  const names = new Map<string, Export>();
+  const { vars } = scope;
+  for (const [name, binding] of vars) {
+    if (unreadable(binding, 0, name) === undefined) {
+      names.set(name, { kind: "value", value: binding.value });
+    }
+  }
+  return { inObject: false, names };
+}
+
+/**
+ * Builds the value of bare "this": an object whose exports are a snapshot of the names "this.name" can read at this
+ * point. The snapshot holds the values at the time it is built, so later assignments are not seen.
  *
  * @param scope - The scope "this" is written in.
  * @returns The snapshot object.
  */
 function thisSnapshot(scope: Scope): ObjectValue {
-  const owner = nearestExportScope(scope);
+  const { names } = readableThisNames(scope);
   const exports = new Map<string, Export>();
-  if (owner !== undefined && owner.objectBody === true) {
-    const { exports: ownerExports } = owner;
-    for (const [name, exported] of ownerExports ?? []) {
-      const value = exportedValue(exported);
-      if (value !== undefined) {
-        exports.set(name, { kind: "value", value });
-      }
-    }
-  } else {
-    const { vars } = scope;
-    for (const [name, binding] of vars) {
-      if (unreadable(binding, 0, name) === undefined) {
-        exports.set(name, { kind: "value", value: binding.value });
-      }
+  for (const [name, exported] of names) {
+    const value = exportedValue(exported);
+    if (value !== undefined) {
+      exports.set(name, { kind: "value", value });
     }
   }
   return { kind: "object", name: "this", exports };
 }
 
 /**
- * Parses ".name" after "this", which reads a name of the current scope. Inside an object body, including a block
- * nested in one, the name must be one the object exports, the same rule as "Name.name" from outside. Elsewhere it
- * must be a variable declared directly in the current scope.
+ * Parses ".name" after "this", which reads a name this can read at the current point. Bare "this" is handled by
+ * the caller and is not seen here. A function must be called, not read.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position just after "this", advanced past the name.
@@ -521,27 +540,15 @@ export function parseThisMember(text: string, cursor: Cursor, start: number): Re
     return err({ offset: cursor.pos, expected: `a name after "this."` });
   }
   cursor.pos += member.length;
-  const owner = nearestExportScope(cursor.scope);
-  if (owner !== undefined && owner.objectBody === true) {
-    const { exports: ownerExports } = owner;
-    const exported = ownerExports?.get(member);
-    if (exported?.kind === "function") {
-      return err({ offset: start, expected: `a call to "this.${member}()" (a function is called, not read)` });
-    }
-    const value = exported === undefined ? undefined : exportedValue(exported);
-    if (value === undefined) {
-      return err({ offset: start, expected: `a name this object exports (no "${member}" is exported)` });
-    }
-    return ok(value);
+  const { inObject, names } = readableThisNames(cursor.scope);
+  const exported = names.get(member);
+  if (exported?.kind === "function") {
+    return err({ offset: start, expected: `a call to "this.${member}()" (a function is called, not read)` });
   }
-  const { vars } = cursor.scope;
-  const binding = vars.get(member);
-  if (binding === undefined) {
-    return err({ offset: start, expected: `a variable declared in this scope (no "${member}" is declared here)` });
+  const value = exported === undefined ? undefined : exportedValue(exported);
+  if (value === undefined) {
+    const where = inObject ? "a name this object exports" : "a variable declared in this scope";
+    return err({ offset: start, expected: `${where} (no "${member}" is available here)` });
   }
-  const problem = unreadable(binding, start, member);
-  if (problem !== undefined) {
-    return err(problem);
-  }
-  return ok(binding.value);
+  return ok(value);
 }
