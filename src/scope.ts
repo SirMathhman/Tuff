@@ -499,12 +499,14 @@ export function valuesEqual(left: Value, right: Value, offset: number): Result<b
  * @param hostValues - Values and functions the host supplies.
  * @param modules - Loads imported modules by name.
  * @param inputs - The values passed to this module as inputs, by name.
+ * @param linked - Functions the other side of an expect/actual pair provides, by name.
  * @returns A fresh cursor at the start of the text.
  */
 export function newCursor(
   hostValues: ReadonlyMap<string, HostValue>,
   modules: ModuleLoader,
   inputs: ReadonlyMap<string, Value>,
+  linked: ReadonlyMap<string, FunctionDef>,
 ): Cursor {
   return {
     pos: 0,
@@ -517,5 +519,6 @@ export function newCursor(
     exported: new Map(),
     inputs,
     inputsUsed: new Set(),
+    linked,
   };
 }

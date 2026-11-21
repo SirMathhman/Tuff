@@ -133,6 +133,8 @@ export interface FunctionDef {
   readonly scope: Scope;
   /** True if the function was declared with "declare fn" and its body is supplied by the host. */
   readonly external: boolean;
+  /** The source text the body was declared in, so calls parse the body from it; undefined for extern functions. */
+  readonly source?: string;
   /** For an extern function: the host's implementation. */
   readonly host?: HostFunction;
 }
@@ -172,6 +174,8 @@ export interface Cursor {
   readonly inputs: ReadonlyMap<string, Value>;
   /** The inputs this module declared with "in let". */
   readonly inputsUsed: Set<string>;
+  /** Functions the other side of an expect/actual pair provides, by name. */
+  readonly linked: ReadonlyMap<string, FunctionDef>;
 }
 /** A module's exported values, plus a live reader for a native module's current host values. */
 export interface ModuleExports {

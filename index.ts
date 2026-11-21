@@ -43,7 +43,13 @@ import { hoistFunctions } from "./src/parse/hoisting";
 import { parseExternValue, parseUnboundName, unreadable, parseModifiedStatement } from "./src/parse/imports";
 import { parseDestructuring, parseExternLet } from "./src/parse/destructure";
 import { callExternal } from "./src/host";
-import { parseCallStatement, parseFunctionDeclaration, parseVoidBody } from "./src/parse/functions";
+import {
+  parseCallStatement,
+  parseFunctionDeclaration,
+  parseVoidBody,
+  parseActualFn,
+  parseExpectFn,
+} from "./src/parse/functions";
 import { RESERVED_WORDS } from "./src/keywords";
 import { parseArrayLiteral } from "./src/parse/arrays";
 import { parsePostfix } from "./src/parse/postfix";
@@ -111,7 +117,7 @@ function parseProgram(
   hostValues: ReadonlyMap<string, HostValue>,
   modules: ModuleLoader,
 ): Result<number | boolean, Problem> {
-  const cursor = newCursor(hostValues, modules, new Map());
+  const cursor = newCursor(hostValues, modules, new Map(), new Map());
   skipSpaces(text, cursor);
   if (cursor.pos >= text.length) {
     return ok(0);
@@ -575,6 +581,12 @@ function parseOneStatement(text: string, cursor: Cursor, allowDeclaration: boole
   const name = peekName(text, cursor);
   if (name === "let" && allowDeclaration) {
     return { matched: true, problem: parseDeclaration(text, cursor) };
+  }
+  if (name === "expect" && allowDeclaration) {
+    return { matched: true, problem: parseExpectFn(text, cursor) };
+  }
+  if (name === "actual" && allowDeclaration) {
+    return { matched: true, problem: parseActualFn(text, cursor) };
   }
   if (name === "extern" && allowDeclaration) {
     cursor.pos += "extern".length;
@@ -1349,18 +1361,19 @@ function parseCall(text: string, cursor: Cursor, name: string, start: number, fn
     }
   });
   cursor.scope = callScope;
+  const bodyText = fn.source ?? text;
   cursor.pos = fn.bodyStart;
   cursor.callDepth++;
   const body =
-    fn.returnType === "Void" ? parseVoidBody(text, cursor, parseStatementBlock) : parseExpression(text, cursor);
-  const endsAtSemicolon = peek(text, cursor) === ";";
+    fn.returnType === "Void" ? parseVoidBody(bodyText, cursor, parseStatementBlock) : parseExpression(bodyText, cursor);
+  const endsAtSemicolon = peek(bodyText, cursor) === ";";
   cursor.callDepth--;
   cursor.scope = savedScope;
   cursor.pos = savedPos;
   if (!body.ok) {
     return body;
   }
-  if (!endsAtSemicolon && text.charAt(fn.bodyStart) !== "{") {
+  if (!endsAtSemicolon && bodyText.charAt(fn.bodyStart) !== "{") {
     return err({ offset: start, expected: `a function body that is a single expression` });
   }
   const resultProblem =

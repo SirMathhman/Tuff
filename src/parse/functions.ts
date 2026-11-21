@@ -78,7 +78,13 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
     returnType = annotation.value;
   }
   if (peek(text, cursor) === ";") {
+    if (precededByWord(text, declStart, "expect")) {
+      return declareExpectFunction(text, cursor, { name, params, returnType, declStart });
+    }
     return declareHostFunction(text, cursor, { name, params, returnType, declStart });
+  }
+  if (precededByWord(text, declStart, "expect")) {
+    return { offset: cursor.pos, expected: "';' (an expect fn has no body)" };
   }
   if (peek(text, cursor) !== "=" || text.charAt(cursor.pos + 1) !== ">") {
     return { offset: cursor.pos, expected: `"=>"` };
@@ -97,7 +103,7 @@ export function parseFunctionDeclaration(text: string, cursor: Cursor): Problem 
   }
   const { scope } = cursor;
   const { functions } = scope;
-  functions.set(name, { params, returnType, bodyStart, bodyEnd, scope, external: false });
+  functions.set(name, { params, returnType, bodyStart, bodyEnd, scope, external: false, source: text });
   return undefined;
 }
 
@@ -316,4 +322,88 @@ export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Pro
     exportedValues.set(name, value);
   }
   return undefined;
+}
+
+/**
+ * Reports whether the word given immediately precedes the offset, ignoring spaces.
+ *
+ * @param text - The source being parsed.
+ * @param pos - Offset of the declaration keyword.
+ * @param word - The word to look for.
+ * @returns True if the word is the one before the declaration.
+ */
+function precededByWord(text: string, pos: number, word: string): boolean {
+  const before = text.slice(0, pos).trimEnd();
+  const charBefore = before.charAt(before.length - word.length - 1);
+  return before.endsWith(word) && !/[A-Za-z0-9_]/.test(charBefore);
+}
+
+/**
+ * Returns the type of the parameter at an index, or undefined if there is none.
+ *
+ * @param params - The parameters.
+ * @param index - The position to read.
+ * @returns The parameter's type, or undefined.
+ */
+function typeAt(params: readonly Param[], index: number): string | undefined {
+  const param = params[index];
+  return param === undefined ? undefined : param.type;
+}
+
+/**
+ * Declares an "expect fn" with no body. It takes the matching "actual fn" that the other side of the pair
+ * declares, after checking that their signatures agree.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at the ";" after the signature, advanced past it.
+ * @param signature - The parsed signature and where the declaration starts.
+ * @returns The first problem found, or undefined if the declaration is valid.
+ */
+function declareExpectFunction(text: string, cursor: Cursor, signature: HostSignature): Problem | undefined {
+  const { name, params, returnType, declStart } = signature;
+  const { linked, scope } = cursor;
+  const actual = linked.get(name);
+  if (actual === undefined) {
+    return { offset: declStart, expected: `an actual fn "${name}" in the other set of this module` };
+  }
+  cursor.pos++;
+  const { params: actualParams, returnType: actualReturn } = actual;
+  const sameParams =
+    actualParams.length === params.length && params.every((param, index) => typeAt(actualParams, index) === param.type);
+  if (!sameParams || actualReturn !== returnType) {
+    return { offset: declStart, expected: `an actual fn "${name}" with the same parameters and return type` };
+  }
+  const { functions } = scope;
+  functions.set(name, actual);
+  return undefined;
+}
+
+/**
+ * Parses "expect fn name(params) : Type;", a function the module declares and another set implements.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "expect", advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseExpectFn(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "expect".length;
+  if (peekName(text, cursor) !== "fn") {
+    return { offset: cursor.pos, expected: '"fn" after "expect"' };
+  }
+  return parseFunctionDeclaration(text, cursor);
+}
+
+/**
+ * Parses "actual fn name(params) : Type => body;", the implementation of an expect fn in another set.
+ *
+ * @param text - The source being parsed.
+ * @param cursor - The read position at "actual", advanced past the declaration.
+ * @returns The first problem found, or undefined if the declaration parsed.
+ */
+export function parseActualFn(text: string, cursor: Cursor): Problem | undefined {
+  cursor.pos += "actual".length;
+  if (peekName(text, cursor) !== "fn") {
+    return { offset: cursor.pos, expected: '"fn" after "actual"' };
+  }
+  return parseFunctionDeclaration(text, cursor);
 }
