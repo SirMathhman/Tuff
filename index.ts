@@ -112,6 +112,11 @@ function parseProgram(
   modules: ModuleLoader,
 ): Result<number | boolean, Problem> {
   const cursor = newCursor(hostValues, modules, new Map());
+  skipSpaces(text, cursor);
+  if (cursor.pos >= text.length) {
+    return ok(0);
+  }
+  cursor.pos = 0;
   const value = parseBlockBody(text, cursor);
   if (!value.ok) {
     return value;

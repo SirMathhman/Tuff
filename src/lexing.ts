@@ -48,8 +48,18 @@ export interface Position {
  * @param cursor - The read position to advance.
  */
 export function skipSpaces(text: string, cursor: Position): void {
-  while (/\s/.test(text.charAt(cursor.pos))) {
-    cursor.pos++;
+  while (true) {
+    if (/\s/.test(text.charAt(cursor.pos))) {
+      cursor.pos++;
+    } else if (text.startsWith("//", cursor.pos)) {
+      const newline = text.indexOf("\n", cursor.pos);
+      cursor.pos = newline < 0 ? text.length : newline + 1;
+    } else if (text.startsWith("/*", cursor.pos)) {
+      const close = text.indexOf("*/", cursor.pos + 2);
+      cursor.pos = close < 0 ? text.length : close + 2;
+    } else {
+      return;
+    }
   }
 }
 
