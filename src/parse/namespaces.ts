@@ -1,7 +1,7 @@
 import { peek, peekName, peekStart, type Position, type Problem } from "../lexing";
 import { err, ok, type Result } from "../result";
-import { claimNamespace, claimObject, isStruct, lookup, lookupNamespace, newScope } from "../scope";
-import { type Binding, type Cursor, type FunctionDef, type Scope, type Value } from "../types";
+import { claimNamespace, claimObject, exportedValue, isObject, lookup, lookupNamespace, newScope } from "../scope";
+import { type Cursor, type Export, type FunctionDef, type ObjectValue, type Scope, type Value } from "../types";
 import { type CallParser, parseCallAndSemicolon } from "./functions";
 
 /** Parses the statements and closing brace of a body, running them in the scope it is given. */
@@ -13,19 +13,28 @@ type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undef
 type Claim = (scope: Scope, name: string) => string | undefined;
 
 /** Binds a parsed body's exports under its name in the scope that declares it. */
-type Bind = (scope: Scope, name: string, exports: Map<string, Value>, body: Scope) => void;
+type Bind = (scope: Scope, name: string, exports: Map<string, Export>) => void;
+
+/** What distinguishes a namespace declaration from an object declaration. */
+interface BlockOptions {
+  /** The word that starts the declaration. */
+  readonly keyword: string;
+  /** Words that cannot be used as names. */
+  readonly reserved: ReadonlySet<string>;
+  /** Checks that the name may be declared, before the body runs. */
+  readonly claim: Claim;
+  /** True for an object body, whose "out let" names are live cells and which may export functions. */
+  readonly objectBody: boolean;
+}
 
 /**
  * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The name is claimed before
  * the body runs, so a rejected declaration runs no code. The body runs in its own scope, and the names it declares
- * with "out let" are its exports; they are then bound under the name.
+ * with "out" are its exports; they are then bound under the name.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at the keyword, advanced past the declaration.
- * @param keyword - The word that starts the declaration.
- * @param reserved - Words that cannot be used as names.
- * @param claim - Checks that the name may be declared in the scope, before the body runs.
- * @param functionsExported - True if the body may export functions with "out fn".
+ * @param options - The keyword, reserved words, claim rule, and body kind of the declaration.
  * @param parseBody - Parses the body after its opening brace, in the scope it is given.
  * @param bind - Binds the exports under the name in the enclosing scope.
  * @returns The first problem found, or undefined if the declaration parsed and was bound.
@@ -33,13 +42,11 @@ type Bind = (scope: Scope, name: string, exports: Map<string, Value>, body: Scop
 function parseExportingBlock(
   text: string,
   cursor: Cursor,
-  keyword: string,
-  reserved: ReadonlySet<string>,
-  claim: Claim,
-  functionsExported: boolean,
+  options: BlockOptions,
   parseBody: ParseBody,
   bind: Bind,
 ): Problem | undefined {
+  const { keyword, reserved, claim, objectBody } = options;
   cursor.pos += keyword.length;
   const nameStart = peekStart(text, cursor);
   const name = peekName(text, cursor);
@@ -56,17 +63,12 @@ function parseExportingBlock(
   }
   cursor.pos++;
   const { scope: outer } = cursor;
-  const exports = new Map<string, Value>();
-  const body: Scope = {
-    ...newScope(outer),
-    exports,
-    ...(functionsExported ? { exportedFunctions: new Map<string, FunctionDef>() } : {}),
-  };
-  const problem = parseBody(text, cursor, body);
+  const exports = new Map<string, Export>();
+  const problem = parseBody(text, cursor, { ...newScope(outer), exports, objectBody });
   if (problem !== undefined) {
     return problem;
   }
-  bind(outer, name, exports, body);
+  bind(outer, name, exports);
   return undefined;
 }
 
@@ -86,23 +88,15 @@ export function parseNamespaceDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(
-    text,
-    cursor,
-    "namespace",
-    reserved,
-    claimNamespace,
-    false,
-    parseBody,
-    (scope, name, exports) => {
-      const { namespaces } = scope;
-      namespaces.set(name, exports);
-    },
-  );
+  const options: BlockOptions = { keyword: "namespace", reserved, claim: claimNamespace, objectBody: false };
+  return parseExportingBlock(text, cursor, options, parseBody, (scope, name, exports) => {
+    const { namespaces } = scope;
+    namespaces.set(name, exports);
+  });
 }
 
 /**
- * Parses "object Name { statements }", which declares a variable in the current scope whose value is a struct of
+ * Parses "object Name { statements }", which declares a variable in the current scope whose value is an object of
  * the body's exports. Its exports are read as "Name.name", the same as a module's, and its "out fn" functions are
  * called as "Name.fn()".
  *
@@ -118,29 +112,12 @@ export function parseObjectDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(
-    text,
-    cursor,
-    "object",
-    reserved,
-    claimObject,
-    true,
-    parseBody,
-    (scope, name, exports, body) => {
-      const { vars } = scope;
-      const cells = new Map<string, Binding>();
-      const { vars: bodyVars } = body;
-      for (const key of exports.keys()) {
-        const cell = bodyVars.get(key);
-        if (cell !== undefined) {
-          cells.set(key, cell);
-        }
-      }
-      const { exportedFunctions } = body;
-      const value = { structName: name, fields: exports, cells, functions: exportedFunctions };
-      vars.set(name, { value, mutable: false, depth: scope.depth });
-    },
-  );
+  const options: BlockOptions = { keyword: "object", reserved, claim: claimObject, objectBody: true };
+  return parseExportingBlock(text, cursor, options, parseBody, (scope, name, exports) => {
+    const { vars } = scope;
+    const value: ObjectValue = { kind: "object", name, exports };
+    vars.set(name, { value, mutable: false, depth: scope.depth });
+  });
 }
 
 /**
@@ -179,26 +156,40 @@ export function parseNamespaceMember(
   }
   cursor.pos += member.length;
   const exported = namespace?.get(member);
-  if (exported === undefined) {
+  const value = exported === undefined ? undefined : exportedValue(exported);
+  if (value === undefined) {
     return err({ offset: start, expected: `a name exported from namespace "${name}" (declare it with "out let")` });
   }
-  return ok(exported);
+  return ok(value);
 }
 
 /**
- * Returns the functions an object variable exports, if the name is a variable holding an object.
+ * Returns the object a variable holds, if the name is a variable holding an object.
  *
  * @param scope - The scope to search for the variable.
  * @param name - The variable's name.
- * @returns The object's exported functions, or undefined if the name is not an object.
+ * @returns The object, or undefined if the name is not a variable holding an object.
  */
-function objectFunctions(scope: Scope, name: string): ReadonlyMap<string, FunctionDef> | undefined {
+function objectNamed(scope: Scope, name: string): ObjectValue | undefined {
   const binding = lookup(scope, name);
   if (binding === undefined) {
     return undefined;
   }
   const { value } = binding;
-  return isStruct(value) ? value.functions : undefined;
+  return isObject(value) ? value : undefined;
+}
+
+/**
+ * Returns the function an object exports under a name, if it exports one.
+ *
+ * @param object - The object.
+ * @param member - The name of the exported function.
+ * @returns The function, or undefined if the object does not export a function with that name.
+ */
+function exportedFunction(object: ObjectValue, member: string): FunctionDef | undefined {
+  const { exports } = object;
+  const exported = exports.get(member);
+  return exported?.kind === "function" ? exported.fn : undefined;
 }
 
 /**
@@ -210,8 +201,8 @@ function objectFunctions(scope: Scope, name: string): ReadonlyMap<string, Functi
  * @returns True if the statement is a call to a function exported by an object.
  */
 export function isObjectCallAhead(text: string, cursor: Cursor, name: string): boolean {
-  const functions = objectFunctions(cursor.scope, name);
-  if (functions === undefined) {
+  const object = objectNamed(cursor.scope, name);
+  if (object === undefined) {
     return false;
   }
   const probe: Position = { pos: cursor.pos + name.length };
@@ -221,7 +212,7 @@ export function isObjectCallAhead(text: string, cursor: Cursor, name: string): b
   probe.pos++;
   const member = peekName(text, probe);
   probe.pos += member.length;
-  return functions.has(member) && peek(text, probe) === "(";
+  return exportedFunction(object, member) !== undefined && peek(text, probe) === "(";
 }
 
 /**
@@ -245,7 +236,8 @@ export function parseObjectCallStatement(
   cursor.pos++;
   const member = peekName(text, cursor);
   cursor.pos += member.length;
-  const fn = objectFunctions(cursor.scope, name)?.get(member);
+  const object = objectNamed(cursor.scope, name);
+  const fn = object === undefined ? undefined : exportedFunction(object, member);
   if (fn === undefined) {
     return { offset: start, expected: `a function exported by "${name}"` };
   }

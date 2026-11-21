@@ -15,6 +15,8 @@ import {
   type Param,
   type HostValue,
   type ModuleLoader,
+  type Export,
+  type ObjectValue,
 } from "./types";
 import { findTopLevel, type Problem } from "./lexing";
 import { ok, err, type Result } from "./result";
@@ -137,7 +139,7 @@ export function claimObject(scope: Scope, name: string): string | undefined {
  * @param name - The namespace name to look up.
  * @returns The namespace's exported values, or undefined if no namespace with that name is in scope.
  */
-export function lookupNamespace(scope: Scope, name: string): ReadonlyMap<string, Value> | undefined {
+export function lookupNamespace(scope: Scope, name: string): ReadonlyMap<string, Export> | undefined {
   for (let current: Scope | undefined = scope; current !== undefined; current = current.parent) {
     const { namespaces } = current;
     const found = namespaces.get(name);
@@ -193,6 +195,10 @@ export function escapes(value: Value, depth: number): boolean {
     const { fields } = value;
     return [...fields.values()].some((field) => escapes(field, depth));
   }
+  if (isObject(value)) {
+    const { exports } = value;
+    return [...exportValues(exports).values()].some((exported) => escapes(exported, depth));
+  }
   if (!isReference(value)) {
     return false;
   }
@@ -214,6 +220,9 @@ export function kindOf(value: Value): string {
   }
   if (isStruct(value)) {
     return `a ${value.structName} struct`;
+  }
+  if (isObject(value)) {
+    return "an object";
   }
   return isArray(value) ? "an array" : "a reference";
 }
@@ -471,6 +480,51 @@ export function isReference(value: Value): value is Reference {
  * @param value - The value to check.
  * @returns True if the value is a struct.
  */
+export function isObject(value: Value): value is ObjectValue {
+  return typeof value === "object" && "kind" in value && value.kind === "object";
+}
+
+/**
+ * Yields the values an export map holds, for exports that are values or live cells. Functions have no value and
+ * are left out.
+ *
+ * @param exports - The export map to read.
+ * @returns The current value of each export that has one, keyed by name.
+ */
+export function exportValues(exports: ReadonlyMap<string, Export>): Map<string, Value> {
+  const values = new Map<string, Value>();
+  for (const [name, exported] of exports) {
+    const value = exportedValue(exported);
+    if (value !== undefined) {
+      values.set(name, value);
+    }
+  }
+  return values;
+}
+
+/**
+ * Yields the current value of an export: a snapshot, or the present value of a live cell.
+ *
+ * @param exported - The export to read.
+ * @returns The value, or undefined for a function, which has no value.
+ */
+export function exportedValue(exported: Export): Value | undefined {
+  if (exported.kind === "function") {
+    return undefined;
+  }
+  if (exported.kind === "value") {
+    return exported.value;
+  }
+  const { cell } = exported;
+  return cell.value;
+}
+
+/**
+ * Reports whether a value is a struct, which has a struct type name and named fields.
+ *
+ * @param value - The value to check.
+ * @returns True if the value is a struct.
+ */
 export function isStruct(value: Value): value is StructValue {
   return typeof value === "object" && "structName" in value;
 }
@@ -532,7 +586,7 @@ export function valuesEqual(left: Value, right: Value, offset: number): Result<b
   if (kindOf(left) !== kindOf(right)) {
     return err({ offset, expected: `a value of the same type as the left side of "=="` });
   }
-  if (isArray(left) || isArray(right) || isStruct(left) || isStruct(right)) {
+  if (isArray(left) || isArray(right) || isStruct(left) || isStruct(right) || isObject(left) || isObject(right)) {
     return err({ offset, expected: `numbers, booleans or references to compare with "=="` });
   }
   if (isReference(left) && isReference(right)) {

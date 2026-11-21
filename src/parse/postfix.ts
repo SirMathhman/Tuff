@@ -1,6 +1,6 @@
 import { peek, peekName, peekStart, type Problem } from "../lexing";
-import { isArray, isStruct } from "../scope";
-import { type Cursor, type HostValue, type Value } from "../types";
+import { exportedValue, isArray, isObject, isStruct } from "../scope";
+import { type Cursor, type HostValue, type ObjectValue, type Value } from "../types";
 import { err, ok, type Result } from "../result";
 
 /** Parses one value from the cursor, such as an index expression. */
@@ -92,20 +92,38 @@ function parseField(text: string, cursor: Cursor, start: number, base: Value): R
     return err({ offset: fieldStart, expected: `a field name after "."` });
   }
   cursor.pos += field.length;
+  if (isObject(base)) {
+    return readObjectMember(base, field, fieldStart);
+  }
   if (!isStruct(base)) {
-    return err({ offset: start, expected: `a struct before "."` });
+    return err({ offset: start, expected: `a struct or object before "."` });
   }
-  const { structName, fields, live, cells } = base;
-  let value: Value | undefined;
-  if (cells !== undefined) {
-    value = cells.get(field)?.value;
-  } else if (live === undefined) {
-    value = fields.get(field);
-  } else {
-    value = liveNumber(live(field));
-  }
+  const { structName, fields, live } = base;
+  const value = live === undefined ? fields.get(field) : liveNumber(live(field));
   if (value === undefined) {
     return err({ offset: fieldStart, expected: `a field of ${structName} named "${field}"` });
+  }
+  return ok(value);
+}
+
+/**
+ * Reads a name an object exports with "Name.member". A function is called, not read, so reading one is an error
+ * that says so.
+ *
+ * @param object - The object being read.
+ * @param field - The name read after ".".
+ * @param fieldStart - Offset of the name, for error reporting.
+ * @returns An Ok result with the current value, or an Err result with the first problem found.
+ */
+function readObjectMember(object: ObjectValue, field: string, fieldStart: number): Result<Value, Problem> {
+  const { name, exports } = object;
+  const exported = exports.get(field);
+  if (exported === undefined) {
+    return err({ offset: fieldStart, expected: `a name exported by object "${name}" (declare it with "out let")` });
+  }
+  const value = exportedValue(exported);
+  if (value === undefined) {
+    return err({ offset: fieldStart, expected: `a call to "${name}.${field}()" (a function is called, not read)` });
   }
   return ok(value);
 }

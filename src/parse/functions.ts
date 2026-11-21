@@ -421,8 +421,8 @@ export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Pro
     return annotation.error;
   }
   const { scope } = cursor;
-  const { exports: exportedValues } = scope;
-  if (scope.depth !== 0 || exportedValues === undefined) {
+  const { exports } = scope;
+  if (scope.depth !== 0 || exports === undefined) {
     return { offset: declStart, expected: '"in" only at the top level of a module' };
   }
   const { inputs, inputsUsed } = cursor;
@@ -438,7 +438,7 @@ export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Pro
   vars.set(name, { value, mutable: false, depth: scope.depth, type: annotation.value });
   inputsUsed.add(name);
   if (isOut) {
-    exportedValues.set(name, value);
+    exports.set(name, { kind: "value", value });
   }
   return undefined;
 }

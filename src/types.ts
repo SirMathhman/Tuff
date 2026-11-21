@@ -8,7 +8,7 @@ import { type Result } from "./result";
  * A value of a Tuff expression: a number, a boolean from "true" or "false", a reference, or an array.
  * Values of different types are never equal.
  */
-export type Value = number | boolean | Reference | ArrayValue | StructValue;
+export type Value = number | boolean | Reference | ArrayValue | StructValue | ObjectValue;
 /**
  * A reference made with "&name" or "&mut name". Reading it with "*" gives the target's
  * current value; only a mutable reference can be assigned through with "*name = ...".
@@ -41,10 +41,44 @@ export interface StructValue {
   readonly native?: boolean;
   /** For a native module: reads a field's current value from the host. */
   readonly live?: LiveRead;
-  /** For an object: the bindings of its exported names, read live so that later assignments are seen. */
-  readonly cells?: ReadonlyMap<string, Binding>;
-  /** For an object: the functions it exports with "out fn", called as "Name.fn()". */
-  readonly functions?: ReadonlyMap<string, FunctionDef>;
+}
+/**
+ * What an export scope exports under a name: a snapshot of a value (a namespace or module export), the live binding
+ * of an object's "out let", or an object's "out fn" function.
+ */
+export type Export = ValueExport | CellExport | FunctionExport;
+/** An export that is a snapshot of a value. */
+export interface ValueExport {
+  /** Tags the export as a snapshot value. */
+  readonly kind: "value";
+  /** The value at the time the export was made. */
+  readonly value: Value;
+}
+/** An export that is a live binding, read at each use. */
+export interface CellExport {
+  /** Tags the export as a live cell. */
+  readonly kind: "cell";
+  /** The binding the object reads. */
+  readonly cell: Binding;
+}
+/** An export that is a function, called as "Name.fn()". */
+export interface FunctionExport {
+  /** Tags the export as a function. */
+  readonly kind: "function";
+  /** The function, with the scope it was declared in. */
+  readonly fn: FunctionDef;
+}
+/**
+ * An object, declared with "object Name { ... }". It is read with "Name.member", and its functions are called as
+ * "Name.fn()". It is not a struct, so it has no struct type name and cannot be passed where a struct is expected.
+ */
+export interface ObjectValue {
+  /** Tags the value as an object, which distinguishes it from a struct. */
+  readonly kind: "object";
+  /** The object's name. */
+  readonly name: string;
+  /** The names the object body exports, keyed by name. */
+  readonly exports: ReadonlyMap<string, Export>;
 }
 /**
  * A struct declared with "struct". Each field has a declared type.
@@ -114,15 +148,15 @@ export interface Scope {
   readonly types: Map<string, string>;
   /** Structs declared directly in this scope. */
   readonly structs: Map<string, StructDef>;
-  /** Namespaces declared directly in this scope, each mapping its "out" names to their values. */
-  readonly namespaces: Map<string, ReadonlyMap<string, Value>>;
+  /** Namespaces declared directly in this scope, each mapping its "out" names to what they export. */
+  readonly namespaces: Map<string, ReadonlyMap<string, Export>>;
   /**
-   * The values this scope exports with "out let", keyed by name: the top-level scope of a module, or a namespace
-   * body. Undefined for every other scope.
+   * What this scope exports, keyed by name: the top-level scope of a module, a namespace body, or an object body.
+   * Undefined for every other scope.
    */
-  readonly exports?: Map<string, Value>;
-  /** The functions an object body exports with "out fn"; undefined for every scope that is not an object body. */
-  readonly exportedFunctions?: Map<string, FunctionDef>;
+  readonly exports?: Map<string, Export>;
+  /** True for an object body: its "out let" names are exported as live cells, and it may export functions. */
+  readonly objectBody?: boolean;
 }
 /** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
 export type HostValue = number | boolean | HostFunction;

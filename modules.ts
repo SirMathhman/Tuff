@@ -1,6 +1,6 @@
 import { interpretTuff, parseStatements } from "./index";
 import { describeUnsupported, skipSpaces } from "./src/lexing";
-import { newCursor } from "./src/scope";
+import { exportValues, newCursor } from "./src/scope";
 import { err, ok, type Result } from "./src/result";
 import { type FunctionDef, type HostValue, type ModuleExports, type ModuleLoader, type Value } from "./src/types";
 
@@ -180,7 +180,7 @@ export function interpretModule(
   }
   const { scope } = cursor;
   const { functions, exports } = scope;
-  return ok({ exports: exports ?? new Map(), functions });
+  return ok({ exports: exportValues(exports ?? new Map()), functions });
 }
 
 /**

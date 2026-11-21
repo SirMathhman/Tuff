@@ -104,8 +104,8 @@ export function parseModifiedStatement(
  */
 function parseExportedFunction(text: string, cursor: Cursor): Problem | undefined {
   const { scope } = cursor;
-  const { exportedFunctions, functions } = scope;
-  if (exportedFunctions === undefined) {
+  const { exports, functions, objectBody } = scope;
+  if (exports === undefined || objectBody !== true) {
     return { offset: cursor.pos, expected: '"out fn" only in the body of an object' };
   }
   peek(text, cursor);
@@ -119,7 +119,7 @@ function parseExportedFunction(text: string, cursor: Cursor): Problem | undefine
   }
   const fn = functions.get(name);
   if (fn !== undefined) {
-    exportedFunctions.set(name, fn);
+    exports.set(name, { kind: "function", fn });
   }
   return undefined;
 }
@@ -181,7 +181,11 @@ function exportLet(
   const { vars } = scope;
   const binding = vars.get(exportedName);
   if (binding !== undefined) {
-    exports.set(exportedName, binding.value);
+    const { objectBody } = scope;
+    exports.set(
+      exportedName,
+      objectBody === true ? { kind: "cell", cell: binding } : { kind: "value", value: binding.value },
+    );
   }
   return undefined;
 }
