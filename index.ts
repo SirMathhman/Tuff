@@ -281,7 +281,10 @@ function parseFactor(text: string, cursor: Cursor): Result<Value, Problem> {
       return parseLoop(text, cursor, start);
     }
     const structDef = lookupStruct(cursor.scope, name);
-    if (structDef !== undefined && (peek(text, cursor) === "{" || peek(text, cursor) === "<")) {
+    const typeParams = structDef?.typeParams ?? [];
+    const next = peek(text, cursor);
+    const genericLiteral = next === "<" && typeParams.length > 0 && lookup(cursor.scope, name) === undefined;
+    if (structDef !== undefined && (next === "{" || genericLiteral)) {
       return parseStructLiteral(text, cursor, name, start, parseExpression);
     }
     if (peek(text, cursor) === "(") {
