@@ -2,7 +2,7 @@
 
 This document describes the trust boundaries of Tuff, what untrusted input can reach, and the controls the architecture should have. Each control is marked as present or missing. This describes the target design, so a missing control is a gap to close, not a note about past work.
 
-Related: [ARCHITECTURE.md](../ARCHITECTURE.md).
+Related: [ARCHITECTURE.md](../ARCHITECTURE.md) for the design and its known problems, [language.md](language.md) for what a program may do, and [README.md](../README.md) for setup.
 
 ## What the interpreter is
 
@@ -12,13 +12,13 @@ Anything the program can do outside its own computation goes through a host func
 
 ## Trust boundaries
 
-| Boundary | Trusted side | Untrusted side | Crossing |
-| --- | --- | --- | --- |
-| Program source | Interpreter | Tuff source text, which may come from a user, a file, or a model | `interpretTuff`, `interpretModules` |
-| Module loading | Embedder's source map | Any module path a program imports | `ModuleLoader`, `sources` map |
-| Host functions | Embedder's JavaScript | Arguments that a Tuff program computes | `callExternal`, `callHostFunction` (src/host.ts) |
-| Host values | Embedder | The value the program reads with `declare let` | `hostValues` map |
-| Results | Interpreter | The host reads the returned number or error | return value |
+| Boundary       | Trusted side          | Untrusted side                                                   | Crossing                                         |
+| -------------- | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------ |
+| Program source | Interpreter           | Tuff source text, which may come from a user, a file, or a model | `interpretTuff`, `interpretModules`              |
+| Module loading | Embedder's source map | Any module path a program imports                                | `ModuleLoader`, `sources` map                    |
+| Host functions | Embedder's JavaScript | Arguments that a Tuff program computes                           | `callExternal`, `callHostFunction` (src/host.ts) |
+| Host values    | Embedder              | The value the program reads with `declare let`                   | `hostValues` map                                 |
+| Results        | Interpreter           | The host reads the returned number or error                      | return value                                     |
 
 ## What untrusted input can reach
 
@@ -31,19 +31,26 @@ The interpreter does not write to any host state except through host functions.
 
 ## Controls
 
-| Control | Purpose | Status |
-| --- | --- | --- |
-| No dynamic code execution | Source text is never run as JavaScript | Present (lint rules) |
-| No file, network, or process access in the interpreter | The only effects are host calls | Present (verified in index.ts, modules.ts, src/) |
-| Explicit host allowlist | A program reaches only the host functions and values it was given | Present (`hostValues` map, `declare fn`/`declare let`) |
-| Argument type restriction for host calls | Host functions receive only numbers and booleans | Present (`callHostFunction`) |
-| Return type check for host calls | A host result that does not match the declared type is rejected | Present (`callHostFunction`, `returnType`) |
-| Per-loop iteration limit | Stops a single loop from running forever | Present (`MAX_LOOP_ITERATIONS` = 10000) |
-| Call depth limit | Stops unbounded recursion | Present (`MAX_CALL_DEPTH` = 100) |
-| Global step budget | Bounds total work across nested loops and branches | Missing. Nested loops can run about 10^8 steps |
-| Parse-time work bound | Bounds the cost of parsing untaken branches | Missing. Dry-run re-parsing is exponential in nesting depth (measured: depth 12 takes about 55 s) |
-| Host exception boundary | A throwing host function becomes a structured error, not an escaped exception | Missing (no try/catch in src/host.ts) |
-| Module names as map keys | Module paths resolve only to the embedder's source map, never to the file system | Present (interpreter does no file access); the embedder's loader must still reject unexpected names |
+| Control                                                | Purpose                                                                          | Status                                                                                              |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| No dynamic code execution                              | Source text is never run as JavaScript                                           | Present (lint rules)                                                                                |
+| No file, network, or process access in the interpreter | The only effects are host calls                                                  | Present (verified in index.ts, modules.ts, src/)                                                    |
+| Explicit host allowlist                                | A program reaches only the host functions and values it was given                | Present (`hostValues` map, `declare fn`/`declare let`)                                              |
+| Argument type restriction for host calls               | Host functions receive only numbers and booleans                                 | Present (`callHostFunction`)                                                                        |
+| Return type check for host calls                       | A host result that does not match the declared type is rejected                  | Present (`callHostFunction`, `returnType`)                                                          |
+| Per-loop iteration limit                               | Stops a single loop from running forever                                         | Present (`MAX_LOOP_ITERATIONS`, value in [language.md](language.md#limits))                         |
+| Call depth limit                                       | Stops unbounded recursion                                                        | Present (`MAX_CALL_DEPTH`, value in [language.md](language.md#limits))                              |
+| Validate before effects                                | A program is fully checked for syntax before any host call runs                  | Missing. See Partial execution below                                                                |
+| Global step budget                                     | Bounds total work across nested loops and branches                               | Missing. See Resource exhaustion below                                                              |
+| Parse-time work bound                                  | Bounds the cost of parsing untaken branches                                      | Missing. See [ARCHITECTURE.md](../ARCHITECTURE.md#potential-problems) for the measurements          |
+| Host exception boundary                                | A throwing host function becomes a structured error, not an escaped exception    | Missing. See [ARCHITECTURE.md](../ARCHITECTURE.md#potential-problems)                               |
+| Module names as map keys                               | Module paths resolve only to the embedder's source map, never to the file system | Present (interpreter does no file access); the embedder's loader must still reject unexpected names |
+
+## Partial execution
+
+Evaluation is single-pass (ARCHITECTURE.md, Overview), so a host call runs as soon as the parser reaches it. A program that calls a state-changing host function and then has a syntax error has already changed state, and the error is returned as if the program had not run. An embedder must not treat an error result as "no effect".
+
+Missing: a check-only pass that parses the whole program with host calls stubbed and reports any syntax error before the first real effect. Until then, the rule for embedders is to treat every error as possibly partial.
 
 ## Prompt injection
 
@@ -73,7 +80,7 @@ Missing: a convention that host functions with side effects are named distinctly
 Untrusted source can exhaust time and memory:
 
 - Nested loops multiply the per-loop limit.
-- Nested statement-level `if` branches are parsed exponentially often (see [ARCHITECTURE.md](../ARCHITECTURE.md), Potential Problems).
+- Nested statement-level `if` branches are parsed exponentially often. The measurements are in [ARCHITECTURE.md](../ARCHITECTURE.md#potential-problems).
 - Deeply nested expressions use JavaScript stack frames across the grammar's mutual recursion. 2000 nested parentheses still evaluate, so the stack is not exhausted at that depth, but no nesting limit exists and the failure point has not been measured.
 
 The fixes are the global step budget, single-pass branch parsing, and a nesting limit on expressions. A host that runs untrusted programs should also run them in a worker with a time limit until the budget exists.
@@ -84,3 +91,4 @@ The fixes are the global step budget, single-pass branch parsing, and a nesting 
 2. No global step budget (denial of service from nested loops).
 3. Host exceptions escape `interpretTuff`.
 4. No expression nesting limit; the depth at which the JavaScript stack fails is unmeasured.
+5. Partial execution: host calls run before a later syntax error is found, so an error does not mean nothing happened.

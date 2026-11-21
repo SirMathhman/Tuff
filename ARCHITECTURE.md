@@ -4,7 +4,9 @@ This is the entry point for the architecture of Tuff, a small statically typed l
 
 Related documents:
 
-- [docs/security.md](docs/security.md): trust boundaries, untrusted input, and the controls the interpreter should have.
+- [README.md](README.md): install and run instructions.
+- [docs/language.md](docs/language.md): what a Tuff program means. This document covers how the interpreter is built, not the language's rules.
+- [docs/security.md](docs/security.md): trust boundaries, untrusted input, and the controls the interpreter should have. It owns the status of each control.
 
 ## Overview
 
@@ -16,12 +18,12 @@ Errors are values, never exceptions. Every failure is a `Problem` (an offset plu
 
 ## Definitions
 
-- **Program**: a Tuff source string. Its meaning is its final value, a number or a boolean.
 - **Value**: a runtime value (`src/types.ts`): an integer with a type name, a boolean, a reference, an array, or a struct value.
 - **Type**: the type of a value or declaration, identified by a name. The target design is a discriminated union (see Future Work). Until then a type is a string such as `I32`, `Bool`, `[I32; 3]`, `&mut Bool`, or `Wrapper<I32>`.
-- **Scope**: a chain of frames (`src/scope.ts`), each holding bindings, functions, struct definitions, type aliases, and namespaces. Lookup walks the parent chain. A scope that is the top level of a module or the body of a namespace is an **export scope**: it has an `exports` map, and `out` declarations write to it. No other scope has one.
-- **Export**: a value a module or namespace makes reachable from outside by declaring it with `out`. `out` is valid only at the top level of a module or of a namespace body.
-- **Namespace**: a named group of declarations, written `namespace Name { ... }`. Its body runs in its own scope. Its exports are read from outside as `Name::member`. A namespace is declared in a scope, like a variable, and is visible to the code after it in that scope and in the scopes nested inside.
+- **Scope**: a chain of frames (`src/scope.ts`), each holding bindings, functions, struct definitions, type aliases, and namespaces. Lookup walks the parent chain. A scope that is the top level of a module or the body of a namespace or object is an **export scope**: it has an `exports` map, and `out` declarations write to it. No other scope has one.
+- **Export**: a value a module, namespace, or object makes reachable from outside by declaring it with `out`. `out` is valid only at the top level of a module or in the body of a namespace or object.
+- **Namespace**: a declaration in a scope that holds the exports of a namespace body. Its exports are read as `Name::member`. The namespace's rules are in docs/language.md (Namespaces).
+- **Object**: a declaration in a scope that binds a variable whose value is a struct of the exports of its body. Its exports are read as `Name.member`, like a module's. The object's rules are in docs/language.md (Objects).
 - **Cursor**: the read position in the source plus the current scope, call depth, and dead/break state. It is the only mutable state a parse function receives.
 - **Problem**: a structured parse or evaluation failure: the `offset` in the source and the `expected` description. It is rendered by `describeUnsupported` (src/lexing.ts) into a message that says what the problem is, where it is, why it is an error, and what would fix it.
 - **Result**: `Ok` or `Err` (`src/result.ts`). Used everywhere instead of exceptions.
@@ -29,7 +31,7 @@ Errors are values, never exceptions. Every failure is a `Problem` (an offset plu
 - **Struct instance name**: the canonical string for an instantiated generic struct, such as `Wrapper<I32>`. Two annotations that name the same instance produce the same string, and type checks compare these strings.
 - **Type parameter**: a name declared in `<...>` on a generic struct or generic function (`struct Wrapper<T>`, `fn pass<T>`). Inside the declaration it is a type alias for itself while the signature is parsed. In an instance, it is an alias for its type argument.
 - **Type arguments**: the types written in `<...>` at a use site (`Wrapper<I32>`, `pass<I32>(1)`). Their count must equal the declaration's type parameter count.
-- **Host value / host function**: a value or function supplied by the embedding JavaScript code, declared in Tuff with `declare let` or `declare fn`.
+- **Host value / host function**: a value or function supplied by the embedding JavaScript code (`src/host.ts`). The language rules are in docs/language.md (Host values).
 - **Module**: a source unit with a path made of segments. A module is either `expect` (declares functions), `actual` (implements them), or plain.
 
 Invariants:
@@ -39,9 +41,10 @@ Invariants:
 3. Type checks compare canonical type strings. A type string is only produced by the annotation parser (`src/parse/annotations.ts`), so it is normalized (aliases are resolved, instance names are canonical).
 4. Source text is never executed as JavaScript. The `no-eval`, `no-implied-eval`, and `no-new-func` lint rules enforce this.
 5. A name bound to a variable in any enclosing scope is never read as a generic struct or generic function. A `<` after it is a comparison.
-6. A name followed by `::` is resolved in this order: a namespace in scope, then a module path (`foo::lib`, see `src/parse/imports.ts`). A namespace in scope therefore shadows a module path that begins with the same name, and it is never read as a variable.
-7. A namespace's exports are fixed when its body finishes. They are the values of the names at that point, not live bindings, and nothing can assign to them from outside.
-8. A variable and a namespace cannot share a name in the same scope, in either order; the second declaration is an error, not a shadow. (Shadowing across nested scopes stays allowed.) Other kinds of declaration are not yet checked for duplicates; see Future Work.
+6. A name followed by `::` is resolved to a namespace in scope before it is read as a module path (`src/grammar/expression.ts`, `src/parse/imports.ts`). A namespace in scope is never read as a variable.
+7. A namespace's or object's exports are fixed when its body finishes. They are the values of the names at that point, not live bindings, and nothing can assign to them from outside.
+8. A namespace or object name is claimed in its scope before its body is parsed, through the claim functions in `src/scope.ts`. A claim fails if the name is already a variable, namespace, or object in that scope, in either order. A `let` is rejected only when the name is already a namespace in its scope (`src/grammar/statements.ts`). Other declarations (`let` after `let`, `fn`, `struct`, `type`) are not yet checked against earlier names; see Future Work.
+9. A declaration whose name claim fails runs no code. Its body is not parsed, so no host call in it can happen.
 
 ## Structure
 
@@ -49,13 +52,13 @@ Invariants:
 
 Dependencies point downward only. A module may import from modules in the same or lower layers. Cycles between files are not allowed; `bun run circular` (madge) enforces this, and `bun run packages` enforces it between directories.
 
-| Layer | Location | Role |
-| --- | --- | --- |
-| Driver | `modules.ts` | Multi-module loading, `expect`/`actual` linking, module caching |
-| Entry and grammar | `index.ts`, `src/grammar/` | `index.ts`: public `interpretTuff`, builds the `Grammar` record. `src/grammar/`: the expression grammar (`expression.ts`) and the statement grammar (`statements.ts`) |
-| Grammar fragments | `src/parse/*.ts` | One construct each (structs, functions, arrays, annotations, generics, imports, namespaces, postfix, destructuring, hoisting) |
-| Services | `src/scope.ts`, `src/lexing.ts`, `src/host.ts`, `src/keywords.ts` | Scopes and type checks, character-level reading, host calls, reserved words |
-| Core types | `src/types.ts`, `src/result.ts` | Shared data shapes and `Result` |
+| Layer             | Location                                                          | Role                                                                                                                                                                  |
+| ----------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Driver            | `modules.ts`                                                      | Multi-module loading, `expect`/`actual` linking, module caching                                                                                                       |
+| Entry and grammar | `index.ts`, `src/grammar/`                                        | `index.ts`: public `interpretTuff`, builds the `Grammar` record. `src/grammar/`: the expression grammar (`expression.ts`) and the statement grammar (`statements.ts`) |
+| Grammar fragments | `src/parse/**`                                                    | One construct each (structs, functions, arrays, annotations, generics, imports, exports (namespaces, objects), postfix, destructuring, hoisting)                      |
+| Services          | `src/scope.ts`, `src/lexing.ts`, `src/host.ts`, `src/keywords.ts` | Scopes and type checks, character-level reading, host calls, reserved words                                                                                           |
+| Core types        | `src/types.ts`, `src/result.ts`                                   | Shared data shapes and `Result`                                                                                                                                       |
 
 ### Rule for recursion
 
@@ -68,7 +71,7 @@ Grammar recursion (an expression contains a block, which contains statements, wh
 
 ### Export model
 
-Exports are recorded in exactly one place: the `exports` map of the current scope. A module's top-level scope and a namespace body are both export scopes. The module driver (`interpretModule`, modules.ts) reads a module's exports from its top-level scope, and the cursor holds no export map. Both declaration forms that export (`out let`, in `exportLet`, and `in let ... out`, in `parseInputLet`) write to `scope.exports` and fail when it is undefined. `in` additionally requires the module's top-level scope (depth 0). `out` in any other scope is an error.
+Exports are recorded in exactly one place: the `exports` map of the current scope. A module's top-level scope, a namespace body, and an object body are all export scopes. The module driver (`interpretModule`, modules.ts) reads a module's exports from its top-level scope, and the cursor holds no export map. Both declaration forms that export (`out let`, in `exportLet`, and `in let ... out`, in `parseInputLet`) write to `scope.exports` and fail when it is undefined. `in` additionally requires the module's top-level scope (depth 0). `out` in any other scope is an error.
 
 ### Target file layout
 
@@ -79,7 +82,10 @@ src/grammar/grammar.ts    the Grammar record, and helpers shared by the two gram
 src/grammar/expression.ts sums, terms, factors, blocks, if, match, loop, reference, call
 src/grammar/statements.ts let, assignment, compound assignment, dereference assignment, if, while, for, break
 src/parse/annotations.ts  type annotations and type aliases; type arguments are passed in as a parser
-src/parse/namespaces.ts   namespace declarations and Name::member access; takes the body parser as a parameter
+src/parse/exports/        declarations whose body exports names, one directory per feature (the file count limit applies):
+                          exporting.ts is the shared "keyword Name { body }" parser, which takes the body parser as a
+                          parameter and the claim and bind rules as callbacks; namespaces.ts is namespace declarations
+                          and Name::member access; objects.ts is object declarations and their Name.member reads
 src/parse/generics.ts     type parameters and type arguments: parseTypeParameters, parseTypeArguments, parseAngleList,
                           bindTypeParams, newTypeScope, substituteTypeParams, instanceName. Imports no other parse file.
 src/parse/                one construct per file (the rest unchanged)
@@ -103,10 +109,11 @@ The file count limit (10 files per directory, `scripts/check-file-count.js`) app
 
 - **Exponential re-parsing of untaken branches.** Nested statement-level `if` branches are parsed twice (once to skip the dead branch, once to evaluate it) with dry runs (`dryRunStatementIf`, `skipStatementBranch`). Measured: nested depth 8 takes about 0.2 s, depth 12 takes about 55 s. A branch should be parsed once, with the dead flag controlling evaluation only.
 - **Stringly typed types.** Types are strings that are built, compared, and rewritten. `substituteTypeParams` (src/parse/generics.ts) substitutes type parameters by applying a regular expression to a type string, and both generic structs (`instantiateFields`, src/parse/structs.ts) and generic functions (`instantiateFunction`, src/parse/functions.ts) depend on it. This is correct only while every type string is canonical and no name is both a type parameter and part of another name in the same string. A structured type is needed.
+- **Objects are typed by their name.** An object's value is a struct whose `structName` is the object's name, so the object shares the namespace of struct type names that `typeMatches` (`src/scope.ts`) compares. An object and a struct with the same name can be confused. Objects need a distinct type name or their own value kind; this has no test yet.
 - **Namespace names shadow module paths.** A namespace shadows a module path with the same first segment (Invariant 6), so a program that imports `foo::lib` after declaring `namespace foo` gets a namespace error, not a module load.
 - **Namespace bodies are copies.** The exports are snapshots taken at `out`. This is correct while nothing can assign through `Name::member`, but it would become a surprise if assignment to exports were ever added.
 - **Near-limit directories.** `tests/` contains 10 files, which is the maximum; the next test file in that directory fails `bun run files`.
-- **Host exceptions escape the interpreter.** Host functions are JavaScript and can throw. Nothing in `src/host.ts` catches them, so a throwing host function escapes `interpretTuff` instead of becoming a `Problem`. The boundary should convert host exceptions to structured errors.
+- **Host exceptions escape the interpreter.** Nothing in `src/host.ts` catches a throwing host function, so the exception escapes `interpretTuff` instead of becoming a `Problem`. The boundary should convert it to a structured error. The risk is tracked in [security.md](docs/security.md).
 
 ## Security Concerns
 
@@ -126,8 +133,8 @@ See [docs/security.md](docs/security.md).
 These are the concerns that are visible from the design. Use a profiler before optimizing anything.
 
 - Re-parsing of branches (see Potential Problems) is the dominant risk: its cost is exponential in nesting depth.
-- Loops are bounded by `MAX_LOOP_ITERATIONS` (10000) per loop, but nested loops multiply that bound: two nested loops can run 10^8 steps.
-- Recursion depth is bounded by `MAX_CALL_DEPTH` (100). Each level uses JavaScript stack frames across the grammar cycle, so the JavaScript stack is also a limit.
+- Loops are bounded by `MAX_LOOP_ITERATIONS` per loop (the value is in docs/language.md, Limits), but nested loops multiply that bound: two nested loops can run 10^8 steps.
+- Recursion depth is bounded by `MAX_CALL_DEPTH` (the value is in docs/language.md, Limits). Each level uses JavaScript stack frames across the grammar cycle, so the JavaScript stack is also a limit.
 - Each call to a generic function re-parses the body and allocates a type scope (`instantiateFunction`). A generic function that calls itself multiplies this per level, bounded by `MAX_CALL_DEPTH`.
 - Scope lookups walk the parent chain on every name. This is fine at the current size; if programs grow, cache resolved bindings per scope.
 - Each `newScope` allocates four maps. A scope created per loop iteration is a cost to watch.

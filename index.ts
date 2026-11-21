@@ -71,13 +71,8 @@ export function parseStatements(text: string, cursor: Cursor): Problem | undefin
  *   factor     := number | "true" | "false" | name | name "::" name | "&" ["mut"] name | "*" factor | "(" expression ")" | block
  *               | "if" "(" expression ")" expression "else" expression
  *
- * Multiplication binds tighter than addition and subtraction, and parentheses
- * group sub-expressions. "true" and "false" evaluate to 1 and 0, and "==" yields
- * 1 or 0. "let" declares a variable and the final expression
- * is the value; a block's variables are visible only inside that block. Only
- * variables declared with "let mut" may be assigned. "&name" makes a reference
- * to a variable and "*" reads through one; a reference may not outlive the
- * variable it points to. Whitespace between tokens is ignored.
+ * This grammar covers expressions and statements only. Declarations and module forms are parsed in src/parse/.
+ * The meaning of each form is described in docs/language.md.
  *
  * @param text - The source to parse.
  * @param hostValues - Values and functions the host supplies, by name.

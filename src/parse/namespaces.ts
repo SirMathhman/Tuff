@@ -1,26 +1,29 @@
 import { peek, peekName, peekStart, type Problem } from "../lexing";
 import { err, ok, type Result } from "../result";
-import { lookupNamespace, newScope } from "../scope";
+import { claimNamespace, claimObject, lookupNamespace, newScope } from "../scope";
 import { type Cursor, type Scope, type Value } from "../types";
 
 /** Parses the statements and closing brace of a body, running them in the scope it is given. */
 type ParseBody = (text: string, cursor: Cursor, scope: Scope) => Problem | undefined;
 
 /**
- * Binds a parsed body's exports under its name in the scope that declares it. Returns the reason the name
- * cannot be bound, or undefined if it was bound.
+ * Checks whether a name may be declared in a scope, given the kind of declaration. Returns the reason it may not.
  */
-type Bind = (scope: Scope, name: string, exports: Map<string, Value>) => string | undefined;
+type Claim = (scope: Scope, name: string) => string | undefined;
+
+/** Binds a parsed body's exports under its name in the scope that declares it. */
+type Bind = (scope: Scope, name: string, exports: Map<string, Value>) => void;
 
 /**
- * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The body runs in its own
- * scope, and the names it declares with "out let" are its exports. Once the body is parsed, the exports are
- * bound under the name by the caller's rule.
+ * Parses "keyword Name { statements }", the shape shared by namespaces and objects. The name is claimed before
+ * the body runs, so a rejected declaration runs no code. The body runs in its own scope, and the names it declares
+ * with "out let" are its exports; they are then bound under the name.
  *
  * @param text - The source being parsed.
  * @param cursor - The read position at the keyword, advanced past the declaration.
  * @param keyword - The word that starts the declaration.
  * @param reserved - Words that cannot be used as names.
+ * @param claim - Checks that the name may be declared in the scope, before the body runs.
  * @param parseBody - Parses the body after its opening brace, in the scope it is given.
  * @param bind - Binds the exports under the name in the enclosing scope.
  * @returns The first problem found, or undefined if the declaration parsed and was bound.
@@ -30,6 +33,7 @@ function parseExportingBlock(
   cursor: Cursor,
   keyword: string,
   reserved: ReadonlySet<string>,
+  claim: Claim,
   parseBody: ParseBody,
   bind: Bind,
 ): Problem | undefined {
@@ -38,6 +42,10 @@ function parseExportingBlock(
   const name = peekName(text, cursor);
   if (name === "" || reserved.has(name)) {
     return { offset: nameStart, expected: `a ${keyword} name` };
+  }
+  const reason = claim(cursor.scope, name);
+  if (reason !== undefined) {
+    return { offset: nameStart, expected: reason };
   }
   cursor.pos += name.length;
   if (peek(text, cursor) !== "{") {
@@ -50,8 +58,8 @@ function parseExportingBlock(
   if (problem !== undefined) {
     return problem;
   }
-  const reason = bind(outer, name, exports);
-  return reason === undefined ? undefined : { offset: nameStart, expected: reason };
+  bind(outer, name, exports);
+  return undefined;
 }
 
 /**
@@ -70,16 +78,9 @@ export function parseNamespaceDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(text, cursor, "namespace", reserved, parseBody, (scope, name, exports) => {
-    const { namespaces, vars } = scope;
-    if (namespaces.has(name)) {
-      return `a namespace name not already declared in this scope`;
-    }
-    if (vars.has(name)) {
-      return `a namespace name not already used by a variable in this scope`;
-    }
+  return parseExportingBlock(text, cursor, "namespace", reserved, claimNamespace, parseBody, (scope, name, exports) => {
+    const { namespaces } = scope;
     namespaces.set(name, exports);
-    return undefined;
   });
 }
 
@@ -99,16 +100,9 @@ export function parseObjectDeclaration(
   reserved: ReadonlySet<string>,
   parseBody: ParseBody,
 ): Problem | undefined {
-  return parseExportingBlock(text, cursor, "object", reserved, parseBody, (scope, name, exports) => {
-    const { namespaces, vars } = scope;
-    if (namespaces.has(name)) {
-      return `an object name not already used by a namespace in this scope`;
-    }
-    if (vars.has(name)) {
-      return `an object name not already declared in this scope`;
-    }
+  return parseExportingBlock(text, cursor, "object", reserved, claimObject, parseBody, (scope, name, exports) => {
+    const { vars } = scope;
     vars.set(name, { value: { structName: name, fields: exports }, mutable: false, depth: scope.depth });
-    return undefined;
   });
 }
 

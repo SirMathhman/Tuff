@@ -95,6 +95,42 @@ export function newScope(parent?: Scope): Scope {
 }
 
 /**
+ * Reports why a name cannot be declared as a namespace in the given scope, checked before the namespace's body runs.
+ *
+ * @param scope - The scope the namespace would be declared in.
+ * @param name - The namespace name.
+ * @returns The reason the name is taken, or undefined if it may be declared.
+ */
+export function claimNamespace(scope: Scope, name: string): string | undefined {
+  const { namespaces, vars } = scope;
+  if (namespaces.has(name)) {
+    return `a namespace name not already declared in this scope`;
+  }
+  if (vars.has(name)) {
+    return `a namespace name not already used by a variable in this scope`;
+  }
+  return undefined;
+}
+
+/**
+ * Reports why a name cannot be declared as an object in the given scope, checked before the object's body runs.
+ *
+ * @param scope - The scope the object would be declared in.
+ * @param name - The object name.
+ * @returns The reason the name is taken, or undefined if it may be declared.
+ */
+export function claimObject(scope: Scope, name: string): string | undefined {
+  const { namespaces, vars } = scope;
+  if (namespaces.has(name)) {
+    return `an object name not already used by a namespace in this scope`;
+  }
+  if (vars.has(name)) {
+    return `an object name not already declared in this scope`;
+  }
+  return undefined;
+}
+
+/**
  * Finds a namespace declared in the given scope or the scopes enclosing it.
  *
  * @param scope - The innermost scope to search first.
