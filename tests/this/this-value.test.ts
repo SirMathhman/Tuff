@@ -29,3 +29,23 @@ test("inside a function, Name.this is a snapshot of that call's variables", () =
     value: 1,
   });
 });
+
+test("Name.this inside a nested block sees the inner variable, which shadows the outer one", () => {
+  expect(interpretTuff("fn W() => { let x = 1; { let x = 2; W.this } }; W().x")).toEqual({ ok: true, value: 2 });
+});
+
+test("Name.this outside any call of that function is an error", () => {
+  expect(interpretTuff("let x = 1; W.this").ok).toBe(false);
+});
+
+test("a Name.this snapshot is frozen: a later assignment is not seen through it", () => {
+  expect(interpretTuff("fn W() => { let mut x = 1; let s = W.this; x = 2; s.x }; W()")).toEqual({ ok: true, value: 1 });
+});
+
+test("Name.this inside a nested call of another function reads the named outer call's variables", () => {
+  expect(
+    interpretTuff(
+      "fn Inner() => { let y = 5; y }; fn Outer() : Outer => { let x = 7; let z = Inner(); Outer.this }; Outer().x",
+    ),
+  ).toEqual({ ok: true, value: 7 });
+});
