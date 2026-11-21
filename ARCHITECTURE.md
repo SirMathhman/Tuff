@@ -126,6 +126,7 @@ See [docs/security.md](docs/security.md).
 - **Structured types.** Replace type strings with a discriminated union (`IntType`, `BoolType`, `ArrayType`, `ReferenceType`, `StructInstance` with a name and type arguments). Canonical names are derived from the union for display only. Substitution of type parameters becomes a structural map, not a regex.
 - **Single evaluation per branch.** Parse each branch once, with a dead flag. Remove the dry-run functions.
 - **Generic type aliases,** using the same type arguments as generic structs.
+- **One rule for reference equality.** `valuesEqual` (src/scope.ts) compares references to numbers and booleans by value, and references to arrays, structs, and objects by identity of the pointee. The language should pick one rule. Identity for aggregates is the proposed rule, because it matches how an object is a single named value. Decide this before any structured equality is added, and record the decision in docs/language.md (Equality).
 - **Unique names per scope.** Extend Invariant 8 to every kind of declaration (functions, structs, type aliases, and each other), with a structured error that names the earlier declaration.
 - **Structured errors.** Replace the string returned by `interpretTuff` with an error enum that carries the `Problem` and the module name, so hosts can act on the error without parsing text.
 - **Resource budgets.** A single step budget per `interpretTuff` call that counts parsed tokens and loop iterations, so nested loops cannot multiply the limits.

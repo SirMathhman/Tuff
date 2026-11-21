@@ -33,7 +33,7 @@ Number literals are non-negative whole numbers, such as `0`, `42`. The words `tr
 let x = 5; x == 5   // 1
 ```
 
-Operands must be numbers. `1 + true` is an error.
+Arithmetic operands must be numbers. `1 + true` is an error. Equality is described under Equality below.
 
 ## Variables
 
@@ -157,6 +157,17 @@ let r = &mut x;
 *r = 7;
 x                                 // 7
 ```
+
+## Equality
+
+`==` compares two values of the same kind. A kind mismatch, such as a number and a reference, is an error. Numbers and booleans compare by value. Arrays, structs, and objects cannot be compared directly.
+
+References compare what they point to, and the rule depends on the kind of the pointee:
+
+- A reference to a number or boolean is equal to another reference whose pointee has the same value: `let a = 1; let b = 1; &a == &b` is `1`.
+- A reference to an array, struct, or object is equal only to a reference to the same value: `let p = P { x : 1 }; let q = P { x : 1 }; &p == &q` is `0`, but `let q = p; &q == &p` is `1`. An object is the same value only when it is the same object, so `&A == &B` is `0` for two objects with identical fields.
+
+This is the current behavior. Whether aggregates should instead compare by value is an open question (see ARCHITECTURE.md, Future Work).
 
 ## Namespaces
 
