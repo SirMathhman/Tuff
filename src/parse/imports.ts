@@ -130,7 +130,7 @@ function exportLet(
   parseDeclaration: (text: string, cursor: Cursor) => Problem | undefined,
 ): Problem | undefined {
   const { scope } = cursor;
-  const exports = scope.exports ?? (scope.depth === 0 ? cursor.exported : undefined);
+  const { exports } = scope;
   if (exports === undefined) {
     return { offset: cursor.pos, expected: '"out" only at the top level of a module or namespace' };
   }

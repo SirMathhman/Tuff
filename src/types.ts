@@ -112,7 +112,10 @@ export interface Scope {
   readonly structs: Map<string, StructDef>;
   /** Namespaces declared directly in this scope, each mapping its "out" names to their values. */
   readonly namespaces: Map<string, ReadonlyMap<string, Value>>;
-  /** The values a namespace body exports with "out let"; undefined for every scope that is not a namespace body. */
+  /**
+   * The values this scope exports with "out let", keyed by name: the top-level scope of a module, or a namespace
+   * body. Undefined for every other scope.
+   */
   readonly exports?: Map<string, Value>;
 }
 /** A value the host supplies to a Tuff program: a number, a boolean, or a function. */
@@ -179,8 +182,6 @@ export interface Cursor {
   readonly hostValues: ReadonlyMap<string, HostValue>;
   /** Loads an imported module by name; undefined if no module has that name. */
   readonly modules: ModuleLoader;
-  /** The values this module exports with "out let", keyed by name. */
-  readonly exported: Map<string, Value>;
   /** The values passed to this module as inputs, by name. */
   readonly inputs: ReadonlyMap<string, Value>;
   /** The inputs this module declared with "in let". */

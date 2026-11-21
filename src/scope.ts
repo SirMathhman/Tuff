@@ -529,13 +529,12 @@ export function newCursor(
 ): Cursor {
   return {
     pos: 0,
-    scope: newScope(undefined),
+    scope: { ...newScope(undefined), exports: new Map() },
     dead: false,
     breakable: false,
     callDepth: 0,
     hostValues,
     modules,
-    exported: new Map(),
     inputs,
     inputsUsed: new Set(),
     linked,

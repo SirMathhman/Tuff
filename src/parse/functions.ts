@@ -399,10 +399,11 @@ export function parseInputLet(text: string, cursor: Cursor, isOut: boolean): Pro
     return annotation.error;
   }
   const { scope } = cursor;
-  if (scope.depth !== 0) {
+  const { exports: exportedValues } = scope;
+  if (scope.depth !== 0 || exportedValues === undefined) {
     return { offset: declStart, expected: '"in" only at the top level of a module' };
   }
-  const { inputs, inputsUsed, exported: exportedValues } = cursor;
+  const { inputs, inputsUsed } = cursor;
   const value = inputs.get(name);
   if (value === undefined) {
     return { offset: declStart, expected: `a value passed for input "${name}"` };

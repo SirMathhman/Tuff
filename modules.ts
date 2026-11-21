@@ -179,8 +179,8 @@ export function interpretModule(
     }
   }
   const { scope } = cursor;
-  const { functions } = scope;
-  return ok({ exports: cursor.exported, functions });
+  const { functions, exports } = scope;
+  return ok({ exports: exports ?? new Map(), functions });
 }
 
 /**
