@@ -27,6 +27,10 @@ export default tseslint.config(
           selector: "Literal[regex]",
           message: "Regex literals are not allowed. Use string methods instead.",
         },
+        {
+          selector: "ThrowStatement",
+          message: "throw is not allowed. Return a Result instead.",
+        },
       ],
     },
   },

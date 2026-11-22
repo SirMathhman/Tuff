@@ -1,12 +1,24 @@
+export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+
 type Token =
   | { kind: "number"; value: number; pos: number }
   | { kind: "operator"; symbol: "+" | "-" | "*"; pos: number };
+
+type Parsed = { value: number; next: number };
+
+function ok<T>(value: T): Result<T> {
+  return { ok: true, value };
+}
+
+function err<T>(error: string): Result<T> {
+  return { ok: false, error };
+}
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
 }
 
-function tokenize(source: string): Token[] {
+function tokenize(source: string): Result<Token[]> {
   const tokens: Token[] = [];
   let index = 0;
   while (index < source.length) {
@@ -24,10 +36,10 @@ function tokenize(source: string): Token[] {
     } else if (char.trim() === "") {
       index++;
     } else {
-      throw new Error(`Unexpected character "${char}" at position ${index}`);
+      return err(`Unexpected character "${char}" at position ${index}`);
     }
   }
-  return tokens;
+  return ok(tokens);
 }
 
 function signOf(token: Token | undefined): 1 | -1 | undefined {
@@ -43,59 +55,73 @@ function signOf(token: Token | undefined): 1 | -1 | undefined {
   return undefined;
 }
 
-export function interpretTuff(tuffSource: string): number {
+function expectedError<T>(what: string, tokens: Token[], index: number): Result<T> {
+  const token = tokens[index];
+  const where = token === undefined ? "end of input" : `position ${token.pos}`;
+  return err(`Expected ${what} at ${where}`);
+}
+
+function parseNumber(tokens: Token[], index: number): Result<Parsed> {
+  const token = tokens[index];
+  if (token?.kind !== "number") {
+    return expectedError("a number", tokens, index);
+  }
+  return ok({ value: token.value, next: index + 1 });
+}
+
+function parseTerm(tokens: Token[], index: number, sign: 1 | -1): Result<Parsed> {
+  const first = parseNumber(tokens, index);
+  if (!first.ok) {
+    return first;
+  }
+  let value = sign * first.value.value;
+  let next = first.value.next;
+  let token = tokens[next];
+  while (token?.kind === "operator" && token.symbol === "*") {
+    const factor = parseNumber(tokens, next + 1);
+    if (!factor.ok) {
+      return factor;
+    }
+    value *= factor.value.value;
+    next = factor.value.next;
+    token = tokens[next];
+  }
+  return ok({ value, next });
+}
+
+export function interpretTuff(tuffSource: string): Result<number> {
   // Grammar: an optional leading sign, then terms joined by "+" or "-".
   // A term is numbers joined by "*". Signs appear only at the start of the
   // expression or directly after "+" or "-". "*" binds tighter than "+" and "-".
-  const tokens = tokenize(tuffSource);
+  const tokenized = tokenize(tuffSource);
+  if (!tokenized.ok) {
+    return tokenized;
+  }
+  const tokens = tokenized.value;
   if (tokens.length === 0) {
-    return 0;
-  }
-
-  let index = 0;
-
-  function unexpected(expected: string): never {
-    const token = tokens[index];
-    const where = token === undefined ? "end of input" : `position ${token.pos}`;
-    throw new Error(`Expected ${expected} at ${where}`);
-  }
-
-  function expectNumber(): number {
-    const token = tokens[index];
-    if (token?.kind !== "number") {
-      return unexpected("a number");
-    }
-    index++;
-    return token.value;
-  }
-
-  function parseTerm(sign: 1 | -1): number {
-    let value = sign * expectNumber();
-    for (
-      let token = tokens[index];
-      token?.kind === "operator" && token.symbol === "*";
-      token = tokens[index]
-    ) {
-      index++;
-      value *= expectNumber();
-    }
-    return value;
+    return ok(0);
   }
 
   const leadingSign = signOf(tokens[0]);
-  if (leadingSign !== undefined) {
-    index = 1;
+  const first = parseTerm(tokens, leadingSign === undefined ? 0 : 1, leadingSign ?? 1);
+  if (!first.ok) {
+    return first;
   }
-  let sum = parseTerm(leadingSign ?? 1);
+  let sum = first.value.value;
+  let index = first.value.next;
 
   while (index < tokens.length) {
     const sign = signOf(tokens[index]);
     if (sign === undefined) {
-      return unexpected("an operator");
+      return expectedError("an operator", tokens, index);
     }
-    index++;
-    sum += parseTerm(sign);
+    const term = parseTerm(tokens, index + 1, sign);
+    if (!term.ok) {
+      return term;
+    }
+    sum += term.value.value;
+    index = term.value.next;
   }
 
-  return sum;
+  return ok(sum);
 }
