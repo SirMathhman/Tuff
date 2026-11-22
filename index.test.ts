@@ -12,3 +12,7 @@ test('interpretTuff("1 + 2") => 3', () => {
 test('interpretTuff("2 + 3 - 4") => 1', () => {
   expect(interpretTuff("2 + 3 - 4")).toBe(1);
 });
+
+test('interpretTuff("2 * 3 + 4") => 10', () => {
+  expect(interpretTuff("2 * 3 + 4")).toBe(10);
+});
