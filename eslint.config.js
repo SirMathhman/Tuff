@@ -31,6 +31,10 @@ export default tseslint.config(
           selector: "ThrowStatement",
           message: "throw is not allowed. Return a Result instead.",
         },
+        {
+          selector: "TSTypeLiteral",
+          message: "Object type literals are not allowed. Declare a named interface instead.",
+        },
       ],
     },
   },

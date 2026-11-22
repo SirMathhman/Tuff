@@ -1,10 +1,33 @@
-export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+export interface OkResult<T> {
+  ok: true;
+  value: T;
+}
 
-type Token =
-  | { kind: "number"; value: number; pos: number }
-  | { kind: "operator"; symbol: "+" | "-" | "*"; pos: number };
+export interface ErrResult {
+  ok: false;
+  error: string;
+}
 
-type Parsed = { value: number; next: number };
+export type Result<T> = OkResult<T> | ErrResult;
+
+interface NumberToken {
+  kind: "number";
+  value: number;
+  pos: number;
+}
+
+interface OperatorToken {
+  kind: "operator";
+  symbol: "+" | "-" | "*";
+  pos: number;
+}
+
+type Token = NumberToken | OperatorToken;
+
+interface Parsed {
+  value: number;
+  next: number;
+}
 
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
