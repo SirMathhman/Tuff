@@ -6,15 +6,15 @@ export function interpretTuff(tuffSource: string): number {
   // operator between, starts a new term. Any other character ends the term and
   // clears a pending sign.
   let sum = 0;
-  let term: number | null = null;
+  let term: number | undefined = undefined;
   let sign = 1;
   let afterStar = false;
   let digits = "";
 
   function commitTerm(): void {
-    if (term !== null) {
+    if (term !== undefined) {
       sum += term;
-      term = null;
+      term = undefined;
     }
   }
 
