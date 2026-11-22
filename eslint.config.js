@@ -10,6 +10,7 @@ export default tseslint.config(
   tseslint.configs.recommended,
   {
     rules: {
+      "func-style": ["error", "declaration", { allowArrowFunctions: false }],
       "no-restricted-syntax": [
         "error",
         {

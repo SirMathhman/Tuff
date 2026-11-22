@@ -6,13 +6,13 @@ export function interpretTuff(tuffSource: string): number {
   let sign = 1;
   let digits = "";
 
-  const flushDigits = (): void => {
+  function flushDigits(): void {
     if (digits !== "") {
       sum += sign * Number(digits);
       digits = "";
       sign = 1;
     }
-  };
+  }
 
   for (const char of tuffSource) {
     if (char >= "0" && char <= "9") {
