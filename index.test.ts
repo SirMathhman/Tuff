@@ -140,6 +140,18 @@ test('interpretTuff("x = 1; x") => undefined variable error for assignment', () 
   });
 });
 
+test("interpretTuff with 1001 nested parentheses => nesting too deep error", () => {
+  expect(interpretTuff("(".repeat(1001) + "1" + ")".repeat(1001))).toEqual({
+    ok: false,
+    error: {
+      what: "Nesting too deep",
+      where: 1000,
+      why: "Groups nest more than 1000 levels deep",
+      fix: "Reduce the nesting of parentheses and braces",
+    },
+  });
+});
+
 test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
   expect(interpretTuff("{ 2 + 3")).toEqual({
     ok: false,

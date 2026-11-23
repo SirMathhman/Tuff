@@ -109,6 +109,10 @@ interface Parsed {
 // instead of calling parseFactor directly, which breaks the recursion cycle.
 type Parser = (tokens: Token[], index: number, scope: Scope, end: number) => Result<Parsed>;
 
+// The deepest allowed nesting of parentheses and braces. The parser recurses
+// once per level, so this bound keeps it inside the call stack.
+const MAX_NESTING = 1000;
+
 function ok<T>(value: T): Result<T> {
   return { ok: true, value };
 }
@@ -670,6 +674,27 @@ function parseAssign(
   );
 }
 
+// Rejects source whose parentheses and braces nest deeper than MAX_NESTING.
+function checkNesting(tokens: Token[]): Result<true> {
+  let depth = 0;
+  for (const token of tokens) {
+    if (token.kind === "open") {
+      depth++;
+      if (depth > MAX_NESTING) {
+        return err({
+          what: "Nesting too deep",
+          where: token.pos,
+          why: `Groups nest more than ${MAX_NESTING} levels deep`,
+          fix: "Reduce the nesting of parentheses and braces",
+        });
+      }
+    } else if (token.kind === "close") {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return ok(true);
+}
+
 export function interpretTuff(tuffSource: string): Result<number> {
   // Grammar:
   //   sequence   = { statement } expression
@@ -690,6 +715,10 @@ export function interpretTuff(tuffSource: string): Result<number> {
   const end = tuffSource.length;
   if (tokens.length === 0) {
     return ok(0);
+  }
+  const nesting = checkNesting(tokens);
+  if (!nesting.ok) {
+    return nesting;
   }
 
   const sequence = parseSequence(tokens, 0, rootScope(), end, parseFactor);
