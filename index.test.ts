@@ -275,6 +275,18 @@ test("interpretTuff('let b = true; if (b) 1 else 2') returns Ok(1)", () => {
   expect(interpretTuff("let b = true; if (b) 1 else 2")).toEqual(ok(1));
 });
 
+test("interpretTuff('let mut x = 0; if (true) { x = 1; } else { x = 2; } x') returns Ok(1)", () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toEqual(ok(1));
+});
+
+test("interpretTuff ending in an if statement with statement branches returns Ok(0)", () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; }")).toEqual(ok(0));
+});
+
+test("interpretTuff an if with statement branches followed by an operator is an InvalidTerm error", () => {
+  expectErrorKind("let mut x = 0; if (true) { x = 1; } else { x = 2; } + 1", "InvalidTerm");
+});
+
 test("interpretTuff('true') returns Ok(1)", () => {
   expect(interpretTuff("true")).toEqual(ok(1));
 });

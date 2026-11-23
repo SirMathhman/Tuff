@@ -31,7 +31,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 ### Stages and tests
 
-1. Pipeline: `tokenizer.ts`, then `parser.ts` (AST), then `evaluator.ts`. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
+1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists and blocks), then `evaluator.ts`. Parse-error constructors live in `parse-errors.ts`, which every parser module imports, so no parser module imports another. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
 2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
 3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 
@@ -43,7 +43,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; when both branches are statement blocks, the if is a statement with no value; `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
 - Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, or `}`, or the `}` ends the input and directly follows a `;`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.

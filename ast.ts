@@ -74,10 +74,18 @@ interface ScopeStatement {
   statements: Statement[];
 }
 
+interface BranchStatement {
+  kind: "branch";
+  condition: Expr;
+  then: Statement[];
+  otherwise: Statement[];
+  where: ErrorWhere;
+}
+
 /**
  * A statement inside a block body: a let declaration, an assignment, or a statement block.
  */
-export type Statement = LetStatement | AssignStatement | ScopeStatement;
+export type Statement = LetStatement | AssignStatement | ScopeStatement | BranchStatement;
 
 interface BlockNode {
   kind: "block";

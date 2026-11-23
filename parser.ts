@@ -225,16 +225,7 @@ function parsePrimary(
   );
 }
 
-function parseIf(
-  tokens: string[],
-  pos: number,
-  depth: number,
-  expr: ExprRule,
-): Parse {
-  if (depth >= MAX_NESTING_DEPTH) {
-    return nestingTooDeepAt(tokens, pos);
-  }
-
+function parseCondition(tokens: string[], pos: number, depth: number, expr: ExprRule): Parse {
   if (tokens[pos + 1] !== "(") {
     return invalidAt(tokens, pos + 1, "'(' after 'if'", "Write the condition in parentheses after 'if'.");
   }
@@ -249,7 +240,26 @@ function parseIf(
     return invalidAt(tokens, condition.value.next, "')' after the condition", "Close the condition with ')'.");
   }
 
-  const then = expr(tokens, condition.value.next + 1, depth);
+  return ok({ value: condition.value.value, next: condition.value.next + 1 });
+}
+
+function parseIf(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  const condition = parseCondition(tokens, pos, depth, expr);
+
+  if (!condition.ok) {
+    return condition;
+  }
+
+  const then = expr(tokens, condition.value.next, depth);
 
   if (!then.ok) {
     return then;
@@ -393,18 +403,18 @@ function startsStatement(tokens: string[], pos: number): boolean {
   return token === "let" || (token !== undefined && isIdentifier(token) && tokens[pos + 1] === "=");
 }
 
-function closingBrace(tokens: string[], open: number): number | undefined {
+function closingOf(tokens: string[], open: number, opener: string, closer: string): number | undefined {
   let level = 0;
   let index = open;
 
   while (index < tokens.length) {
     const token = tokens[index];
 
-    if (token === "{") {
+    if (token === opener) {
       level += 1;
     }
 
-    if (token === "}") {
+    if (token === closer) {
       level -= 1;
     }
 
@@ -437,7 +447,7 @@ function isStatementBlock(tokens: string[], open: number): boolean {
     return false;
   }
 
-  const close = closingBrace(tokens, open);
+  const close = closingOf(tokens, open, "{", "}");
 
   if (close === undefined) {
     return false;
@@ -452,6 +462,80 @@ function isStatementBlock(tokens: string[], open: number): boolean {
   return canFollowStatementBlock(follower);
 }
 
+type StatementsRule = (tokens: string[], pos: number, depth: number, expr: ExprRule) => Result<StatementsParsed, TuffError>;
+
+// An "if" is a statement when both branches are statement blocks (each ends
+// with ";") and the token after the else block cannot continue an expression.
+// A following operator makes the whole if an expression, as with statement blocks.
+function isBranchStatement(tokens: string[], pos: number): boolean {
+  if (tokens[pos] !== "if" || tokens[pos + 1] !== "(") {
+    return false;
+  }
+
+  const conditionClose = closingOf(tokens, pos + 1, "(", ")");
+
+  if (conditionClose === undefined || tokens[conditionClose + 1] !== "{") {
+    return false;
+  }
+
+  const thenClose = closingOf(tokens, conditionClose + 1, "{", "}");
+
+  if (thenClose === undefined || tokens[thenClose + 1] !== "else" || tokens[thenClose + 2] !== "{") {
+    return false;
+  }
+
+  const elseClose = closingOf(tokens, thenClose + 2, "{", "}");
+
+  if (elseClose === undefined || tokens[thenClose - 1] !== ";" || tokens[elseClose - 1] !== ";") {
+    return false;
+  }
+
+  const follower = tokens[elseClose + 1];
+
+  return follower !== "+" && follower !== "-" && follower !== "*";
+}
+
+function parseBranchStatement(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+  statementsRule: StatementsRule,
+): Result<StatementParsed, TuffError> {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  const condition = parseCondition(tokens, pos, depth, expr);
+
+  if (!condition.ok) {
+    return condition;
+  }
+
+  const then = statementsRule(tokens, condition.value.next + 1, depth + 1, expr);
+
+  if (!then.ok) {
+    return then;
+  }
+
+  const otherwise = statementsRule(tokens, then.value.next + 3, depth + 1, expr);
+
+  if (!otherwise.ok) {
+    return otherwise;
+  }
+
+  return ok({
+    statement: {
+      kind: "branch",
+      condition: condition.value.value,
+      then: then.value.statements,
+      otherwise: otherwise.value.statements,
+      where: whereAt(tokens, pos),
+    },
+    next: otherwise.value.next + 1,
+  });
+}
+
 function parseStatementList(
   tokens: string[],
   pos: number,
@@ -461,8 +545,17 @@ function parseStatementList(
   const statements: Statement[] = [];
   let next = pos;
 
-  while (startsStatement(tokens, next) || isStatementBlock(tokens, next)) {
-    if (tokens[next] === "{") {
+  while (startsStatement(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
+    if (tokens[next] === "if") {
+      const branch = parseBranchStatement(tokens, next, depth, expr, parseStatementList);
+
+      if (!branch.ok) {
+        return branch;
+      }
+
+      statements.push(branch.value.statement);
+      next = branch.value.next;
+    } else if (tokens[next] === "{") {
       if (depth >= MAX_NESTING_DEPTH) {
         return nestingTooDeepAt(tokens, next);
       }

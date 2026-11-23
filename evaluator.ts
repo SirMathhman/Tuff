@@ -106,6 +106,22 @@ function runStatements(
         return inner.ok ? ok(acc.value) : inner;
       }
 
+      if (statement.kind === "branch") {
+        const condition = evaluateRule(statement.condition, acc.value);
+
+        if (!condition.ok) {
+          return condition;
+        }
+
+        if (typeof condition.value !== "boolean") {
+          return typeMismatchAt(statement.where, "a boolean condition", typeName(condition.value));
+        }
+
+        const chosen = runStatements(condition.value ? statement.then : statement.otherwise, acc.value, evaluateRule);
+
+        return chosen.ok ? ok(acc.value) : chosen;
+      }
+
       const value = evaluateRule(statement.value, acc.value);
 
       if (!value.ok) {
