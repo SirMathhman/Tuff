@@ -90,6 +90,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - `if (cond) a else b` takes a boolean condition and requires both branches; the else branch is a comparison, so arithmetic and shifts after it belong to the else branch, while `|`, `&`, `&&`, and `||` after it apply to the whole if.
 - A `{` at statement position opens a statement block when its contents begin with a statement and the token after its `}` ends the statement.
 - `while (cond) { body }` is a statement. It runs the body while the boolean condition holds, with no step limit yet. The body is a block or one unbraced statement other than `let`. The body's bindings end with each pass, and its changes to outer mut names persist.
+- An `if` statement's then and else branches are each a block or one unbraced statement other than `let`, as in `if (c) x += 1; else x += 2;`. An `if` that begins like an expression, such as `if (c) 1 else 2`, stays an expression.
 - `x op= value;` on a mut name is the same as `x = x op value;`, for `+=`, `-=`, `*=`, and `/=`.
 
 ### Blocks as values

@@ -129,33 +129,22 @@ function parseCompoundAssign(tokens: Token[], pos: number, depth: number, expr: 
   });
 }
 
-// while (condition) { body }: runs the body while the condition holds.
-// while (condition) { body }, or while (condition) statement; with one unbraced statement as the body.
-function parseWhile(
+// The "(condition)" after if or while, then its body.
+interface ConditionBody {
+  condition: Expr;
+  body: BodyParsed;
+}
+
+function parseConditionBody(
   tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
   statementsRule: StatementsRule,
   oneRule: OneStatementRule,
-): Result<StatementParsed, TuffError> {
-  const closing = closingOf(tokens, pos + 1, "(", ")");
-
-  if (closing !== undefined && textAt(tokens, closing + 1) === "{") {
-    const loop = parseConditionBody(tokens, pos, depth, expr, statementsRule);
-
-    if (!loop.ok) {
-      return loop;
-    }
-
-    if (textAt(tokens, loop.value.next) !== "}") {
-      return invalidAt(tokens, loop.value.next, "'}' after the loop body", "Close the loop body with '}'.");
-    }
-
-    return ok({
-      statement: { kind: "while", condition: loop.value.condition, body: loop.value.statements, where: whereAt(tokens, pos) },
-      next: loop.value.next + 1,
-    });
+): Result<ConditionBody, TuffError> {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
   }
 
   const condition = parseCondition(tokens, pos, depth, expr);
@@ -164,19 +153,33 @@ function parseWhile(
     return condition;
   }
 
-  if (textAt(tokens, condition.value.next) === "let") {
-    return invalidAt(tokens, condition.value.next, "a statement other than let as the loop body", "Wrap the let in braces, or use a statement that does not bind a name.");
+  const body = parseBody(tokens, condition.value.next, depth, expr, statementsRule, oneRule);
+
+  if (!body.ok) {
+    return body;
   }
 
-  const single = oneRule(tokens, condition.value.next, depth + 1, expr, statementsRule);
+  return ok({ condition: condition.value.value, body: body.value });
+}
 
-  if (!single.ok) {
-    return single;
+// while (condition) body: runs the body while the condition holds.
+function parseWhile(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+  statementsRule: StatementsRule,
+  oneRule: OneStatementRule,
+): Result<StatementParsed, TuffError> {
+  const loop = parseConditionBody(tokens, pos, depth, expr, statementsRule, oneRule);
+
+  if (!loop.ok) {
+    return loop;
   }
 
   return ok({
-    statement: { kind: "while", condition: condition.value.value, body: [single.value.statement], where: whereAt(tokens, pos) },
-    next: single.value.next,
+    statement: { kind: "while", condition: loop.value.condition, body: loop.value.body.statements, where: whereAt(tokens, pos) },
+    next: loop.value.body.next,
   });
 }
 
@@ -294,7 +297,7 @@ function canFollowStatementBlock(token: string | undefined): boolean {
 // an enclosing block. A block followed by an operator is a value, as in
 // "{ let x = 2; x } * 4".
 function isStatementBlock(tokens: Token[], open: number): boolean {
-  if (textAt(tokens, open) !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1))) {
+  if (textAt(tokens, open) !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1) && !isUnbracedIf(tokens, open + 1))) {
     return false;
   }
 
@@ -354,67 +357,91 @@ function isBranchStatement(tokens: Token[], pos: number): boolean {
   return !continuesExpression(textAt(tokens, elseClose + 1));
 }
 
-interface ConditionBody {
-  condition: Expr;
+// An if whose then branch is one unbraced statement, as in if (c) x += 1;. The branch must begin like a
+// statement, so an if expression such as if (c) 1 else 2 is not taken as a statement.
+function isUnbracedIf(tokens: Token[], pos: number): boolean {
+  if (textAt(tokens, pos) !== "if" || textAt(tokens, pos + 1) !== "(") {
+    return false;
+  }
+
+  const closing = closingOf(tokens, pos + 1, "(", ")");
+
+  if (closing === undefined) {
+    return false;
+  }
+
+  const first = closing + 1;
+
+  return textAt(tokens, first) !== "let" && (startsStatement(tokens, first) || isElementAssign(tokens, first) || isDerefAssign(tokens, first));
+}
+
+// A branch or loop body: a block's statements, or one unbraced statement other than let.
+interface BodyParsed {
   statements: Statement[];
-  // The index of the closing "}" of the body.
+  // The index just after the body.
   next: number;
 }
 
-// The "(condition)" after if or while, then its "{ statements }" body.
-function parseConditionBody(
+function parseBody(
   tokens: Token[],
-  pos: number,
+  start: number,
   depth: number,
   expr: ExprRule,
   statementsRule: StatementsRule,
-): Result<ConditionBody, TuffError> {
-  if (depth >= MAX_NESTING_DEPTH) {
-    return nestingTooDeepAt(tokens, pos);
+  oneRule: OneStatementRule,
+): Result<BodyParsed, TuffError> {
+  if (textAt(tokens, start) === "{") {
+    const body = statementsRule(tokens, start + 1, depth + 1, expr);
+
+    if (!body.ok) {
+      return body;
+    }
+
+    if (textAt(tokens, body.value.next) !== "}") {
+      return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
+    }
+
+    return ok({ statements: body.value.statements, next: body.value.next + 1 });
   }
 
-  const condition = parseCondition(tokens, pos, depth, expr);
-
-  if (!condition.ok) {
-    return condition;
+  if (textAt(tokens, start) === "let") {
+    return invalidAt(tokens, start, "a statement other than let as the body", "Wrap the let in braces, or use a statement that does not bind a name.");
   }
 
-  const body = statementsRule(tokens, condition.value.next + 1, depth + 1, expr);
+  const single = oneRule(tokens, start, depth + 1, expr, statementsRule);
 
-  if (!body.ok) {
-    return body;
+  if (!single.ok) {
+    return single;
   }
 
-  return ok({ condition: condition.value.value, statements: body.value.statements, next: body.value.next });
+  return ok({ statements: [single.value.statement], next: single.value.next });
 }
 
+// if (condition) body, with an optional else body; each body is braced or one unbraced statement.
 function parseBranchStatement(
   tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
   statementsRule: StatementsRule,
+  oneRule: OneStatementRule,
 ): Result<StatementParsed, TuffError> {
-  const then = parseConditionBody(tokens, pos, depth, expr, statementsRule);
+  const head = parseConditionBody(tokens, pos, depth, expr, statementsRule, oneRule);
 
-  if (!then.ok) {
-    return then;
+  if (!head.ok) {
+    return head;
   }
 
-  if (textAt(tokens, then.value.next + 1) !== "else") {
+  const then = head.value.body;
+
+  if (textAt(tokens, then.next) !== "else") {
     return ok({
-      statement: {
-        kind: "branch",
-        condition: then.value.condition,
-        then: then.value.statements,
-        otherwise: [],
-        where: whereAt(tokens, pos),
-      },
-      next: then.value.next + 1,
+      statement: { kind: "branch", condition: head.value.condition, then: then.statements, otherwise: [], where: whereAt(tokens, pos) },
+      next: then.next,
     });
   }
 
-  const otherwise = statementsRule(tokens, then.value.next + 3, depth + 1, expr);
+  const otherwise = parseBody(tokens, then.next + 1, depth, expr, statementsRule, oneRule);
 
   if (!otherwise.ok) {
     return otherwise;
@@ -423,12 +450,12 @@ function parseBranchStatement(
   return ok({
     statement: {
       kind: "branch",
-      condition: then.value.condition,
-      then: then.value.statements,
+      condition: head.value.condition,
+      then: then.statements,
       otherwise: otherwise.value.statements,
       where: whereAt(tokens, pos),
     },
-    next: otherwise.value.next + 1,
+    next: otherwise.value.next,
   });
 }
 
@@ -443,7 +470,7 @@ function parseOneStatement(
   const token = textAt(tokens, pos);
 
   if (token === "if") {
-    return parseBranchStatement(tokens, pos, depth, expr, statementsRule);
+    return parseBranchStatement(tokens, pos, depth, expr, statementsRule, parseOneStatement);
   }
 
   if (token === "while") {
@@ -455,17 +482,13 @@ function parseOneStatement(
       return nestingTooDeepAt(tokens, pos);
     }
 
-    const body = statementsRule(tokens, pos + 1, depth + 1, expr);
+    const block = parseBody(tokens, pos, depth, expr, statementsRule, parseOneStatement);
 
-    if (!body.ok) {
-      return body;
+    if (!block.ok) {
+      return block;
     }
 
-    if (textAt(tokens, body.value.next) !== "}") {
-      return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
-    }
-
-    return ok({ statement: { kind: "scope", statements: body.value.statements }, next: body.value.next + 1 });
+    return ok({ statement: { kind: "scope", statements: block.value.statements }, next: block.value.next });
   }
 
   if (token === "let") {
@@ -496,7 +519,7 @@ function parseStatementList(
   const statements: Statement[] = [];
   let next = pos;
 
-  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
+  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next) || isUnbracedIf(tokens, next)) {
     const parsed = parseOneStatement(tokens, next, depth, expr, parseStatementList);
 
     if (!parsed.ok) {
