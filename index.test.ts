@@ -214,6 +214,22 @@ test("interpretTuff('1\\n+2') returns Ok(3)", () => {
   expect(interpretTuff("1\n+2")).toEqual(ok(3));
 });
 
+test("interpretTuff('let mut x = 0; x = 1; x') returns Ok(1)", () => {
+  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual(ok(1));
+});
+
+test("interpretTuff assigning to a name declared without mut is an ImmutableAssignment error", () => {
+  expectErrorKind("let x = 0; x = 1; x", "ImmutableAssignment");
+});
+
+test("interpretTuff assignment inside a nested block persists after the block", () => {
+  expect(interpretTuff("let mut x = 0; let y = { x = 5; x }; x + y")).toEqual(ok(10));
+});
+
+test("interpretTuff assigning to an undeclared name is an UndefinedName error", () => {
+  expectErrorKind("x = 1; x", "UndefinedName");
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });

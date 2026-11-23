@@ -8,16 +8,17 @@ import {
 } from "./errors.ts";
 
 // Grammar, implemented by the functions below:
-//   program  := body
-//   body     := ("let" name "=" expr ";")* expr
-//   expr     := term (("+" | "-") term)*
-//   term     := factor ("*" factor)*
-//   factor   := "-"? primary
-//   primary  := number | name | "(" expr ")" | "{" body "}"
+//   program   := body
+//   body      := statement* expr
+//   statement := "let" "mut"? name "=" expr ";" | name "=" expr ";"
+//   expr      := term (("+" | "-") term)*
+//   term      := factor ("*" factor)*
+//   factor    := "-"? primary
+//   primary   := number | name | "(" expr ")" | "{" body "}"
 // A name starts with a letter or underscore and continues with letters,
-// digits, or underscores; "let" is reserved. The parser builds an AST; the
-// evaluator computes its value. primary receives expr as a parameter, so the
-// rules form no static cycle.
+// digits, or underscores; "let" and "mut" are reserved. The parser builds an
+// AST; the evaluator computes its value. primary receives expr as a parameter,
+// so the rules form no static cycle.
 
 interface NumberNode {
   kind: "number";
@@ -53,19 +54,35 @@ interface ChainNode {
   links: Link[];
 }
 
-/**
- * A let statement: a name bound to the value of an expression.
- */
-export interface Binding {
-  /** The declared name. */
+interface LetStatement {
+  kind: "let";
   name: string;
-  /** The expression whose value the name is bound to. */
+  mutable: boolean;
   value: Expr;
 }
 
+/**
+ * An assignment to a name that an enclosing let statement declared.
+ */
+export interface AssignStatement {
+  /** The statement kind. */
+  kind: "assign";
+  /** The name being assigned. */
+  name: string;
+  /** The expression whose value replaces the name's value. */
+  value: Expr;
+  /** Where the assigned name appears in the token list. */
+  where: ErrorWhere;
+}
+
+/**
+ * A statement inside a block body: a let declaration or an assignment.
+ */
+export type Statement = LetStatement | AssignStatement;
+
 interface BlockNode {
   kind: "block";
-  bindings: Binding[];
+  statements: Statement[];
   result: Expr;
 }
 
@@ -84,8 +101,8 @@ interface Parsed {
   next: number;
 }
 
-interface BindingParsed {
-  binding: Binding;
+interface StatementParsed {
+  statement: Statement;
   next: number;
 }
 
@@ -112,6 +129,7 @@ function isIdentifier(text: string): boolean {
 
   return (
     text !== "let" &&
+    text !== "mut" &&
     chars.length > 0 &&
     isLetterOrUnderscore(chars[0] ?? "") &&
     chars.every((char) => isLetterOrUnderscore(char) || isDigit(char))
@@ -305,42 +323,88 @@ export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
   );
 }
 
-function parseBinding(
+function parseStatementValue(
   tokens: string[],
   pos: number,
   depth: number,
   expr: ExprRule,
-): Result<BindingParsed, TuffError> {
-  const name = tokens[pos + 1];
-
-  if (name === undefined || !isIdentifier(name)) {
-    return invalidAt(tokens, pos + 1, "a name after 'let'", "Write a name such as x after 'let'.");
-  }
-
-  if (tokens[pos + 2] !== "=") {
-    return invalidAt(tokens, pos + 2, "'=' after the name", "Write '=' and a value after the name.");
-  }
-
-  const value = expr(tokens, pos + 3, depth);
+  keyword: string,
+): Parse {
+  const value = expr(tokens, pos, depth);
 
   if (!value.ok) {
     return value;
   }
 
   if (tokens[value.value.next] !== ";") {
-    return invalidAt(tokens, value.value.next, "';' after the value", "End the let statement with ';'.");
+    return invalidAt(tokens, value.value.next, "';' after the value", `End the ${keyword} with ';'.`);
   }
 
-  return ok({ binding: { name, value: value.value.value }, next: value.value.next + 1 });
+  return ok({ value: value.value.value, next: value.value.next + 1 });
+}
+
+function parseLet(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Result<StatementParsed, TuffError> {
+  const mutable = tokens[pos + 1] === "mut";
+  const nameIndex = mutable ? pos + 2 : pos + 1;
+  const name = tokens[nameIndex];
+
+  if (name === undefined || !isIdentifier(name)) {
+    return invalidAt(tokens, nameIndex, "a name after 'let'", "Write a name such as x after 'let'.");
+  }
+
+  if (tokens[nameIndex + 1] !== "=") {
+    return invalidAt(tokens, nameIndex + 1, "'=' after the name", "Write '=' and a value after the name.");
+  }
+
+  const value = parseStatementValue(tokens, nameIndex + 2, depth, expr, "let statement");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  return ok({
+    statement: { kind: "let", name, mutable, value: value.value.value },
+    next: value.value.next,
+  });
+}
+
+function parseAssign(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Result<StatementParsed, TuffError> {
+  const name = tokens[pos] ?? "";
+  const value = parseStatementValue(tokens, pos + 2, depth, expr, "assignment");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  return ok({
+    statement: { kind: "assign", name, value: value.value.value, where: whereAt(tokens, pos) },
+    next: value.value.next,
+  });
+}
+
+function startsStatement(tokens: string[], pos: number): boolean {
+  const token = tokens[pos];
+
+  return token === "let" || (token !== undefined && isIdentifier(token) && tokens[pos + 1] === "=");
 }
 
 /**
- * Parses a block body: any let statements followed by the final expression.
+ * Parses a block body: any statements followed by the final expression.
  * @param tokens - The token list to parse.
  * @param pos - The index of the first token of the body.
  * @param depth - The number of groups enclosing this position.
  * @param expr - The expression rule used for values and the final expression.
- * @returns The body as an expression, or a block when it has let statements.
+ * @returns The body as an expression, or a block when it has statements.
  */
 export function blockBody(
   tokens: string[],
@@ -348,18 +412,21 @@ export function blockBody(
   depth: number,
   expr: ExprRule,
 ): Parse {
-  const bindings: Binding[] = [];
+  const statements: Statement[] = [];
   let next = pos;
 
-  while (tokens[next] === "let") {
-    const declared = parseBinding(tokens, next, depth, expr);
+  while (startsStatement(tokens, next)) {
+    const parsed =
+      tokens[next] === "let"
+        ? parseLet(tokens, next, depth, expr)
+        : parseAssign(tokens, next, depth, expr);
 
-    if (!declared.ok) {
-      return declared;
+    if (!parsed.ok) {
+      return parsed;
     }
 
-    bindings.push(declared.value.binding);
-    next = declared.value.next;
+    statements.push(parsed.value.statement);
+    next = parsed.value.next;
   }
 
   const result = expr(tokens, next, depth);
@@ -368,12 +435,12 @@ export function blockBody(
     return result;
   }
 
-  if (bindings.length === 0) {
+  if (statements.length === 0) {
     return result;
   }
 
   return ok({
-    value: { kind: "block", bindings, result: result.value.value },
+    value: { kind: "block", statements, result: result.value.value },
     next: result.value.next,
   });
 }

@@ -86,6 +86,14 @@ export interface UndefinedName extends TuffErrorDetails {
 }
 
 /**
+ * A name declared without mut is the target of an assignment.
+ */
+export interface ImmutableAssignment extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "ImmutableAssignment";
+}
+
+/**
  * Any error that interpretTuff can return.
  */
 export type TuffError =
@@ -93,7 +101,8 @@ export type TuffError =
   | TermTooLarge
   | ResultTooLarge
   | NestingTooDeep
-  | UndefinedName;
+  | UndefinedName
+  | ImmutableAssignment;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -139,6 +148,20 @@ export function undefinedNameAt(where: ErrorWhere): Err<TuffError> {
     why: `${JSON.stringify(where.text)} is not declared.`,
     where,
     fix: `Declare it first with let ${where.text} = ...; before using it.`,
+  });
+}
+
+/**
+ * Builds an ImmutableAssignment error for an assignment to a name declared without mut.
+ * @param where - The token where the assignment targets the name.
+ * @returns An Err result holding the ImmutableAssignment error.
+ */
+export function immutableAssignmentAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    kind: "ImmutableAssignment",
+    why: `${JSON.stringify(where.text)} was declared without mut, so it cannot be assigned.`,
+    where,
+    fix: `Declare it as let mut ${where.text} = ...; to allow assignment.`,
   });
 }
 

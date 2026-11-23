@@ -9,7 +9,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function of the interpreter.
 - **Value**: the result of evaluating a program. Numbers only for now.
-- **Binding**: a name paired with a value, introduced by `let`.
+- **Binding**: a name paired with a value, introduced by `let`. A `let mut` binding can be reassigned with `name = expr;`.
 - **Scope**: the bindings visible at a point, innermost first. Inner blocks shadow outer names; the last declaration wins.
 - **Block**: a body of bindings followed by a result expression.
 
@@ -45,7 +45,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 - Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, and undeclared names are errors. A block ends in a final expression.
+- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block ends in a final expression.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 

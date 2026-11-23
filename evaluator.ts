@@ -1,15 +1,21 @@
 import {
   ok,
+  immutableAssignmentAt,
   resultTooLargeAt,
   undefinedNameAt,
   type Result,
   type TuffError,
 } from "./errors.ts";
-import { type Binding, type Expr, type Link } from "./parser.ts";
+import { type AssignStatement, type Expr, type Link, type Statement } from "./parser.ts";
+
+interface Cell {
+  value: number;
+}
 
 interface Scope {
   name: string;
-  value: number;
+  cell: Cell;
+  mutable: boolean;
   parent?: Scope;
 }
 
@@ -33,25 +39,60 @@ function lookup(name: string, scope: Scope | undefined): Scope | undefined {
   return current;
 }
 
+function assign(
+  statement: AssignStatement,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Scope | undefined, TuffError> {
+  const target = lookup(statement.name, scope);
+
+  if (target === undefined) {
+    return undefinedNameAt(statement.where);
+  }
+
+  if (!target.mutable) {
+    return immutableAssignmentAt(statement.where);
+  }
+
+  const value = evaluateRule(statement.value, scope);
+
+  if (!value.ok) {
+    return value;
+  }
+
+  target.cell.value = value.value;
+
+  return ok(scope);
+}
+
 function evaluateBlock(
-  bindings: Binding[],
+  statements: Statement[],
   result: Expr,
   scope: Scope | undefined,
   evaluateRule: EvalRule,
 ): Result<number, TuffError> {
-  const inner = bindings.reduce<Result<Scope | undefined, TuffError>>(
-    (acc, binding) => {
+  const inner = statements.reduce<Result<Scope | undefined, TuffError>>(
+    (acc, statement) => {
       if (!acc.ok) {
         return acc;
       }
 
-      const value = evaluateRule(binding.value, acc.value);
+      if (statement.kind === "assign") {
+        return assign(statement, acc.value, evaluateRule);
+      }
+
+      const value = evaluateRule(statement.value, acc.value);
 
       if (!value.ok) {
         return value;
       }
 
-      return ok({ name: binding.name, value: value.value, parent: acc.value });
+      return ok({
+        name: statement.name,
+        cell: { value: value.value },
+        mutable: statement.mutable,
+        parent: acc.value,
+      });
     },
     ok(scope),
   );
@@ -64,7 +105,7 @@ function evaluateBlock(
 }
 
 /**
- * Computes the value of a parsed expression, reporting names that are not declared and values that leave the safe integer range.
+ * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
  * @param scope - The let bindings visible to the expression, innermost first.
  * @returns The computed value, or a structured error.
@@ -83,11 +124,11 @@ export function evaluate(expr: Expr, scope?: Scope): Result<number, TuffError> {
   if (expr.kind === "reference") {
     const found = lookup(expr.name, scope);
 
-    return found === undefined ? undefinedNameAt(expr.where) : ok(found.value);
+    return found === undefined ? undefinedNameAt(expr.where) : ok(found.cell.value);
   }
 
   if (expr.kind === "block") {
-    return evaluateBlock(expr.bindings, expr.result, scope, evaluate);
+    return evaluateBlock(expr.statements, expr.result, scope, evaluate);
   }
 
   return expr.links.reduce<Result<number, TuffError>>(
