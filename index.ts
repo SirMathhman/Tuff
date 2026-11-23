@@ -33,25 +33,15 @@ interface Term {
   text: string;
 }
 
-function splitTerms(source: string): Term[] {
-  const terms: Term[] = [];
-  let sign = 1;
-  let text = "";
-  for (const char of source) {
-    if (char === "+" || char === "-") {
-      terms.push({ sign, text: text.trim() });
-      sign = char === "+" ? 1 : -1;
-      text = "";
-    } else {
-      text += char;
-    }
-  }
-  terms.push({ sign, text: text.trim() });
-  return terms;
+function parseTerm(chunk: string): Term {
+  const trimmed = chunk.trim();
+  return trimmed.startsWith("-")
+    ? { sign: -1, text: trimmed.slice(1).trim() }
+    : { sign: 1, text: trimmed };
 }
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  const terms = splitTerms(tuffSource);
+  const terms = tuffSource.replaceAll("-", "+-").split("+").map(parseTerm);
   if (!terms.every((term) => isDigits(term.text))) {
     return err({ message: `Invalid number in: ${JSON.stringify(tuffSource)}` });
   }

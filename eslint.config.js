@@ -26,6 +26,18 @@ export default [
           selector: "CallExpression[callee.name='RegExp']",
           message: "RegExp() is not allowed.",
         },
+        {
+          selector: "ForStatement",
+          message: "Use map or reduce instead of a for loop.",
+        },
+        {
+          selector: "ForInStatement",
+          message: "Use map or reduce instead of a for loop.",
+        },
+        {
+          selector: "ForOfStatement",
+          message: "Use map or reduce instead of a for loop.",
+        },
       ],
     },
   },
