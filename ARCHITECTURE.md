@@ -21,7 +21,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 ## Structure
 
-Dependency direction is strictly downward. No cycles exist; `madge --circular` in `lint` enforces this. `for` loops are banned; prefer `map` and `reduce`, using `while` only where a parse must read ahead.
+Dependency direction is strictly downward. Source lives in `src/`, and no directory holds more than 10 files (checked by `scripts/check-file-count.ts` in `lint`). No cycles exist; `madge --circular` in `lint` enforces this. `for` loops are banned; prefer `map` and `reduce`, using `while` only where a parse must read ahead.
 
 ### Layers
 
@@ -31,7 +31,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 ### Stages and tests
 
-1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists, blocks, and if statements), then `evaluator.ts`. `conditions.ts` holds the shared `( expr )` condition rule. Parse-error constructors and position helpers live in `parse-errors.ts`. `statements.ts` and `conditions.ts` import only `parse-errors.ts`, `ast.ts`, and each other; they receive the expression rule as a parameter. `parser.ts` imports them, so no parser module imports the expression parser, and no cycle forms. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
+1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists, blocks, and if statements), then `evaluator.ts`. `conditions.ts` holds the shared `( expr )` condition rule. Parse-error constructors and position helpers live in `parse-errors.ts`. `statements.ts` and `conditions.ts` import only the shared core (`errors.ts`), `tokenizer.ts`, `parse-errors.ts`, `ast.ts`, and each other; they receive the expression rule as a parameter. `parser.ts` imports them, so no parser module imports the expression parser, and no cycle forms. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
 2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
 3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 

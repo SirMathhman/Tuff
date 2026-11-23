@@ -1,6 +1,6 @@
 {
   "name": "tuff",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
   "devDependencies": {
@@ -15,7 +15,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "lint": "eslint . && madge --circular --extensions ts . && bun run cpd",
-    "cpd": "pmd cpd --language typescript --minimum-tokens 50 index.ts errors.ts tokenizer.ts ast.ts parse-errors.ts conditions.ts statements.ts parser.ts evaluator.ts index.test.ts"
+    "lint": "eslint . && madge --circular --extensions ts . && bun run cpd && bun scripts/check-file-count.ts",
+    "cpd": "pmd cpd --language typescript --minimum-tokens 50 src/index.ts src/errors.ts src/tokenizer.ts src/ast.ts src/parse-errors.ts src/conditions.ts src/statements.ts src/parser.ts src/evaluator.ts src/index.test.ts"
   }
 }
