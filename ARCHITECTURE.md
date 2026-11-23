@@ -28,8 +28,9 @@ as the language grows. It describes the ideal, not the current code.
 - **Sequence**: zero or more statements, then one expression. A statement is
   `let [mut] name = value ;`, `name = value ;`, `*name = expression ;`, or a
   block `{ statements }` that ends with `;`. A block statement has no final
-  value, so only statements may appear in it (`ValueInStatementBlock`
-  otherwise). It needs no `;` after it, and its lets stay inside it. The
+  value, so only statements may appear in it (`ValueInStatementBlock` for a
+  value, `UnexpectedSemicolon` for a stray `;`). It needs no `;` after it, and
+  its lets stay inside it. The
   sequence evaluates to its final expression. A `let` name is visible to the
   rest of its sequence, and a name may be declared only once per sequence. Names
   are not visible after the block that declares them closes.
@@ -248,7 +249,9 @@ If:
 Blocks:
 
 - `ValueInStatementBlock { offset, text }`: a block that ends with `;` holds a
-  value, for example `{ x = 1; 2; }`. `offset` is the value's position.
+  value, for example `{ x = 1; 2; }`. `offset` is the value's position. A stray
+  `;` in such a block, for example `{ ; }`, is not a value. It is
+  `UnexpectedSemicolon { offset }`.
 
 Names, assignments, and scope:
 
@@ -367,6 +370,9 @@ performs no state changes.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not after.
 - Truncate names in error messages to a fixed maximum length.
+- Keep the brace-block close rules (the reference escape check and the scope
+  close) in one module that both `group.ts` and `sequence.ts` use, instead of
+  repeating them in each.
 - Add tests for every error variant, with one test per rule violated.
 
 ## Performance
@@ -381,5 +387,8 @@ These are obvious concerns only. Measure with a profiler before optimizing.
   expected inputs.
 - String concatenation while building digits is linear in the number of
   digits. This is fine for expected inputs.
+- Block-statement detection scans forward to the matching `}` once for each
+  `{` in statement position. Each enclosing block rescans its nested blocks, so
+  the cost is O(n × depth). Depth is bounded by the nesting limit.
 - Deeply nested brackets use several stack frames per level. The depth limit
   (see Recursion) keeps this bounded; statement count is not yet bounded.

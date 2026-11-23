@@ -1,6 +1,7 @@
 import {
   letNameAtEnd,
   letNotName,
+  missingOperator,
   missingSemicolon,
   undefinedVariable,
   valueInStatementBlock,
@@ -168,6 +169,9 @@ function parseBlockBody(
   const statement = parseStatement(tokens, index, scope, end, factor);
   if (statement === undefined) {
     const token = tokens[index];
+    if (token?.kind === "semicolon") {
+      return err(missingOperator(token.pos, ";"));
+    }
     if (token?.kind !== "close") {
       return err(
         valueInStatementBlock(token?.pos ?? end, textAt(tokens, index)),
