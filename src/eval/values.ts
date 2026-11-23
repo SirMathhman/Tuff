@@ -5,6 +5,8 @@ import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from
  * A borrow of a binding: reads see the binding's current value, and writes go to it.
  */
 export interface Reference {
+    /** The discriminant: always "reference". */
+    kind: "reference";
   /** The binding the reference points to. */
   target: Scope;
   /** True for a writable borrow (&mut), false for a read-only one. */
@@ -15,6 +17,8 @@ export interface Reference {
  * A sized integer. Its value is a bigint, so every type's range is exact, and it never equals a plain number.
  */
 export interface Integer {
+    /** The discriminant: always "integer". */
+    kind: "integer";
   /** The sized type, such as U8 or I64. */
   type: IntType;
   /** The value, within the type's range. */
@@ -28,6 +32,8 @@ export interface Integer {
  * A record: named fields, each holding a value. A record is never changed in place; a field write makes a new record.
  */
 export interface RecordValue {
+    /** The discriminant: always "record". */
+    kind: "record";
   /** The fields, keyed by name, in declaration order. */
   fields: Map<string, Value>;
   /** The struct this record was built from by a constructor. An anonymous record has none. */
@@ -38,6 +44,8 @@ export interface RecordValue {
  * A function value: a declaration, with the functions declared before it, which its body may call.
  */
 export interface FunctionValue {
+    /** The discriminant: always "function". */
+    kind: "function";
   /** The declaration the value calls. */
   decl: FunctionDecl;
   /** The functions declared before this one, which its body may call. */
@@ -52,7 +60,7 @@ export type Value = number | Integer | boolean | string | Value[] | Reference | 
  * @returns True when the value is a RecordValue.
  */
 export function isRecord(value: Value): value is RecordValue {
-  return typeof value === "object" && !Array.isArray(value) && "fields" in value;
+    return typeof value === "object" && !Array.isArray(value) && value.kind === "record";
 }
 
 /**
@@ -70,7 +78,7 @@ export function copyValue(value: Value): Value {
  * @returns True when the value is an Integer.
  */
 export function isInteger(value: Value): value is Integer {
-  return typeof value === "object" && !Array.isArray(value) && "type" in value;
+    return typeof value === "object" && !Array.isArray(value) && value.kind === "integer";
 }
 
 /**
@@ -79,7 +87,7 @@ export function isInteger(value: Value): value is Integer {
  * @returns True when the value is a Reference.
  */
 export function isReference(value: Value): value is Reference {
-  return typeof value === "object" && !Array.isArray(value) && !isInteger(value) && !isRecord(value) && !isFunction(value);
+    return typeof value === "object" && !Array.isArray(value) && value.kind === "reference";
 }
 
 /**
@@ -270,7 +278,7 @@ export function asBoolean(value: Value, where: ErrorWhere): Result<boolean, Tuff
  * @returns True when the value is a FunctionValue.
  */
 export function isFunction(value: Value): value is FunctionValue {
-  return typeof value === "object" && !Array.isArray(value) && "decl" in value;
+    return typeof value === "object" && !Array.isArray(value) && value.kind === "function";
 }
 
 /**

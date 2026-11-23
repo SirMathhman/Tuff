@@ -8,15 +8,16 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a sized integer, a boolean, a one-character string, an array, or a record. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
+- **Value**: a number, a sized integer, a boolean, a one-character string, an array, a record, a reference, or a function value. Every object-shaped value carries a `kind` tag, so its variant is read from the tag and never inferred from its properties. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
 - **Struct**: a named record type declared at the start of a program, such as `struct Point { x : I32, y : I32 }`. Its name starts with a capital letter. A struct value is a record tagged with its struct name, and the tag survives every copy, field write, and move.
-- **Function**: a named expression declared after the structs, such as `fn add(first : I32, second : I32) : I32 => first + second;`. Its parameters and return type are sized integers or Bool. A function sees its parameters, the structs, and the functions declared before it, never a caller's bindings.
+- **Function**: a named expression declared after the structs, such as `fn add(first : I32, second : I32) : I32 => first + second;`. Its parameters are sized integers, Bool, or function types, and its return type is a sized integer or Bool. A function sees its parameters, the structs, and the functions declared before it, never a caller's bindings.
+- **Function value**: a declared function held as a value, made by `&name` and typed by a function type such as `&(I32, I32) => I32`. It captures the functions declared before its declaration and no bindings, so it is pure and cannot reach or change caller state.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
 
 - **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment. A binding keeps its annotation for its whole life, so reassignment checks the annotation itself, not only the type of the value it replaces. An annotated array keeps its length.
-- **Annotation**: an optional type after the name: a sized integer type, `Bool`, an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`, or a declared struct name such as `Point`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`, `let p : Point = Point { x : 1I32, y : 2I32 };`. The value must have exactly that type when the binding is made, and reassignment must keep it.
+- **Annotation**: an optional type after the name: a sized integer type, `Bool`, an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`, a function type `&(Type, ...) => Type` whose parameter and result types are scalar, or a declared struct name such as `Point`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`, `let p : Point = Point { x : 1I32, y : 2I32 };`. The value must have exactly that type when the binding is made, and reassignment must keep it.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
 - **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
 - **Block**: bindings followed by one result expression.
@@ -134,8 +135,12 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Functions
 
-- A program declares its functions after its structs and before its body. Each declaration is `fn name(p : Type, ...) : Type => expr;`, with scalar parameter and return types.
-- A call `name(args)` evaluates its arguments in the caller's scope. The body then runs in a fresh scope holding only the structs and the functions declared before the callee.
+- A program declares its functions after its structs and before its body. Each declaration is `fn name(p : Type, ...) : Type => expr;`. A parameter type is a sized integer, Bool, or a function type; a return type is a sized integer or Bool.
+- A function type `&(Type, ...) => Type` takes scalar parameter types and a scalar result type. It nests: a parameter may itself be a function type, so `&(&(I32) => I32) => I32` is valid. Nested parsing receives the annotation rule as a parameter, so the parser has no mutual recursion.
+- `&name` of a declared function that no binding shadows yields a function value. `&mut name` of a function is a TypeMismatch.
+- A call `name(args)` first looks up a binding named `name` and calls the function value it holds, innermost binding first. Otherwise it calls the declared function of that name.
+- A declared function's body runs in a fresh scope holding only the structs and the functions declared before it. A function value's body runs with the list of functions captured by its `&name`.
+- A function value matches a function type when its parameter and result types are equal. A `mut` binding of a function type may be reassigned to any function value of that signature.
 - Arguments must match each parameter's type exactly, and the argument count must match. The result must match the return type. A mismatch is a TypeMismatch, and an unknown name is an UndefinedName.
 - Parameters are immutable bindings with their annotations. A body cannot call itself or a later function.
 
@@ -170,6 +175,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Growth
 
 - Dispatch functions grow with every new expression kind. Each kind should get its own rule instead.
+- Each object-shaped value carries a `kind` tag that its type requires, so a new variant without a tag fails to compile instead of being misread by a property check.
 
 ## Security Concerns
 
@@ -180,6 +186,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 - No `eval`, `Function`, or dynamic import of anything derived from source.
 - No filesystem, network, process, or global access. Host capabilities are passed in explicitly and absent by default.
 - A function body is a pure expression over its parameters and earlier functions, so a call reads no caller state and performs no host access.
+- A function value captures declared functions only, never a caller's bindings, so passing one cannot leak mutable state.
 
 ### Input tokens
 
@@ -205,7 +212,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, `errors.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
+3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, `errors.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
 4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
@@ -219,6 +226,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 2. Tune size limits in `eslint.config.js`; they are warnings today.
 3. Add resource limits (source size, depth, steps) as interpreter options with safe defaults.
 4. Accept compound assignment on array elements and through references, as `a[0] += 1;` and `*r += 1;`.
+5. Allow nested function types in parameters, and function types as return types and struct fields, parsing nested types with the annotation rule passed as a parameter.
 
 ## Performance
 
@@ -231,7 +239,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 ### Scope and loops
 
 - Scope lookup walks bindings in order, so many `let` statements can make evaluation quadratic. A map by name avoids this.
-- Each call builds a new root scope and copies the list of earlier functions, so a call costs time in the number of declared functions.
+- Each call builds a new root scope and each `&name` copies the list of earlier functions, so both cost time in the number of declared functions.
 - Step limits will guard unbounded loops, which the language will eventually need.
 
 ### Arrays

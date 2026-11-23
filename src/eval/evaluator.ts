@@ -70,7 +70,7 @@ function combineInteger(link: Link, left: Value, right: Value): Result<Value, Tu
   const range = INT_RANGES[left.type];
 
   return value >= range.min && value <= range.max
-    ? ok({ type: left.type, value })
+    ? ok({ kind: "integer", type: left.type, value })
     : integerOutOfRangeAt(link.where, value, left.type, range.min, range.max);
 }
 
@@ -85,7 +85,7 @@ function negateInteger(value: Integer, where: ErrorWhere): Result<Value, TuffErr
   const negated = -value.value;
 
   return negated >= range.min && negated <= range.max
-    ? ok({ type: value.type, value: negated })
+    ? ok({ kind: "integer", type: value.type, value: negated })
     : integerOutOfRangeAt(where, negated, value.type, range.min, range.max);
 }
 
@@ -348,7 +348,7 @@ function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scop
     return undefinedNameAt(where);
   }
 
-  return invokeFunction({ decl, visible: declared.slice(0, index) }, args, where, scope, evaluateRule);
+  return invokeFunction({ kind: "function", decl, visible: declared.slice(0, index) }, args, where, scope, evaluateRule);
 }
 
 // &name for a declared function that no binding shadows: a function value, which cannot be borrowed writably.
@@ -361,7 +361,7 @@ function functionReference(name: string, mutable: boolean, where: ErrorWhere, sc
     return undefinedNameAt(where);
   }
 
-  return mutable ? typeMismatchAt(where, "a binding", "a function") : ok({ decl, visible: declared.slice(0, index) });
+  return mutable ? typeMismatchAt(where, "a binding", "a function") : ok({ kind: "function", decl, visible: declared.slice(0, index) });
 }
 
 // Runs a function value's body on the arguments. The body sees only its parameters, the structs, and the functions the value was declared after.
@@ -425,7 +425,7 @@ function evaluateConstruct(name: string, fields: RecordField[], where: ErrorWher
     return typeMismatchAt(where, annotationName(wrong.annotation), typeName(wrong.value));
   }
 
-  return ok({ fields: given, struct: name });
+  return ok({ kind: "record", fields: given, struct: name });
 }
 
 // A binding with an annotation keeps it, so an assignment must match the annotation, not just the old element type.
@@ -870,9 +870,9 @@ function evaluateRecord(fields: RecordField[], where: ErrorWhere, scope: Scope |
         return referenceEscapesAt(where);
       }
 
-      return ok({ fields: new Map<string, Value>([...acc.value.fields, [field.name, value.value]]) });
+      return ok({ kind: "record", fields: new Map<string, Value>([...acc.value.fields, [field.name, value.value]]) });
     },
-    ok({ fields: new Map<string, Value>() }),
+    ok({ kind: "record", fields: new Map<string, Value>() }),
   );
 }
 
@@ -939,7 +939,7 @@ function assignField(statement: FieldAssignStatement, scope: Scope | undefined, 
     return referenceEscapesAt(statement.where);
   }
 
-  cell.value.value = { fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value), struct: record.struct };
+  cell.value.value = { kind: "record", fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value), struct: record.struct };
 
   return ok(scope);
 }
@@ -961,7 +961,7 @@ function evaluateRef(name: string, mutable: boolean, where: ErrorWhere, scope: S
     return immutableAssignmentAt({ index: where.index, text: name });
   }
 
-  return ok({ target: found, mutable });
+  return ok({ kind: "reference", target: found, mutable });
 }
 
 function evaluateDeref(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
@@ -1068,7 +1068,7 @@ const RULES: KindRules = {
   number: (expr) => ok(expr.value),
   boolean: (expr) => ok(expr.value),
   string: (expr) => ok(expr.value),
-  int: (expr) => ok({ type: expr.type, value: expr.value }),
+  int: (expr) => ok({ kind: "integer", type: expr.type, value: expr.value }),
   record: (expr, scope) => evaluateRecord(expr.fields, expr.where, scope, evaluate),
   construct: (expr, scope) => evaluateConstruct(expr.name, expr.fields, expr.where, scope, evaluate),
   field: (expr, scope) => evaluateField(expr.target, expr.name, expr.where, scope, evaluate),
