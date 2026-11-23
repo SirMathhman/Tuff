@@ -101,6 +101,45 @@ test('interpretTuff("1;") => unexpected semicolon error', () => {
   });
 });
 
+test('interpretTuff("let mut x = 0; x = 1; x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("let mut x = 0; let y = { x = 1; x }; x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; let y = { x = 1; x }; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("let mut x = 0; let y = { let mut x = 5; x = 6; x }; x") => 0', () => {
+  expect(interpretTuff("let mut x = 0; let y = { let mut x = 5; x = 6; x }; x")).toEqual({
+    ok: true,
+    value: 0,
+  });
+});
+
+test('interpretTuff("let x = 0; x = 1; x") => immutable variable error', () => {
+  expect(interpretTuff("let x = 0; x = 1; x")).toEqual({
+    ok: false,
+    error: {
+      what: "Immutable variable",
+      where: 11,
+      why: '"x" was declared with let, so it cannot be reassigned',
+      fix: "Declare it with let mut x = ...; to allow reassignment",
+    },
+  });
+});
+
+test('interpretTuff("x = 1; x") => undefined variable error for assignment', () => {
+  expect(interpretTuff("x = 1; x")).toEqual({
+    ok: false,
+    error: {
+      what: "Undefined variable",
+      where: 0,
+      why: '"x" has not been declared',
+      fix: "Declare it first with let mut x = ...;, or fix the spelling",
+    },
+  });
+});
+
 test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
   expect(interpretTuff("{ 2 + 3")).toEqual({
     ok: false,

@@ -14,10 +14,21 @@ as the language grows. It describes the ideal, not the current code.
 - **Factor**: a number, a name, or a grouped expression `( expression )` or a
   block `{ sequence }`. A sign is never written directly before a factor; a sign
   is part of an expression.
-- **Sequence**: zero or more `let name = expression ;` statements, then one
-  expression. The sequence evaluates to its final expression. A `let` name is
-  visible to the rest of its sequence, and a name may be declared only once per
-  sequence. Names are not visible after the block that declares them closes.
+- **Sequence**: zero or more statements, then one expression. A statement is
+  `let [mut] name = expression ;` or `name = expression ;`. The sequence
+  evaluates to its final expression. A `let` name is visible to the rest of its
+  sequence, and a name may be declared only once per sequence. Names are not
+  visible after the block that declares them closes.
+- **Mutability**: a name declared with `let` is fixed. Only a name declared with
+  `let mut` may be reassigned. Assigning to a fixed name, or to an undeclared
+  name, is an error. An assignment inside a block to an enclosing `let mut` name
+  persists after the block closes. A `let` in the block that shadows the name
+  is not affected.
+- **Scope**: the variables visible at one point of the source. A scope holds
+  every visible name with its value and mutability, and the set of names the
+  current block declared itself. Declaring or assigning a name returns a new
+  scope; it never mutates one. Closing a block keeps the enclosing scope's names,
+  with assignments from the block applied, except names the block declared.
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
   of its factors.
 - **Expression**: an optional leading sign, then one or more terms joined by
@@ -51,51 +62,67 @@ Invariants:
    and reads the token itself. Helpers that receive a token take a definite
    `Token`. This keeps the "end of input" case in one place.
 7. Arrays are immutable. `Array.prototype.push` is banned (ESLint
-   `no-restricted-syntax`). Build a new array with spread instead.
+   `no-restricted-syntax`). Build a new array with spread instead. The cost of
+   this rule is noted in Performance; see Future Work for how it is resolved.
 
 ## Structure
 
 Target layout:
 
 ```
-index.ts            public entry point; re-exports interpretTuff
-src/errors.ts       TuffError type and its variants
-src/result.ts       Result type and helpers (ok, err)
-src/tokenize.ts     string -> Result<Token[], TuffError>
-src/evaluate.ts     Token[] -> Result<number, TuffError>
+index.ts                 public entry point; re-exports interpretTuff
+src/errors.ts            TuffError type and its variants
+src/result.ts            Result type and helpers (ok, err)
+src/scope.ts             Scope: rootScope, emptyScopeIn, declare, lookup
+src/tokenize.ts          string -> Result<Token[], TuffError>
+src/evaluate.ts          Token[] -> Result<number, TuffError>; starts the parser
+src/parse/factor.ts      number, name, and group; the only file that calls group
+src/parse/group.ts       "( expression )" and "{ sequence }"
+src/parse/sequence.ts    let statements, then an expression
+src/parse/expression.ts  signs, "+" and "-"
+src/parse/term.ts        "*"
 ```
 
 Dependency direction (arrows mean "imports from"):
 
 ```
 index.ts -> evaluate.ts -> tokenize.ts -> errors.ts
-                       \-> result.ts  <-  (used by all of the above)
+                       \-> parse/factor.ts -> parse/group.ts
+                                           -> parse/sequence.ts -> parse/expression.ts -> parse/term.ts
+                       \-> scope.ts
+result.ts and errors.ts are imported by all of the above.
 ```
 
 Rules:
 
-- No cycles between files. `result.ts` and `errors.ts` import nothing from the
-  project.
+- No cycles between files. `result.ts`, `errors.ts`, and `scope.ts` import
+  nothing from the project.
 - The tokenizer knows nothing about precedence. The evaluator knows nothing
   about characters.
 - Each stage takes plain data in and returns a `Result`. No stage holds state
   between calls.
-
-Current state: a single file, `index.ts`, with a tokenizer and a recursive
-descent parser (expression, term, factor, group). It is not yet split into the
-target files above; see Future Work.
+- The parser files below `factor.ts` never import `factor.ts`. The factor
+  parser is passed to them as a parameter (see Recursion). Only `factor.ts`
+  imports `group.ts`, so the file graph stays acyclic.
 
 ### Recursion
 
-The grammar is recursive because of parentheses (factor -> expression ->
-term -> factor). The target parser must not use recursion that spans files:
+The grammar is recursive because of parentheses and braces (factor -> group ->
+sequence or expression -> term -> factor). Today this recursion sits inside one
+file, which hides the problem; it blocks splitting the parser into files because
+the functions form a cycle of imports. The target parser must not use recursion
+that spans files:
 
-- The target is a non-recursive parser (for example shunting-yard, or
-  recursive descent with an explicit stack). This removes the call-stack
-  limit and any mutual recursion, so the parser can be split across files
-  freely.
-- Until then, if two functions must call each other, pass one as a parameter
-  instead of importing it. This keeps the file graph acyclic.
+- The preferred target is a non-recursive parser (for example shunting-yard, or
+  recursive descent with an explicit stack). This removes the call-stack limit
+  and any mutual recursion.
+- Until then, the cycle is broken by parameter passing. The factor parser has
+  the type `(tokens, index, scope, end) => Result<Parsed>`. `term`, `expression`,
+  `sequence`, and `group` each take it as a parameter and pass it on to the
+  next stage. Only `factor.ts` supplies the real function. Of two mutually
+  calling functions, one is passed as a parameter instead of being imported.
+- Self-recursion inside one function (for example a `let` sequence that calls
+  itself for its tail) is allowed, because it does not cross a file boundary.
 - Recursion depth is bounded. Input that nests too deeply is reported as a
   `TuffError`, never as a thrown `RangeError`.
 
@@ -113,7 +140,10 @@ A `TuffError` must answer four questions:
 4. What the caller can do about it (the variant implies the fix: remove the
    operator, add a number, and so on).
 
-Planned variants (initial set):
+Target shape: a discriminated union on a `kind` field, one variant per rule.
+Each variant carries an `offset` and only the fields its message needs.
+
+Variants (initial set, with the variants added for names and let):
 
 - `UnexpectedCharacter { offset, character }`
 - `DanglingOperator { offset, operator }`: an operator with no operand
@@ -126,6 +156,14 @@ Planned variants (initial set):
   an operator or `)` is found. Covers `2 *`, `2 * + 3`, and `()`.
 - `MissingOperator { offset }`: two numbers or groups are adjacent with no
   operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
+- `UnexpectedSemicolon { offset }`: a `;` that does not end a let statement.
+- `MissingSemicolon { offset, name }`: a let value is not followed by `;`.
+- `MissingName { offset }`: `let` is not followed by a name.
+- `MissingEquals { offset, name }`: a let name is not followed by `=`.
+- `DuplicateVariable { offset, name }`: a name is declared twice in one
+  sequence.
+- `UndefinedVariable { offset, name }`: a name is used where no enclosing block
+  declares it.
 - `UnmatchedBracket { offset, symbol }`: an opener with no closer, or a closer
   with no opener. `symbol` is one of `(`, `)`, `{`, `}`.
 - `MismatchedBracket { offset, opener, openerOffset }`: a closer that does not
@@ -135,27 +173,34 @@ Planned variants (initial set):
   limit.
 
 Error messages are built from the variant. They never echo unbounded source
-text.
+text. A name carried in a variant is shown only after truncation to a fixed
+maximum length, so a long name in the source cannot make an error message long.
 
 ## Potential Problems
 
-- **Silent acceptance of malformed input.** The current scanner returns a
-  number for `2 *` (2), `2 * + 3` (6), `2 * * 3` (6), and `2 - * 3` (-1).
-  These should be `TuffError`s. This is the most important known defect.
-- **Adjacent numbers.** Whitespace-separated numbers are an error
-  (`MissingOperator`). Whitespace is never a multiplication.
-- **Stack exhaustion.** Nested parentheses recurse once per level. Around
-  10,000 nested `(` the current parser throws a `RangeError` from
-  `interpretTuff`, which breaks the no-exceptions rule. Depth must be limited
-  and reported as `NestingTooDeep`.
+- **Stack exhaustion.** Nested parentheses recurse once per level, and the
+  parser's call stack is the only limit. Around 10,000 nested `(` the current
+  parser throws a `RangeError` from `interpretTuff`, which breaks the
+  no-exceptions rule. Depth must be limited and reported as `NestingTooDeep`.
+- **Recursion cycle.** The parser functions call each other across a cycle
+  (factor, group, sequence, expression, term). Splitting the parser into the
+  files in Structure is blocked until the cycle is broken (see Recursion).
+- **Quadratic tokenizing.** Invariant 7 forces each token to be appended with a
+  spread, which copies the whole array. Tokenizing is therefore O(n^2) in the
+  number of tokens. A 20,000-term source takes over a second.
+- **Unbounded names in messages.** Undefined-variable, duplicate-variable, and
+  missing-`=` messages echo the full name. A 5,000-character name produces a
+  5,000-character error message.
 - **Precision.** Large integer literals lose precision as doubles. Results
   that overflow become `Infinity` without an error.
-- **Scanner state coupling.** The closure-based scanner mixes tokenizing and
-  evaluation. Adding a new operator or a new precedence level requires
-  changing several interacting flags (`sign`, `afterStar`, `term`).
+- **Parse and evaluate are fused.** The parser computes values as it reads, so
+  there is no syntax tree. This keeps the code small, but it means every rule
+  about evaluation is tied to the grammar code, and a later feature that needs
+  the tree (for example, reporting an error after evaluation) would require a
+  rewrite.
 - **Unbounded input.** There is no length limit. A very long source string
-  costs linear time and memory, which is acceptable now but should be
-  bounded before Tuff accepts input from a network or a model.
+  costs time and memory, which should be bounded before Tuff accepts input from
+  a network or a model.
 
 ## Security Concerns
 
@@ -173,10 +218,10 @@ Controls the architecture should have:
 | Control | Status |
 | --- | --- |
 | No dynamic code execution (`eval`, `Function`) | Present |
-| Malformed input is rejected, not coerced | Missing (see Potential Problems) |
+| Malformed input is rejected, not coerced | Present for the rules in Errors |
 | Input length limit | Missing |
 | Non-finite results are reported as errors | Missing |
-| Error messages do not echo unbounded input | Present (messages echo one character at most) |
+| Error messages do not echo unbounded input | Missing (names are echoed in full) |
 | Nesting depth limit (no stack exhaustion) | Missing (see Potential Problems) |
 
 Prompt injection: if Tuff source is ever produced by a language model, treat
@@ -193,14 +238,20 @@ performs no state changes.
 
 ## Future Work
 
-- Replace the single-pass scanner with the tokenize-then-evaluate pipeline
-  described in Structure.
-- Return `Result<number, TuffError>` from `interpretTuff`. Update callers and
-  tests together.
+- Break the parser's recursion cycle by parameter passing, then split the
+  parser into the files in Structure.
+- Replace the fused parse-and-evaluate pass with a parser that produces a tree,
+  then an evaluator that walks it. The tree is the seam that lets later
+  features (type checks, more error kinds) be added without touching the
+  grammar code.
 - Make the parser non-recursive, following the Recursion section.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
-  contents, not as `MissingNumber`.
+  contents, not after.
 - Add a nesting depth limit that returns `NestingTooDeep`.
+- Make tokenizing linear. Decide how a linear builder fits invariant 7, for
+  example a local buffer owned by one function and returned as `readonly`, and
+  state that decision in Invariants.
+- Truncate names in error messages to a fixed maximum length.
 - Add tests for every error variant, with one test per rule violated.
 - Add a length limit on source input.
 
@@ -208,7 +259,12 @@ performs no state changes.
 
 These are obvious concerns only. Measure with a profiler before optimizing.
 
-- Tokenizing is linear in source length. This is fine for expected inputs.
+- Tokenizing is O(n^2) in the number of tokens because of the spread-based
+  append (see Potential Problems). This is the first thing to fix.
+- Each `let` copies its scope's name map, so a sequence with k lets copies
+  O(k^2) entries. Fine for expected inputs.
+- Variable lookup walks the scope chain, one step per enclosing block. Fine for
+  expected inputs.
 - String concatenation while building digits is linear in the number of
   digits. This is fine for expected inputs.
 - Deeply nested parentheses use one stack frame per level. Enforce the
