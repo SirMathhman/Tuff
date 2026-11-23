@@ -825,7 +825,7 @@ function assignField(statement: FieldAssignStatement, scope: Scope | undefined, 
     return referenceEscapesAt(statement.where);
   }
 
-  cell.value.value = { fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value) };
+  cell.value.value = { fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value), struct: record.struct };
 
   return ok(scope);
 }

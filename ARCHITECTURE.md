@@ -9,12 +9,13 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
 - **Value**: a number, a sized integer, a boolean, a one-character string, an array, or a record. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
+- **Struct**: a named record type declared at the start of a program, such as `struct Point { x : I32, y : I32 }`. Its name starts with a capital letter. A struct value is a record tagged with its struct name, and the tag survives every copy, field write, and move.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
 
 - **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment. A binding keeps its annotation for its whole life, so reassignment checks the annotation itself, not only the type of the value it replaces. An annotated array keeps its length.
-- **Annotation**: an optional type after the name: a sized integer type, `Bool`, or an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`. The value must have exactly that type when the binding is made, and reassignment must keep it.
+- **Annotation**: an optional type after the name: a sized integer type, `Bool`, an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`, or a declared struct name such as `Point`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`, `let p : Point = Point { x : 1I32, y : 2I32 };`. The value must have exactly that type when the binding is made, and reassignment must keep it.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
 - **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
 - **Block**: bindings followed by one result expression.
@@ -39,8 +40,9 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 ### Pipeline
 
 1. `tokenizer.ts`: a character scanner that emits typed tokens, each with its kind and text.
-2. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
-3. `eval/evaluator.ts`: a fold over the AST. `eval/values.ts` holds the value model and type checks; `eval/operators.ts` holds the operator tables. Cells change in place for assignment and moves until Future Work item 2 lands.
+2. `structs.ts`: parses the struct declarations at the start of a program, and returns them with the index of the first statement. It reads `statements.ts` only for annotations.
+3. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
+4. `eval/evaluator.ts`: a fold over the AST. The outermost scope carries the struct table that constructors and struct annotations read. `eval/values.ts` holds the value model and type checks; `eval/operators.ts` holds the operator tables. Cells change in place for assignment and moves until Future Work item 2 lands.
 
 ### Shared rules
 
@@ -119,7 +121,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - A record literal `{ name : value, name : value }` has named fields, each holding any value. A field name is used once. A `{` followed by a name and `:` is a record, never a block.
 - `pt.x` reads a field, and chains such as `pt.a.b` read nested fields. Reading a field copies any array in it. An unknown field is an UndefinedField error.
-- `pt.x = value;` assigns a field of a mut record, and the value must have the field's type. The record is replaced, not changed in place.
+- `pt.x = value;` assigns a field of a mut record, and the value must have the field's type. The record is replaced, not changed in place, and a struct value keeps its struct name through the replacement.
 - A record moves on whole-name use, as an array does, so a later use is a UseAfterMove error. Reading a field does not move it.
 - A struct declaration `struct Point { x : I32, y : I32 }` starts the program and names a record type. Its name starts with a capital letter, and each field has a scalar or array type. A constructor `Point { x : 3I32, y : 4I32 }` builds one value with every field once and each field's type, and plain numbers do not convert to sized types.
 - A let annotation `: Point` accepts only a value built by Point's constructor, so an anonymous record does not match. An undeclared struct name in an annotation is an InvalidTerm error, and an undeclared constructor is an UndefinedStruct error.
@@ -194,6 +196,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
 7. Derive the annotation names, the `let` type check, and the `let` error hint from one declaration in `ast.ts`, instead of writing `Bool`, the type list, and `annotationName` by hand in several places.
+8. Allow struct-typed fields, so a struct can name another struct as a field type.
 
 ### Later
 
