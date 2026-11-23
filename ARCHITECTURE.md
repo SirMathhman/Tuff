@@ -9,7 +9,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
 - **Value**: a number, a boolean, or a one-character string. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
-- **Token**: a kind (text, string, or unclosed string) and its text. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
+- **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
 
@@ -30,8 +30,9 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 ### Layers
 
 1. Entry points: REPL and file runner. The only layer allowed to do I/O.
-2. Public API: `interpretTuff` and its exported types, from `index.ts`.
-3. Shared core (`errors.ts`): `Result`, `TuffError`, `ErrorWhere`, `Value`. Depends on nothing else.
+2. Public API: `interpretTuff` and its exported types, from `index.ts`. It composes the pipeline and nothing else.
+3. Pipeline: the stage modules listed below. Each depends only on the layers beneath it.
+4. Shared core (`errors.ts`): `Result`, `TuffError`, `ErrorWhere`. Depends on nothing else.
 
 ### Pipeline
 
@@ -77,7 +78,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Arithmetic and unary operators
 
 - `+`, `-`, and `*` fold left to right, with `*` binding tighter.
-- `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a number, a name, or a group.
+- `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if
 
@@ -151,8 +152,9 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 ### Near term
 
-1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
-2. Split `src/` into subdirectories by stage before adding an eleventh file.
+1. Split the text kind into punctuation, keyword, number, and name kinds, so the parser matches no token text.
+2. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
+3. Split `src/` into subdirectories by stage before adding an eleventh file.
 
 ### Later
 
