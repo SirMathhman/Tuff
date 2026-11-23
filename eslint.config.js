@@ -32,6 +32,11 @@ export default tseslint.config(
           message: "throw is not allowed. Return a Result instead.",
         },
         {
+          selector:
+            ":matches(FunctionDeclaration, FunctionExpression, ArrowFunctionExpression) > Identifier.params:has(TSUnionType > TSUndefinedKeyword)",
+          message: "Parameters must not accept undefined in a union. Pass the container and an index, or split the function.",
+        },
+        {
           selector: "TSTypeLiteral",
           message: "Object type literals are not allowed. Declare a named interface instead.",
         },

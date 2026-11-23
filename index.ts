@@ -101,7 +101,8 @@ function tokenize(source: string): Result<Token[]> {
   return ok(tokens);
 }
 
-function signOf(token: Token | undefined): 1 | -1 | undefined {
+function signAt(tokens: Token[], index: number): 1 | -1 | undefined {
+  const token = tokens[index];
   if (token?.kind !== "operator") {
     return undefined;
   }
@@ -114,17 +115,20 @@ function signOf(token: Token | undefined): 1 | -1 | undefined {
   return undefined;
 }
 
+// Reported when a number is required but the source ends. `end` is the source
+// length.
+function missingNumberAtEnd<T>(end: number): Result<T> {
+  return err({
+    what: "Missing number",
+    where: end,
+    why: "The expression ends where a number is required",
+    fix: "Add a number after the last operator, or delete that operator",
+  });
+}
+
 // Reported when a number is required but the token at that place is an
-// operator or a parenthesis, or the source ends. `end` is the source length.
-function missingNumber<T>(token: Token | undefined, end: number): Result<T> {
-  if (token === undefined) {
-    return err({
-      what: "Missing number",
-      where: end,
-      why: "The expression ends where a number is required",
-      fix: "Add a number after the last operator, or delete that operator",
-    });
-  }
+// operator or a parenthesis.
+function missingNumber<T>(token: Token): Result<T> {
   if (token.kind === "close") {
     return err({
       what: "Missing number",
@@ -146,10 +150,10 @@ function missingNumber<T>(token: Token | undefined, end: number): Result<T> {
 
 // Reported when two numbers (or a number and a group) appear with no operator
 // between them.
-function missingOperator<T>(token: Token | undefined, end: number): Result<T> {
+function missingOperator<T>(token: Token): Result<T> {
   return err({
     what: "Missing operator",
-    where: token?.pos ?? end,
+    where: token.pos,
     why: "Two numbers appear next to each other with no operator between them",
     fix: "Insert +, -, or * between the numbers, or delete one of them",
   });
@@ -161,8 +165,11 @@ function parseNumber(
   end: number,
 ): Result<Parsed> {
   const token = tokens[index];
-  if (token?.kind !== "number") {
-    return missingNumber(token, end);
+  if (token === undefined) {
+    return missingNumberAtEnd(end);
+  }
+  if (token.kind !== "number") {
+    return missingNumber(token);
   }
   return ok({ value: token.value, next: index + 1 });
 }
@@ -196,7 +203,7 @@ function parseGroup(tokens: Token[], index: number, end: number): Result<Parsed>
     });
   }
   if (token.kind !== "close") {
-    return missingOperator(token, end);
+    return missingOperator(token);
   }
   return ok({ value: inner.value.value, next: next + 1 });
 }
@@ -230,7 +237,7 @@ function parseTerm(
 // before the first token that is not "+" or "-"; the caller decides whether
 // that token is valid there.
 function parseExpression(tokens: Token[], index: number, end: number): Result<Parsed> {
-  const leadingSign = signOf(tokens[index]);
+  const leadingSign = signAt(tokens, index);
   const first = parseTerm(
     tokens,
     leadingSign === undefined ? index : index + 1,
@@ -243,7 +250,7 @@ function parseExpression(tokens: Token[], index: number, end: number): Result<Pa
   let sum = first.value.value;
   let next = first.value.next;
 
-  let sign = signOf(tokens[next]);
+  let sign = signAt(tokens, next);
   while (sign !== undefined) {
     const term = parseTerm(tokens, next + 1, sign, end);
     if (!term.ok) {
@@ -251,7 +258,7 @@ function parseExpression(tokens: Token[], index: number, end: number): Result<Pa
     }
     sum += term.value.value;
     next = term.value.next;
-    sign = signOf(tokens[next]);
+    sign = signAt(tokens, next);
   }
 
   return ok({ value: sum, next });
@@ -289,5 +296,5 @@ export function interpretTuff(tuffSource: string): Result<number> {
       fix: 'Add a "(" before its expression, or delete this ")"',
     });
   }
-  return missingOperator(stop, end);
+  return missingOperator(stop);
 }
