@@ -130,8 +130,21 @@ interface ElementStatement {
   where: ErrorWhere;
 }
 
-/** The type a let annotation names: a sized integer type, or Bool. */
-export type Annotation = IntType | "Bool";
+/** A scalar annotation: a sized integer type, or Bool. */
+export type ScalarAnnotation = IntType | "Bool";
+
+/**
+ * An array annotation such as [Bool; 3]: every element has the element type, and there are exactly length elements.
+ */
+export interface ArrayAnnotation {
+  /** The type every element must have. */
+  element: ScalarAnnotation;
+  /** The number of elements the array must have. */
+  length: number;
+}
+
+/** The type a let annotation names. */
+export type Annotation = ScalarAnnotation | ArrayAnnotation;
 
 // A loop that runs its body while its boolean condition holds.
 interface WhileStatement {

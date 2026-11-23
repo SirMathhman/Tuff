@@ -15,7 +15,7 @@ import {
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { INT_RANGES, type Annotation, type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
+import { INT_RANGES, type Annotation, type ScalarAnnotation, type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
 import { type Cell, type Integer, type Reference, type Scope, type Value, isInteger, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
@@ -236,12 +236,25 @@ function assignElement(
 }
 
 // A let annotation matches a value of exactly its type: a sized integer of that type, or a boolean for Bool.
-function matchesAnnotation(value: Value, annotation: Annotation): boolean {
+function matchesScalar(value: Value, annotation: ScalarAnnotation): boolean {
   if (annotation === "Bool") {
     return typeof value === "boolean";
   }
 
   return isInteger(value) && value.type === annotation;
+}
+
+// An array annotation matches an array of exactly its length whose elements all match its element type.
+function matchesAnnotation(value: Value, annotation: Annotation): boolean {
+  if (typeof annotation === "string") {
+    return matchesScalar(value, annotation);
+  }
+
+  return Array.isArray(value) && value.length === annotation.length && value.every((element) => matchesScalar(element, annotation.element));
+}
+
+function annotationName(annotation: Annotation): string {
+  return typeof annotation === "string" ? `a ${annotation}` : `[${annotation.element}; ${annotation.length}]`;
 }
 
 // Runs the body while the condition is true. The body's bindings end with each pass, and its
@@ -333,7 +346,7 @@ function runStatements(
       }
 
       if (statement.annotation !== undefined && !matchesAnnotation(value.value, statement.annotation)) {
-        return typeMismatchAt(statement.where, `a ${statement.annotation}`, typeName(value.value));
+        return typeMismatchAt(statement.where, annotationName(statement.annotation), typeName(value.value));
       }
 
       if (escapes(value.value, acc.value)) {

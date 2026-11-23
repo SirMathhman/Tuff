@@ -14,7 +14,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 ### Bindings and scope
 
 - **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment.
-- **Annotation**: an optional type after the name, either a sized integer type or `Bool`, as in `let x : U8 = 100U8;` or `let x : Bool = true;`. The value must have exactly that type when the binding is made, and reassignment must keep it.
+- **Annotation**: an optional type after the name: a sized integer type, `Bool`, or an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`. The value must have exactly that type when the binding is made, and reassignment must keep it.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
 - **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
 - **Block**: bindings followed by one result expression.

@@ -1,6 +1,6 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
-import { INT_TYPES, type Annotation, type Expr, type Link, type Statement } from "./ast.ts";
+import { INT_TYPES, type Annotation, type Expr, type Link, type ScalarAnnotation, type Statement } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -40,6 +40,51 @@ function parseStatementValue(
   return ok({ value: value.value.value, next: value.value.next + 1 });
 }
 
+function scalarAnnotationAt(text: string | undefined): ScalarAnnotation | undefined {
+  return text === "Bool" ? "Bool" : INT_TYPES.find((candidate) => candidate === text);
+}
+
+interface AnnotationParsed {
+  annotation: Annotation;
+  // The index just after the annotation.
+  next: number;
+}
+
+// A let annotation at start: a scalar type such as U8 or Bool, or an array type [Type; length].
+function parseAnnotation(tokens: Token[], start: number): Result<AnnotationParsed, TuffError> {
+  if (textAt(tokens, start) !== "[") {
+    const scalar = scalarAnnotationAt(textAt(tokens, start));
+
+    if (scalar === undefined) {
+      return invalidAt(tokens, start, "a type such as U8, Bool, or [Bool; 3]", "Write a sized integer type, Bool, or [Type; length] after ':'.");
+    }
+
+    return ok({ annotation: scalar, next: start + 1 });
+  }
+
+  const element = scalarAnnotationAt(textAt(tokens, start + 1));
+
+  if (element === undefined) {
+    return invalidAt(tokens, start + 1, "an element type such as U8 or Bool", "Write a sized integer type or Bool as the element type.");
+  }
+
+  if (textAt(tokens, start + 2) !== ";") {
+    return invalidAt(tokens, start + 2, "';' after the element type", "Write the array type as [Type; length].");
+  }
+
+  const length = textAt(tokens, start + 3);
+
+  if (!isDigits(length)) {
+    return invalidAt(tokens, start + 3, "the number of elements", "Write the number of elements after ';'.");
+  }
+
+  if (textAt(tokens, start + 4) !== "]") {
+    return invalidAt(tokens, start + 4, "']' after the length", "Close the array type with ']'.");
+  }
+
+  return ok({ annotation: { element, length: Number(length) }, next: start + 5 });
+}
+
 function parseLet(
   tokens: Token[],
   pos: number,
@@ -58,15 +103,14 @@ function parseLet(
   let equalsIndex = nameIndex + 1;
 
   if (textAt(tokens, nameIndex + 1) === ":") {
-    const typeText = textAt(tokens, nameIndex + 2);
+    const parsedType = parseAnnotation(tokens, nameIndex + 2);
 
-    annotation = typeText === "Bool" ? "Bool" : INT_TYPES.find((candidate) => candidate === typeText);
-
-    if (annotation === undefined) {
-      return invalidAt(tokens, nameIndex + 2, "a type such as U8 or Bool", "Write one of U8, U16, U32, U64, I8, I16, I32, I64, or Bool after ':'.");
+    if (!parsedType.ok) {
+      return parsedType;
     }
 
-    equalsIndex = nameIndex + 3;
+    annotation = parsedType.value.annotation;
+    equalsIndex = parsedType.value.next;
   }
 
   if (textAt(tokens, equalsIndex) !== "=") {

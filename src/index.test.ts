@@ -808,6 +808,14 @@ test("interpretTuff: a lowercase bool is not a type name, and a bracketed value 
   expectErrorKind("let x : Bool = [true]; x", "TypeMismatch");
 });
 
+test("interpretTuff: \"let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]\" => 1", () => {
+  expect(interpretTuff("let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]")).toEqual(ok(1));
+});
+
+test("interpretTuff: an array whose length differs from its annotation is a TypeMismatch error", () => {
+  expectErrorKind("let x : [Bool; 2] = [true, true, true]; x", "TypeMismatch");
+});
+
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
   expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
 });
