@@ -323,6 +323,50 @@ test("interpretTuff: a comparison as an if condition returns Ok(5)", () => {
   expect(interpretTuff("let b = 3 >= 3; if (b) 5 else 6")).toEqual(ok(5));
 });
 
+test("interpretTuff: a private-use character U+E000 is an InvalidTerm error", () => {
+  expectErrorKind("1  2", "InvalidTerm");
+});
+
+test("interpretTuff: a private-use character U+E001 is an InvalidTerm error", () => {
+  expectErrorKind("1  2", "InvalidTerm");
+});
+
+test("interpretTuff: a private-use character U+E002 is an InvalidTerm error", () => {
+  expectErrorKind("1  2", "InvalidTerm");
+});
+
+test("interpretTuff: a private-use character U+E003 is an InvalidTerm error", () => {
+  expectErrorKind("1  2", "InvalidTerm");
+});
+
+test("interpretTuff: 1 <= 2 returns a value", () => {
+  expect(interpretTuff("1 <= 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 >= 2 returns a value", () => {
+  expect(interpretTuff("1 >= 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 == 2 returns a value", () => {
+  expect(interpretTuff("1 == 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 != 2 returns a value", () => {
+  expect(interpretTuff("1 != 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 < 2 returns a value", () => {
+  expect(interpretTuff("1 < 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 > 2 returns a value", () => {
+  expect(interpretTuff("1 > 2").ok).toBe(true);
+});
+
+test("interpretTuff: 1 <= 2 <= 3 is an InvalidTerm error", () => {
+  expectErrorKind("1 <= 2 <= 3", "InvalidTerm");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
