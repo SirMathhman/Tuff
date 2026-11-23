@@ -794,6 +794,22 @@ test("interpretTuff: let x : U8 = 100; x is a TypeMismatch error", () => {
   expectErrorKind("let x : U8 = 100; x", "TypeMismatch");
 });
 
+test("interpretTuff: let x : I8 = 1I8; x returns Ok(1)", () => {
+  expect(interpretTuff("let x : I8 = 1I8; x")).toEqual(ok(1));
+});
+
+test("interpretTuff: let x : I8 = 1U8; x is a TypeMismatch error", () => {
+  expectErrorKind("let x : I8 = 1U8; x", "TypeMismatch");
+});
+
+test("interpretTuff: let x : U8 = 1U8 == 1U8; x is a TypeMismatch error", () => {
+  expectErrorKind("let x : U8 = 1U8 == 1U8; x", "TypeMismatch");
+});
+
+test("interpretTuff: let x : U8 = 300U8; x is an IntegerOutOfRange error", () => {
+  expectErrorKind("let x : U8 = 300U8; x", "IntegerOutOfRange");
+});
+
 test("interpretTuff: let x : Foo = 1; x is an InvalidTerm error", () => {
   expectErrorKind("let x : Foo = 1; x", "InvalidTerm");
 });
