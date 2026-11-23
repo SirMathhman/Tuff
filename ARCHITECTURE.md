@@ -45,7 +45,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 - Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block ends in a final expression.
+- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block ends in a final expression, unless it is a statement block: a `{ ... }` holding only statements, followed by a name, number, `(`, `{`, `let`, or `}`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 

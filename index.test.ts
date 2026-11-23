@@ -226,6 +226,10 @@ test("interpretTuff assignment inside a nested block persists after the block", 
   expect(interpretTuff("let mut x = 0; let y = { x = 5; x }; x + y")).toEqual(ok(10));
 });
 
+test("interpretTuff('let mut x = 0; { x = 1; } x') returns Ok(1)", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } x")).toEqual(ok(1));
+});
+
 test("interpretTuff assigning to an undeclared name is an UndefinedName error", () => {
   expectErrorKind("x = 1; x", "UndefinedName");
 });

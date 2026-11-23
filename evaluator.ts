@@ -65,13 +65,12 @@ function assign(
   return ok(scope);
 }
 
-function evaluateBlock(
+function runStatements(
   statements: Statement[],
-  result: Expr,
   scope: Scope | undefined,
   evaluateRule: EvalRule,
-): Result<number, TuffError> {
-  const inner = statements.reduce<Result<Scope | undefined, TuffError>>(
+): Result<Scope | undefined, TuffError> {
+  return statements.reduce<Result<Scope | undefined, TuffError>>(
     (acc, statement) => {
       if (!acc.ok) {
         return acc;
@@ -79,6 +78,12 @@ function evaluateBlock(
 
       if (statement.kind === "assign") {
         return assign(statement, acc.value, evaluateRule);
+      }
+
+      if (statement.kind === "scope") {
+        const inner = runStatements(statement.statements, acc.value, evaluateRule);
+
+        return inner.ok ? ok(acc.value) : inner;
       }
 
       const value = evaluateRule(statement.value, acc.value);
@@ -96,6 +101,15 @@ function evaluateBlock(
     },
     ok(scope),
   );
+}
+
+function evaluateBlock(
+  statements: Statement[],
+  result: Expr,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<number, TuffError> {
+  const inner = runStatements(statements, scope, evaluateRule);
 
   if (!inner.ok) {
     return inner;

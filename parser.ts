@@ -10,7 +10,7 @@ import {
 // Grammar, implemented by the functions below:
 //   program   := body
 //   body      := statement* expr
-//   statement := "let" "mut"? name "=" expr ";" | name "=" expr ";"
+//   statement := "let" "mut"? name "=" expr ";" | name "=" expr ";" | "{" statement* "}"
 //   expr      := term (("+" | "-") term)*
 //   term      := factor ("*" factor)*
 //   factor    := "-"? primary
@@ -75,10 +75,15 @@ export interface AssignStatement {
   where: ErrorWhere;
 }
 
+interface ScopeStatement {
+  kind: "scope";
+  statements: Statement[];
+}
+
 /**
- * A statement inside a block body: a let declaration or an assignment.
+ * A statement inside a block body: a let declaration, an assignment, or a statement block.
  */
-export type Statement = LetStatement | AssignStatement;
+export type Statement = LetStatement | AssignStatement | ScopeStatement;
 
 interface BlockNode {
   kind: "block";
@@ -103,6 +108,11 @@ interface Parsed {
 
 interface StatementParsed {
   statement: Statement;
+  next: number;
+}
+
+interface StatementsParsed {
+  statements: Statement[];
   next: number;
 }
 
@@ -398,6 +408,100 @@ function startsStatement(tokens: string[], pos: number): boolean {
   return token === "let" || (token !== undefined && isIdentifier(token) && tokens[pos + 1] === "=");
 }
 
+function closingBrace(tokens: string[], open: number): number | undefined {
+  let level = 0;
+  let index = open;
+
+  while (index < tokens.length) {
+    const token = tokens[index];
+
+    if (token === "{") {
+      level += 1;
+    }
+
+    if (token === "}") {
+      level -= 1;
+    }
+
+    if (level === 0) {
+      return index;
+    }
+
+    index += 1;
+  }
+
+  return undefined;
+}
+
+function canFollowStatementBlock(token: string | undefined): boolean {
+  return (
+    token === "let" ||
+    token === "(" ||
+    token === "{" ||
+    token === "}" ||
+    (token !== undefined && (isDigits(token) || isIdentifier(token)))
+  );
+}
+
+// A "{" starts a statement block when its contents begin with a statement and
+// the token after its closing "}" can start a statement, an expression, or end
+// an enclosing block. A block followed by an operator is a value, as in
+// "{ let x = 2; x } * 4".
+function isStatementBlock(tokens: string[], open: number): boolean {
+  if (tokens[open] !== "{" || !startsStatement(tokens, open + 1)) {
+    return false;
+  }
+
+  const close = closingBrace(tokens, open);
+
+  return close !== undefined && canFollowStatementBlock(tokens[close + 1]);
+}
+
+function parseStatementList(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Result<StatementsParsed, TuffError> {
+  const statements: Statement[] = [];
+  let next = pos;
+
+  while (startsStatement(tokens, next) || isStatementBlock(tokens, next)) {
+    if (tokens[next] === "{") {
+      if (depth >= MAX_NESTING_DEPTH) {
+        return nestingTooDeepAt(tokens, next);
+      }
+
+      const body = parseStatementList(tokens, next + 1, depth + 1, expr);
+
+      if (!body.ok) {
+        return body;
+      }
+
+      if (tokens[body.value.next] !== "}") {
+        return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
+      }
+
+      statements.push({ kind: "scope", statements: body.value.statements });
+      next = body.value.next + 1;
+    } else {
+      const parsed =
+        tokens[next] === "let"
+          ? parseLet(tokens, next, depth, expr)
+          : parseAssign(tokens, next, depth, expr);
+
+      if (!parsed.ok) {
+        return parsed;
+      }
+
+      statements.push(parsed.value.statement);
+      next = parsed.value.next;
+    }
+  }
+
+  return ok({ statements, next });
+}
+
 /**
  * Parses a block body: any statements followed by the final expression.
  * @param tokens - The token list to parse.
@@ -412,24 +516,14 @@ export function blockBody(
   depth: number,
   expr: ExprRule,
 ): Parse {
-  const statements: Statement[] = [];
-  let next = pos;
+  const list = parseStatementList(tokens, pos, depth, expr);
 
-  while (startsStatement(tokens, next)) {
-    const parsed =
-      tokens[next] === "let"
-        ? parseLet(tokens, next, depth, expr)
-        : parseAssign(tokens, next, depth, expr);
-
-    if (!parsed.ok) {
-      return parsed;
-    }
-
-    statements.push(parsed.value.statement);
-    next = parsed.value.next;
+  if (!list.ok) {
+    return list;
   }
 
-  const result = expr(tokens, next, depth);
+  const { statements } = list.value;
+  const result = expr(tokens, list.value.next, depth);
 
   if (!result.ok) {
     return result;
