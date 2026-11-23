@@ -29,6 +29,10 @@ test('interpretTuff("1 + 2 * 3 - 4 * 5") => -13', () => {
   expect(interpretTuff("1 + 2 * 3 - 4 * 5")).toEqual({ ok: true, value: -13 });
 });
 
+test('interpretTuff("(2 + 3) * 4") => 20', () => {
+  expect(interpretTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
+});
+
 const errorShape = {
   what: expect.any(String),
   where: expect.any(Number),

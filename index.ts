@@ -33,7 +33,17 @@ interface OperatorToken {
   pos: number;
 }
 
-type Token = NumberToken | OperatorToken;
+interface OpenParenToken {
+  kind: "open";
+  pos: number;
+}
+
+interface CloseParenToken {
+  kind: "close";
+  pos: number;
+}
+
+type Token = NumberToken | OperatorToken | OpenParenToken | CloseParenToken;
 
 interface Parsed {
   value: number;
@@ -71,6 +81,12 @@ function tokenize(source: string): Result<Token[]> {
     } else if (char === "+" || char === "-" || char === "*") {
       tokens.push({ kind: "operator", symbol: char, pos: index });
       index++;
+    } else if (char === "(") {
+      tokens.push({ kind: "open", pos: index });
+      index++;
+    } else if (char === ")") {
+      tokens.push({ kind: "close", pos: index });
+      index++;
     } else if (char.trim() === "") {
       index++;
     } else {
@@ -99,7 +115,7 @@ function signOf(token: Token | undefined): 1 | -1 | undefined {
 }
 
 // Reported when a number is required but the token at that place is an
-// operator, or the source ends. `end` is the source length.
+// operator or a parenthesis, or the source ends. `end` is the source length.
 function missingNumber<T>(token: Token | undefined, end: number): Result<T> {
   if (token === undefined) {
     return err({
@@ -109,18 +125,27 @@ function missingNumber<T>(token: Token | undefined, end: number): Result<T> {
       fix: "Add a number after the last operator, or delete that operator",
     });
   }
+  if (token.kind === "close") {
+    return err({
+      what: "Missing number",
+      where: token.pos,
+      why: 'Found ")" where a number is required',
+      fix: "Put a number inside the parentheses, or delete the parentheses",
+    });
+  }
   return err({
     what: "Missing number",
     where: token.pos,
     why:
       token.kind === "operator"
         ? `Found "${token.symbol}" where a number is required`
-        : "A number is required here",
+        : 'Found "(" where a number is required',
     fix: "Put a number before this operator, or remove the operator before it",
   });
 }
 
-// Reported when two numbers appear with no operator between them.
+// Reported when two numbers (or a number and a group) appear with no operator
+// between them.
 function missingOperator<T>(token: Token | undefined, end: number): Result<T> {
   return err({
     what: "Missing operator",
@@ -142,13 +167,47 @@ function parseNumber(
   return ok({ value: token.value, next: index + 1 });
 }
 
+// A factor is a number or a parenthesized expression. Signs are not allowed
+// directly before a factor; a sign inside parentheses belongs to that
+// expression.
+function parseFactor(tokens: Token[], index: number, end: number): Result<Parsed> {
+  const token = tokens[index];
+  if (token?.kind === "open") {
+    return parseGroup(tokens, index, end);
+  }
+  return parseNumber(tokens, index, end);
+}
+
+// Parses "(" expression ")". `index` points at the "(".
+function parseGroup(tokens: Token[], index: number, end: number): Result<Parsed> {
+  const open = tokens[index];
+  const inner = parseExpression(tokens, index + 1, end);
+  if (!inner.ok) {
+    return inner;
+  }
+  const next = inner.value.next;
+  const token = tokens[next];
+  if (token === undefined) {
+    return err({
+      what: "Unmatched parenthesis",
+      where: open?.pos ?? end,
+      why: 'The "(" at this position has no matching ")"',
+      fix: 'Add a ")" after its expression, or delete this "("',
+    });
+  }
+  if (token.kind !== "close") {
+    return missingOperator(token, end);
+  }
+  return ok({ value: inner.value.value, next: next + 1 });
+}
+
 function parseTerm(
   tokens: Token[],
   index: number,
   sign: 1 | -1,
   end: number,
 ): Result<Parsed> {
-  const first = parseNumber(tokens, index, end);
+  const first = parseFactor(tokens, index, end);
   if (!first.ok) {
     return first;
   }
@@ -156,7 +215,7 @@ function parseTerm(
   let next = first.value.next;
   let token = tokens[next];
   while (token?.kind === "operator" && token.symbol === "*") {
-    const factor = parseNumber(tokens, next + 1, end);
+    const factor = parseFactor(tokens, next + 1, end);
     if (!factor.ok) {
       return factor;
     }
@@ -167,10 +226,43 @@ function parseTerm(
   return ok({ value, next });
 }
 
+// Parses an optional leading sign, then terms joined by "+" or "-". Stops
+// before the first token that is not "+" or "-"; the caller decides whether
+// that token is valid there.
+function parseExpression(tokens: Token[], index: number, end: number): Result<Parsed> {
+  const leadingSign = signOf(tokens[index]);
+  const first = parseTerm(
+    tokens,
+    leadingSign === undefined ? index : index + 1,
+    leadingSign ?? 1,
+    end,
+  );
+  if (!first.ok) {
+    return first;
+  }
+  let sum = first.value.value;
+  let next = first.value.next;
+
+  let sign = signOf(tokens[next]);
+  while (sign !== undefined) {
+    const term = parseTerm(tokens, next + 1, sign, end);
+    if (!term.ok) {
+      return term;
+    }
+    sum += term.value.value;
+    next = term.value.next;
+    sign = signOf(tokens[next]);
+  }
+
+  return ok({ value: sum, next });
+}
+
 export function interpretTuff(tuffSource: string): Result<number> {
-  // Grammar: an optional leading sign, then terms joined by "+" or "-".
-  // A term is numbers joined by "*". Signs appear only at the start of the
-  // expression or directly after "+" or "-". "*" binds tighter than "+" and "-".
+  // Grammar:
+  //   expression = [sign] term { ("+" | "-") term }
+  //   term       = factor { "*" factor }
+  //   factor     = number | "(" expression ")"
+  // "*" binds tighter than "+" and "-". Parentheses group an expression.
   const tokenized = tokenize(tuffSource);
   if (!tokenized.ok) {
     return tokenized;
@@ -181,32 +273,21 @@ export function interpretTuff(tuffSource: string): Result<number> {
     return ok(0);
   }
 
-  const leadingSign = signOf(tokens[0]);
-  const first = parseTerm(
-    tokens,
-    leadingSign === undefined ? 0 : 1,
-    leadingSign ?? 1,
-    end,
-  );
-  if (!first.ok) {
-    return first;
+  const expression = parseExpression(tokens, 0, end);
+  if (!expression.ok) {
+    return expression;
   }
-  let sum = first.value.value;
-  let index = first.value.next;
-
-  while (index < tokens.length) {
-    const token = tokens[index];
-    const sign = signOf(token);
-    if (sign === undefined) {
-      return missingOperator(token, end);
-    }
-    const term = parseTerm(tokens, index + 1, sign, end);
-    if (!term.ok) {
-      return term;
-    }
-    sum += term.value.value;
-    index = term.value.next;
+  const stop = tokens[expression.value.next];
+  if (stop === undefined) {
+    return ok(expression.value.value);
   }
-
-  return ok(sum);
+  if (stop.kind === "close") {
+    return err({
+      what: "Unmatched parenthesis",
+      where: stop.pos,
+      why: 'This ")" has no matching "("',
+      fix: 'Add a "(" before its expression, or delete this ")"',
+    });
+  }
+  return missingOperator(stop, end);
 }
