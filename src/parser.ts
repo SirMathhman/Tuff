@@ -1,7 +1,7 @@
 import { ok, type Result } from "./errors.ts";
 import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
-import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
+import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
 import { blockBody } from "./statements.ts";
 
@@ -9,15 +9,20 @@ import { blockBody } from "./statements.ts";
 //   program   := body
 //   body      := statement* expr
 //   statement := "let" "mut"? name "=" expr ";" | name "=" expr ";" | "{" statement* "}"
-//   expr      := term (("+" | "-") term)*
+//   expr      := or
+//   or        := and ("||" and)*
+//   and       := comparison ("&&" comparison)*
+//   comparison := sum (cmp sum)?
+//   sum       := term (("+" | "-") term)*
 //   term      := factor ("*" factor)*
-//   factor    := "-"? primary
+//   factor    := "-" primary | "!" factor | primary
 //   primary   := number | "true" | "false" | name | "(" expr ")" | "{" body "}"
-//              | "if" "(" expr ")" expr "else" expr
+//              | "if" "(" expr ")" expr "else" comparison
 // A name starts with a letter or underscore and continues with letters,
 // digits, or underscores; "let" and "mut" are reserved. The parser builds an
-// AST; the evaluator computes its value. primary receives expr as a parameter,
-// so the rules form no static cycle.
+// AST; the evaluator computes its value. Rules that would close a cycle receive
+// the rules they need as a parameter (ParseRules), so no function calls a rule
+// by name in a cycle.
 
 function operatorAt(
   token: string | undefined,
@@ -64,7 +69,7 @@ function parsePrimary(
   tokens: string[],
   pos: number,
   depth: number,
-  expr: ExprRule,
+  rules: ParseRules,
 ): Parse {
   const token = tokens[pos];
 
@@ -76,8 +81,8 @@ function parsePrimary(
     const closer = token === "(" ? ")" : "}";
     const inner =
       token === "{"
-        ? blockBody(tokens, pos + 1, depth + 1, expr)
-        : expr(tokens, pos + 1, depth + 1);
+        ? blockBody(tokens, pos + 1, depth + 1, rules.expr)
+        : rules.expr(tokens, pos + 1, depth + 1);
 
     if (!inner.ok) {
       return inner;
@@ -100,7 +105,7 @@ function parsePrimary(
   }
 
   if (token === "if") {
-    return parseIf(tokens, pos, depth, expr);
+    return parseIf(tokens, pos, depth, rules);
   }
 
   if (token !== undefined && isDigits(token)) {
@@ -127,19 +132,19 @@ function parseIf(
   tokens: string[],
   pos: number,
   depth: number,
-  expr: ExprRule,
+  rules: ParseRules,
 ): Parse {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
 
-  const condition = parseCondition(tokens, pos, depth, expr);
+  const condition = parseCondition(tokens, pos, depth, rules.expr);
 
   if (!condition.ok) {
     return condition;
   }
 
-  const then = expr(tokens, condition.value.next, depth + 1);
+  const then = rules.expr(tokens, condition.value.next, depth + 1);
 
   if (!then.ok) {
     return then;
@@ -149,7 +154,7 @@ function parseIf(
     return invalidAt(tokens, then.value.next, "'else' after the then branch", "Every if needs an else branch.");
   }
 
-  const otherwise = parseComparison(tokens, then.value.next + 1, depth + 1);
+  const otherwise = rules.comparison(tokens, then.value.next + 1, depth + 1, rules);
 
   if (!otherwise.ok) {
     return otherwise;
@@ -171,10 +176,10 @@ function parseFactor(
   tokens: string[],
   pos: number,
   depth: number,
-  expr: ExprRule,
+  rules: ParseRules,
 ): Parse {
   if (tokens[pos] === "-") {
-    const operand = parsePrimary(tokens, pos + 1, depth, expr);
+    const operand = parsePrimary(tokens, pos + 1, depth, rules);
 
     return operand.ok
       ? ok({ value: { kind: "negate", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
@@ -182,30 +187,34 @@ function parseFactor(
   }
 
   if (tokens[pos] === "!") {
-    const operand = parseFactor(tokens, pos + 1, depth, expr);
+    if (depth >= MAX_NESTING_DEPTH) {
+      return nestingTooDeepAt(tokens, pos);
+    }
+
+    const operand = parseFactor(tokens, pos + 1, depth + 1, rules);
 
     return operand.ok
       ? ok({ value: { kind: "not", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
       : operand;
   }
 
-  return parsePrimary(tokens, pos, depth, expr);
+  return parsePrimary(tokens, pos, depth, rules);
 }
 
 function parseTerm(
   tokens: string[],
   pos: number,
   depth: number,
-  expr: ExprRule,
+  rules: ParseRules,
 ): Parse {
   return parseChain(tokens, pos, ["*"], (next) =>
-    parseFactor(tokens, next, depth, expr),
+    parseFactor(tokens, next, depth, rules),
   );
 }
 
-function parseSum(tokens: string[], pos: number, depth: number): Parse {
+function parseSum(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
   return parseChain(tokens, pos, ["+", "-"], (next) =>
-    parseTerm(tokens, next, depth, parseExpr),
+    parseTerm(tokens, next, depth, rules),
   );
 }
 
@@ -220,10 +229,11 @@ function comparisonAt(token: string | undefined): CompareOp | undefined {
  * @param tokens - The token list to parse.
  * @param pos - The index of the first token of the expression.
  * @param depth - The number of groups enclosing this position.
+ * @param rules - The rules this parse needs from above.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
-function parseComparison(tokens: string[], pos: number, depth: number): Parse {
-  const left = parseSum(tokens, pos, depth);
+function parseComparison(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
+  const left = parseSum(tokens, pos, depth, rules);
 
   if (!left.ok) {
     return left;
@@ -235,7 +245,7 @@ function parseComparison(tokens: string[], pos: number, depth: number): Parse {
     return left;
   }
 
-  const right = parseSum(tokens, left.value.next + 1, depth);
+  const right = parseSum(tokens, left.value.next + 1, depth, rules);
 
   if (!right.ok) {
     return right;
@@ -290,8 +300,8 @@ function parseLogical(
   return ok({ value: left, next });
 }
 
-function parseAnd(tokens: string[], pos: number, depth: number): Parse {
-  return parseLogical(tokens, pos, "&&", (next) => parseComparison(tokens, next, depth));
+function parseAnd(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
+  return parseLogical(tokens, pos, "&&", (next) => parseComparison(tokens, next, depth, rules));
 }
 
 /**
@@ -302,13 +312,7 @@ function parseAnd(tokens: string[], pos: number, depth: number): Parse {
  * @returns The expression tree and the index of the next unread token, or an error.
  */
 export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
-  return parseLogical(tokens, pos, "||", (next) => parseAnd(tokens, next, depth));
-}
+  const rules: ParseRules = { expr: parseExpr, comparison: parseComparison };
 
-// A "{" starts a statement block when its contents begin with a statement and
-// the token after its closing "}" can start a statement, an expression, or end
-// an enclosing block. A block followed by an operator is a value, as in
-// "{ let x = 2; x } * 4".
-// An "if" is a statement when both branches are statement blocks (each ends
-// with ";") and the token after the else block cannot continue an expression.
-// A following operator makes the whole if an expression, as with statement blocks.
+  return parseLogical(tokens, pos, "||", (next) => parseAnd(tokens, next, depth, rules));
+}

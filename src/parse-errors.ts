@@ -13,6 +13,21 @@ export type Parse = Result<Parsed, TuffError>;
 export type ExprRule = (tokens: string[], pos: number, depth: number) => Parse;
 
 /**
+ * A comparison-level rule that receives the full rule set, so it can be passed as a value.
+ */
+export type ComparisonRule = (tokens: string[], pos: number, depth: number, rules: ParseRules) => Parse;
+
+/**
+ * The rules a parser function needs from above, passed as a parameter so no function calls a rule by name.
+ */
+export interface ParseRules {
+  /** The full expression rule, used for groups and branches. */
+  expr: ExprRule;
+  /** The comparison rule, used for the else branch of an if. */
+  comparison: ComparisonRule;
+}
+
+/**
  * Builds the location of a token, using an empty text at the end of the input.
  * @param tokens - The token list being parsed.
  * @param index - The position of the token.
