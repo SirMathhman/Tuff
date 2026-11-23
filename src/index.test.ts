@@ -612,6 +612,38 @@ test("interpretTuff: an operand outside 32 bits is a BitwiseOutOfRange error", (
   expectErrorKind("3000000000 | 1", "BitwiseOutOfRange");
 });
 
+test("interpretTuff: a block-branch if followed by | is an InvalidTerm error", () => {
+  expectErrorKind("{ let mut x = 0; if (true) { x = 1; } else { x = 2; } | 2 }", "InvalidTerm");
+});
+
+test("interpretTuff: { if (true) { 1 } else { 2 } | 2 } returns Ok(3)", () => {
+  expect(interpretTuff("{ if (true) { 1 } else { 2 } | 2 }")).toEqual(ok(3));
+});
+
+test("interpretTuff: if (false) 1 else 2 | 4 returns Ok(6)", () => {
+  expect(interpretTuff("if (false) 1 else 2 | 4")).toEqual(ok(6));
+});
+
+test("interpretTuff: if (false) 1 else 2 << 1 returns Ok(4)", () => {
+  expect(interpretTuff("if (false) 1 else 2 << 1")).toEqual(ok(4));
+});
+
+test("interpretTuff: -1 >> 31 returns Ok(-1) and -8 >> 1 returns Ok(-4)", () => {
+  expect(interpretTuff("-1 >> 31")).toEqual(ok(-1));
+  expect(interpretTuff("-8 >> 1")).toEqual(ok(-4));
+});
+
+test("interpretTuff: 1 << 31 returns Ok(-2147483648)", () => {
+  expect(interpretTuff("1 << 31")).toEqual(ok(-2147483648));
+});
+
+test("interpretTuff: -1 & 0 returns positive zero", () => {
+  const result = interpretTuff("-1 & 0");
+
+  expect(result.ok).toBe(true);
+  expect(Object.is(result.ok ? result.value : undefined, 0)).toBe(true);
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
