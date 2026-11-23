@@ -191,7 +191,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
+3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, `errors.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
 4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
