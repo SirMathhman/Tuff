@@ -47,7 +47,7 @@ as the language grows. It describes the ideal, not the current code.
 - **Boolean rules**: a single factor with no sign, no `*`, and no `+` or `-`
   keeps its value, so `true`, `false`, or a boolean variable can be a whole
   `let` value, an assignment value, or the final result. Any arithmetic (a
-  sign, `*`, `+`, `-`, or `<`) requires numbers; a boolean operand there is a
+  sign, `*`, `+`, `-`, or a comparison) requires numbers; a boolean operand there is a
   `BooleanAsNumber` error.
 - **Boundary coercion**: `interpretTuff` returns a number. A final boolean
   value is returned as `1` for `true` and `0` for `false`. This is the only
@@ -62,13 +62,15 @@ as the language grows. It describes the ideal, not the current code.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
   lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both 20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
   is an error. Empty groups `()` and `{}` are errors.
-- **Precedence**, tightest first: `*`, then `+` and `-`, then `<`, then `&&`,
-  then `||`. Evaluation is left to right within each level. `<` takes two
-  numbers (`BooleanAsNumber` otherwise) and gives a boolean. A second `<` in one
-  comparison is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
+- **Precedence**, tightest first: `*`, then `+` and `-`, then the comparisons
+  `<`, `>`, `<=`, `>=`, `==`, and `!=`, then `&&`, then `||`. Evaluation is left
+  to right within each level. A comparison takes two numbers (`BooleanAsNumber`
+  otherwise) and gives a boolean. A second comparison operator in one comparison
+  is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
 - **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
-  `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or
-  whitespace). Whitespace is dropped after tokenizing.
+  `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `>`, `<=`, `>=`, `==`, `!=`, `+`,
+  `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
+  tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
 - **Result**: `{ ok: true, value } | { ok: false, error }`. The only way a
@@ -122,7 +124,7 @@ src/parse/sequence.ts    let, assignment, and "*name =" statements, then an
                          expression
 src/parse/value.ts       a let or assignment value: "&name", "&mut name", or an
                          expression
-src/parse/expression.ts  signs, "+", "-", "<", "&&", and "||"
+src/parse/expression.ts  signs, "+", "-", comparisons, "&&", and "||"
 src/parse/term.ts        "*"
 ```
 
@@ -204,7 +206,7 @@ Variants (initial set, with the variants added for names and let):
 - `NumberOutOfRange { offset }`: a literal or intermediate result that is not
   finite.
 - `BooleanAsNumber { offset, text }`: a `true` or `false` operand used in
-  arithmetic or a comparison (a sign, `*`, `+`, `-`, or `<`). `text` is the
+  arithmetic or a comparison (a sign, `*`, `+`, `-`, or a comparison). `text` is the
   boolean's spelling.
 - `NumberAsBoolean { offset, symbol }`: a number used as an operand of `||` or
   `&&`. `symbol` is the operator.
@@ -217,8 +219,9 @@ Variants (initial set, with the variants added for names and let):
 
 Comparison:
 
-- `ChainedComparison { offset }`: a second `<` follows a comparison, for
-  example `1 < 2 < 3`. `offset` is the second `<`.
+- `ChainedComparison { offset }`: a second comparison operator follows a
+  comparison, for example `1 < 2 < 3` or `1 == 1 == 1`. `offset` is the second
+  operator.
 
 Names, assignments, and scope:
 
@@ -327,9 +330,6 @@ performs no state changes.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not after.
 - Truncate names in error messages to a fixed maximum length.
-- Decide the rules for further comparison operators (`>`, `<=`, `==`) before
-  adding them, including whether any of them may chain. Today a second `<` is
-  a `ChainedComparison` error.
 - Add tests for every error variant, with one test per rule violated.
 
 ## Performance

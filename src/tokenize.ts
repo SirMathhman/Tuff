@@ -76,9 +76,30 @@ export interface AndToken {
   pos: number;
 }
 
-export interface LessToken {
-  kind: "less";
+export type ComparisonSymbol = "<" | ">" | "<=" | ">=" | "==" | "!=";
+
+export interface ComparisonToken {
+  kind: "comparison";
+  symbol: ComparisonSymbol;
   pos: number;
+}
+
+// Two-character symbols come first, so "<=" is not read as "<" then "=".
+const COMPARISON_SYMBOLS: readonly ComparisonSymbol[] = [
+  "<=",
+  ">=",
+  "==",
+  "!=",
+  "<",
+  ">",
+];
+
+// The comparison operator starting at `index`, or undefined if there is none.
+function comparisonAt(
+  source: string,
+  index: number,
+): ComparisonSymbol | undefined {
+  return COMPARISON_SYMBOLS.find((symbol) => source.startsWith(symbol, index));
 }
 
 export type Token =
@@ -95,7 +116,7 @@ export type Token =
   | BooleanToken
   | OrToken
   | AndToken
-  | LessToken;
+  | ComparisonToken;
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
@@ -130,6 +151,7 @@ export function tokenize(source: string): Result<Token[], TuffError> {
   let index = 0;
   while (index < source.length) {
     const char = source.charAt(index);
+    const comparison = comparisonAt(source, index);
     if (isDigit(char)) {
       let end = index;
       while (end < source.length && isDigit(source.charAt(end))) {
@@ -174,10 +196,10 @@ export function tokenize(source: string): Result<Token[], TuffError> {
       buffer[count] = { kind: "ampersand", pos: index };
       count++;
       index++;
-    } else if (char === "<") {
-      buffer[count] = { kind: "less", pos: index };
+    } else if (comparison !== undefined) {
+      buffer[count] = { kind: "comparison", symbol: comparison, pos: index };
       count++;
-      index++;
+      index += comparison.length;
     } else if (char === "=") {
       buffer[count] = { kind: "equals", pos: index };
       count++;
@@ -230,8 +252,8 @@ export function tokenText(token: Token): string {
   if (token.kind === "boolean") {
     return token.value ? "true" : "false";
   }
-  if (token.kind === "less") {
-    return "<";
+  if (token.kind === "comparison") {
+    return token.symbol;
   }
   if (token.kind === "or") {
     return "||";

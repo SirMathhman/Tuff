@@ -140,14 +140,18 @@ export function booleanAsNumber(where: number, text: string): TuffError {
   };
 }
 
-// Reported when a second "<" follows a comparison. `where` is the offset of that
-// second "<".
-export function chainedComparison(where: number): TuffError {
+// Reported when a second comparison operator follows a comparison. `where` is the
+// offset of that second operator; `first` and `second` are the two operators.
+export function chainedComparison(
+  where: number,
+  first: string,
+  second: string,
+): TuffError {
   return {
     what: "Chained comparison",
     where,
-    why: 'A comparison takes one "<", so another "<" cannot follow it',
-    fix: 'Join the comparisons with "&&", or remove this "<"',
+    why: `A comparison takes one "${first}", so another "${second}" cannot follow it`,
+    fix: `Join the comparisons with "&&", or remove this "${second}"`,
   };
 }
 

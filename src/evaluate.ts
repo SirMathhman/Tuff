@@ -55,12 +55,13 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   //   value      = expression | "&" name | "&" "mut" name
   //   expression = and { "||" and }
   //   and        = comparison { "&&" comparison }
-  //   comparison = sum [ "<" sum ]
+  //   comparison = sum [ compare sum ]
+  //   compare    = "<" | ">" | "<=" | ">=" | "==" | "!="
   //   sum        = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
   //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}"
-  // Precedence, tightest first: "*", then "+" and "-", then "<", then "&&", then "||".
-  // "<" takes numbers and gives a boolean; a second "<" is an error. Operands of "&&"
+  // Precedence, tightest first: "*", then "+" and "-", then the comparisons, then "&&", then "||".
+  // A comparison takes numbers and gives a boolean; a second comparison is an error. Operands of "&&"
   // and "||" must be booleans; the right side is skipped when the left side decides
   // the result. A boolean is a value on its own, but arithmetic
   // needs numbers; a final boolean is returned as 1 or 0. Parentheses group an

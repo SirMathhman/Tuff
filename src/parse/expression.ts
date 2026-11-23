@@ -2,7 +2,7 @@ import { chainedComparison, numberAsBoolean } from "../errors.ts";
 import { err, ok } from "../result.ts";
 import type { Operand, Scope } from "../scope.ts";
 import { signAt, textAt } from "../tokenize.ts";
-import type { Token } from "../tokenize.ts";
+import type { ComparisonSymbol, Token } from "../tokenize.ts";
 import { numberFrom, parseTerm } from "./term.ts";
 import type { ParseResult, Parsed, Parser } from "./types.ts";
 
@@ -120,9 +120,33 @@ function parseChain(
   return ok({ value, next, scope: current });
 }
 
-// Parses a sum, then at most one "<" and another sum. Both sides must be numbers,
-// and the result is a boolean. A second "<" is an error, so "1 < 2 < 3" is
-// rejected rather than chained.
+// Applies a comparison operator to two numbers.
+function compare(
+  symbol: ComparisonSymbol,
+  left: number,
+  right: number,
+): boolean {
+  if (symbol === "<") {
+    return left < right;
+  }
+  if (symbol === ">") {
+    return left > right;
+  }
+  if (symbol === "<=") {
+    return left <= right;
+  }
+  if (symbol === ">=") {
+    return left >= right;
+  }
+  if (symbol === "==") {
+    return left === right;
+  }
+  return left !== right;
+}
+
+// Parses a sum, then at most one comparison operator and another sum. Both sides
+// must be numbers, and the result is a boolean. A second comparison operator is
+// an error, so "1 < 2 < 3" is rejected rather than chained.
 function parseComparison(
   tokens: Token[],
   index: number,
@@ -134,8 +158,8 @@ function parseComparison(
   if (!left.ok) {
     return left;
   }
-  const lessToken = tokens[left.value.next];
-  if (lessToken?.kind !== "less") {
+  const operator = tokens[left.value.next];
+  if (operator?.kind !== "comparison") {
     return left;
   }
   const leftPos = tokens[index]?.pos ?? end;
@@ -161,11 +185,12 @@ function parseComparison(
     return rightValue;
   }
   const next = right.value.next;
-  if (tokens[next]?.kind === "less") {
-    return err(chainedComparison(tokens[next]?.pos ?? end));
+  const second = tokens[next];
+  if (second?.kind === "comparison") {
+    return err(chainedComparison(second.pos, operator.symbol, second.symbol));
   }
   return ok({
-    value: leftValue.value < rightValue.value,
+    value: compare(operator.symbol, leftValue.value, rightValue.value),
     next,
     scope: right.value.scope,
   });

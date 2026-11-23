@@ -458,3 +458,23 @@ test('interpretTuff("true < 2") => boolean used as a number error', () => {
     },
   });
 });
+
+test('interpretTuff("2 > 3") => 0', () => {
+  expect(interpretTuff("2 > 3")).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("2 <= 2") => 1', () => {
+  expect(interpretTuff("2 <= 2")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("2 >= 3") => 0', () => {
+  expect(interpretTuff("2 >= 3")).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("2 == 2") => 1', () => {
+  expect(interpretTuff("2 == 2")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("2 != 2") => 0', () => {
+  expect(interpretTuff("2 != 2")).toEqual({ ok: true, value: 0 });
+});
