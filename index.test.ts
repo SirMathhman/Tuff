@@ -287,6 +287,14 @@ test("interpretTuff an if with statement branches followed by an operator is an 
   expectErrorKind("let mut x = 0; if (true) { x = 1; } else { x = 2; } + 1", "InvalidTerm");
 });
 
+test("interpretTuff with 1001 nested if branches returns NestingTooDeep", () => {
+  expectErrorKind("if (true) ".repeat(1001) + "1 " + " else 2".repeat(1001), "NestingTooDeep");
+});
+
+test("interpretTuff a statement block followed by an if statement returns Ok(2)", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } if (true) { x = 2; } else { x = 3; } x")).toEqual(ok(2));
+});
+
 test("interpretTuff('true') returns Ok(1)", () => {
   expect(interpretTuff("true")).toEqual(ok(1));
 });
