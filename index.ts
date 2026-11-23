@@ -1,6 +1,8 @@
 import { ok, type Result, type TuffError } from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
-import { blockBody, invalidAt, parseExpr } from "./parser.ts";
+import { invalidAt } from "./parse-errors.ts";
+import { parseExpr } from "./parser.ts";
+import { blockBody } from "./statements.ts";
 import { evaluate } from "./evaluator.ts";
 
 export { describeError } from "./errors.ts";

@@ -31,7 +31,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 ### Stages and tests
 
-1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists and blocks), then `evaluator.ts`. Parse-error constructors live in `parse-errors.ts`, which every parser module imports, so no parser module imports another. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
+1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists, blocks, and if statements), then `evaluator.ts`. `conditions.ts` holds the shared `( expr )` condition rule. Parse-error constructors and position helpers live in `parse-errors.ts`. `statements.ts` and `conditions.ts` import only `parse-errors.ts`, `ast.ts`, and each other; they receive the expression rule as a parameter. `parser.ts` imports them, so no parser module imports the expression parser, and no cycle forms. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
 2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
 3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 
@@ -45,14 +45,14 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 - Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; when both branches are statement blocks, the if is a statement with no value; `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, or `}`, or the `}` ends the input and directly follows a `;`.
+- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, `if`, or `}`, or the `}` ends the input and directly follows a `;`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 
 ### Resources and failure modes
 
 - Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
-- Stack exhaustion is prevented by a nesting limit of 1000 levels, which returns a `NestingTooDeep` error instead of a thrown `RangeError`.
+- Every nested construct counts toward one nesting limit of 1000 levels: groups, statement blocks, and if branches alike. Exceeding it returns a `NestingTooDeep` error, so no `RangeError` escapes.
 - Operator chains are folded with `reduce`, so their length never depends on the call stack.
 - Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
 
@@ -72,7 +72,7 @@ Source is untrusted input. It arrives from the REPL, from files, and potentially
 
 ### Known gaps
 
-Nesting depth is limited to 1000 levels; source size and step limits are not enforced yet. Model-driven prompt injection can reach the evaluator through source text, so the host-capability whitelist must be designed before any host function is added.
+Nesting depth is counted for every nested construct; source size and step limits are not enforced yet. Model-driven prompt injection can reach the evaluator through source text, so the host-capability whitelist must be designed before any host function is added.
 
 ## Future Work
 
