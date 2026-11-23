@@ -230,6 +230,26 @@ test("interpretTuff('let mut x = 0; { x = 1; } x') returns Ok(1)", () => {
   expect(interpretTuff("let mut x = 0; { x = 1; } x")).toEqual(ok(1));
 });
 
+test("interpretTuff inner let bindings in a statement block are discarded", () => {
+  expect(interpretTuff("let mut x = 0; { let mut x = 5; x = 1; } x")).toEqual(ok(0));
+});
+
+test("interpretTuff a statement block followed by a name is a statement block", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } x + 1")).toEqual(ok(2));
+});
+
+test("interpretTuff a block followed by an operator is a value", () => {
+  expect(interpretTuff("{ let x = 2; x } * 4")).toEqual(ok(8));
+});
+
+test("interpretTuff assigning to a plain let inside a block is an ImmutableAssignment error", () => {
+  expectErrorKind("let x = 1; { x = 2; } x", "ImmutableAssignment");
+});
+
+test("interpretTuff with 1001 nested statement blocks returns NestingTooDeep", () => {
+  expectErrorKind("let mut x = 0; " + "{ x = 1; ".repeat(1001) + "}".repeat(1001) + " x", "NestingTooDeep");
+});
+
 test("interpretTuff assigning to an undeclared name is an UndefinedName error", () => {
   expectErrorKind("x = 1; x", "UndefinedName");
 });
