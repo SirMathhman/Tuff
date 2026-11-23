@@ -25,7 +25,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ## Potential Problems
 
-- Narrow grammar: `interpretTuff` accepts only non-negative integers joined by `+`. No other operators, parentheses, or negative numbers exist yet.
+- Narrow grammar: `interpretTuff` accepts only non-negative integers joined by `+` or `-`, evaluated left to right. No other operators, parentheses, or negative literals exist yet.
 - Dependency on JavaScript number syntax: the language grammar is currently JavaScript's, so changing it later is a breaking change.
 - Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
 - Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
