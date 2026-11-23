@@ -13,6 +13,10 @@ test("interpretTuff('2 + 3 - 4') returns Ok(1)", () => {
   expect(interpretTuff("2 + 3 - 4")).toEqual(ok(1));
 });
 
+test("interpretTuff('2 * 3 + 4') returns Ok(10)", () => {
+  expect(interpretTuff("2 * 3 + 4")).toEqual(ok(10));
+});
+
 test("interpretTuff('-5') returns Ok(-5)", () => {
   expect(interpretTuff("-5")).toEqual(ok(-5));
 });

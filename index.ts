@@ -55,7 +55,7 @@ function isDigits(text: string): boolean {
   );
 }
 
-type State = "start" | "unary" | "number" | "binary";
+type State = "start" | "unary" | "number" | "binary" | "mul";
 
 interface Guide {
   expected: string;
@@ -72,12 +72,16 @@ const GUIDES: Record<State, Guide> = {
     fix: "Put a number directly after '-'.",
   },
   number: {
-    expected: "'+', '-', or the end of the input",
-    fix: "Join the two numbers with '+' or '-', or remove the extra number.",
+    expected: "'+', '-', '*', or the end of the input",
+    fix: "Join the two numbers with an operator, or remove the extra number.",
   },
   binary: {
     expected: "a number or '-'",
     fix: "Put a number after the operator, or '-' before a negative number.",
+  },
+  mul: {
+    expected: "a number or '-'",
+    fix: "Put a number after '*', or '-' before a negative number.",
   },
 };
 
@@ -85,10 +89,16 @@ function nextState(state: State, token: string): State | undefined {
   if (isDigits(token)) {
     return state === "number" ? undefined : "number";
   }
+  if (state === "number" && token === "*") {
+    return "mul";
+  }
   if (state === "number" && (token === "+" || token === "-")) {
     return "binary";
   }
-  if ((state === "start" || state === "binary") && token === "-") {
+  if (
+    (state === "start" || state === "binary" || state === "mul") &&
+    token === "-"
+  ) {
     return "unary";
   }
   return undefined;
@@ -137,6 +147,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tuffSource
     .replaceAll("+", " + ")
     .replaceAll("-", " - ")
+    .replaceAll("*", " * ")
     .split(" ")
     .filter((token) => token !== "");
   const invalid = findInvalidToken(tokens);
@@ -163,19 +174,37 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       fix: `Use an integer of at most ${Number.MAX_SAFE_INTEGER}.`,
     });
   }
-  const { sum } = tokens.reduce(
-    (acc, token) => {
+  // Each "+" or "-" closes the running term; "*" multiplies into it.
+  const { sum, term } = tokens.reduce(
+    (acc, token, index) => {
       if (isDigits(token)) {
-        return { sum: acc.sum + acc.sign * Number(token), sign: 1 };
+        const value = acc.sign * Number(token);
+        return {
+          ...acc,
+          term: acc.mul ? acc.term * value : value,
+          sign: 1,
+          mul: false,
+        };
       }
-      if (token === "-") {
-        return { sum: acc.sum, sign: -acc.sign };
+      if (token === "*") {
+        return { ...acc, mul: true };
+      }
+      if (token === "-" && !isDigits(tokens[index - 1] ?? "")) {
+        return { ...acc, sign: -acc.sign };
+      }
+      if (token === "+" || token === "-") {
+        return {
+          sum: acc.sum + acc.term,
+          term: 0,
+          sign: token === "-" ? -1 : 1,
+          mul: false,
+        };
       }
       return acc;
     },
-    { sum: 0, sign: 1 },
+    { sum: 0, term: 0, sign: 1, mul: false },
   );
-  return ok(sum);
+  return ok(sum + term);
 }
 
 // TODO: simple repl with interpretTuff
