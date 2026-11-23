@@ -1,5 +1,7 @@
 import {
   ok,
+  bitwiseOutOfRangeAt,
+  type Err,
   divisionByZeroAt,
   immutableAssignmentAt,
   indexOutOfRangeAt,
@@ -128,6 +130,29 @@ function asBoolean(value: Value, where: ErrorWhere): Result<boolean, TuffError> 
   return typeMismatchAt(where, "a boolean", typeName(value));
 }
 
+function isInt32(value: number): boolean {
+  return value >= -2147483648 && value <= 2147483647;
+}
+
+// Bitwise operators work on 32-bit signed integers; a shift amount must be from 0 to 31.
+function bitwiseProblem(op: Link["op"], left: number, right: number, where: ErrorWhere): Err<TuffError> | undefined {
+  if (op === "<<" || op === ">>") {
+    if (!isInt32(left)) {
+      return bitwiseOutOfRangeAt(where, left, "a 32-bit signed integer");
+    }
+
+    return right < 0 || right > 31 ? bitwiseOutOfRangeAt(where, right, "a shift from 0 to 31") : undefined;
+  }
+
+  if (op === "|" || op === "&") {
+    if (!isInt32(left) || !isInt32(right)) {
+      return bitwiseOutOfRangeAt(where, isInt32(left) ? right : left, "a 32-bit signed integer");
+    }
+  }
+
+  return undefined;
+}
+
 function apply(op: Link["op"], left: number, right: number): number {
   if (op === "+") {
     return left + right;
@@ -135,6 +160,22 @@ function apply(op: Link["op"], left: number, right: number): number {
 
   if (op === "-") {
     return left - right;
+  }
+
+  if (op === "|") {
+    return left | right;
+  }
+
+  if (op === "&") {
+    return left & right;
+  }
+
+  if (op === "<<") {
+    return left << right;
+  }
+
+  if (op === ">>") {
+    return left >> right;
   }
 
   return op === "*" ? left * right : Math.trunc(left / right);
@@ -565,6 +606,12 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
 
       if (link.op === "/" && rightNumber.value === 0) {
         return divisionByZeroAt(link.where);
+      }
+
+      const bitwise = bitwiseProblem(link.op, left.value, rightNumber.value, link.where);
+
+      if (bitwise !== undefined) {
+        return bitwise;
       }
 
       const value = apply(link.op, left.value, rightNumber.value);

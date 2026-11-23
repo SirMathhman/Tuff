@@ -363,6 +363,10 @@ function parseTerm(
   );
 }
 
+function parseShift(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  return parseChain(tokens, pos, ["<<", ">>"], (next) => parseSum(tokens, next, depth, rules));
+}
+
 function parseSum(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
   return parseChain(tokens, pos, ["+", "-"], (next) =>
     parseTerm(tokens, next, depth, rules),
@@ -384,7 +388,7 @@ function comparisonAt(token: string | undefined): CompareOp | undefined {
  * @returns The expression tree and the index of the next unread token, or an error.
  */
 function parseComparison(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  const left = parseSum(tokens, pos, depth, rules);
+  const left = parseShift(tokens, pos, depth, rules);
 
   if (!left.ok) {
     return left;
@@ -396,7 +400,7 @@ function parseComparison(tokens: Token[], pos: number, depth: number, rules: Par
     return left;
   }
 
-  const right = parseSum(tokens, left.value.next + 1, depth, rules);
+  const right = parseShift(tokens, left.value.next + 1, depth, rules);
 
   if (!right.ok) {
     return right;
@@ -451,8 +455,16 @@ function parseLogical(
   return ok({ value: left, next });
 }
 
+function parseBitAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  return parseChain(tokens, pos, ["&"], (next) => parseComparison(tokens, next, depth, rules));
+}
+
+function parseBitOr(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  return parseChain(tokens, pos, ["|"], (next) => parseBitAnd(tokens, next, depth, rules));
+}
+
 function parseAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  return parseLogical(tokens, pos, "&&", (next) => parseComparison(tokens, next, depth, rules));
+  return parseLogical(tokens, pos, "&&", (next) => parseBitOr(tokens, next, depth, rules));
 }
 
 /**

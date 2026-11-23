@@ -144,6 +144,14 @@ export interface DivisionByZero extends TuffErrorDetails {
   kind: "DivisionByZero";
 }
 
+/**
+ * A bitwise operand or shift amount is outside its allowed range.
+ */
+export interface BitwiseOutOfRange extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "BitwiseOutOfRange";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -156,6 +164,7 @@ export type TuffError =
   | UseAfterMove
   | EmptyArrayLiteral
   | DivisionByZero
+  | BitwiseOutOfRange
   | ReferenceEscapes;
 
 function describeWhere(where: ErrorWhere): string {
@@ -223,6 +232,22 @@ export function referenceEscapesAt(where: ErrorWhere): Err<TuffError> {
     fix: "Keep the reference inside the block of the value it points to, or copy the value instead.",
     why: "The referenced name is declared in a block that has already ended.",
     kind: "ReferenceEscapes",
+  });
+}
+
+/**
+ * Builds a BitwiseOutOfRange error for a value outside the range its bitwise operator allows.
+ * @param where - The token of the bitwise operator.
+ * @param value - The offending operand or shift amount.
+ * @param allowed - A description of the allowed range.
+ * @returns An Err result holding the BitwiseOutOfRange error.
+ */
+export function bitwiseOutOfRangeAt(where: ErrorWhere, value: number, allowed: string): Err<TuffError> {
+  return err({
+    where,
+    fix: `Use a value that is ${allowed}.`,
+    why: `${value} is outside the allowed range: it must be ${allowed}.`,
+    kind: "BitwiseOutOfRange",
   });
 }
 

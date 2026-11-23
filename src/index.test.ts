@@ -588,6 +588,30 @@ test("interpretTuff: 8 / 2 * 2 evaluates left to right and returns Ok(8)", () =>
   expect(interpretTuff("8 / 2 * 2")).toEqual(ok(8));
 });
 
+test("interpretTuff: 1 | 2 returns Ok(3)", () => {
+  expect(interpretTuff("1 | 2")).toEqual(ok(3));
+});
+
+test("interpretTuff: 3 & 5 returns Ok(1)", () => {
+  expect(interpretTuff("3 & 5")).toEqual(ok(1));
+});
+
+test("interpretTuff: 1 << 3 returns Ok(8)", () => {
+  expect(interpretTuff("1 << 3")).toEqual(ok(8));
+});
+
+test("interpretTuff: 16 >> 2 returns Ok(4)", () => {
+  expect(interpretTuff("16 >> 2")).toEqual(ok(4));
+});
+
+test("interpretTuff: a shift by 32 is a BitwiseOutOfRange error", () => {
+  expectErrorKind("1 << 32", "BitwiseOutOfRange");
+});
+
+test("interpretTuff: an operand outside 32 bits is a BitwiseOutOfRange error", () => {
+  expectErrorKind("3000000000 | 1", "BitwiseOutOfRange");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

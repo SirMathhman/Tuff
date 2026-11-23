@@ -78,6 +78,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Arithmetic and unary operators
 
+- Bitwise `|` and `&` sit between `&&` and comparisons, and `<<` and `>>` between comparisons and `+ -`. Bitwise operands are 32-bit signed integers and a shift amount is from 0 to 31; otherwise the result is a BitwiseOutOfRange error. The `&` after an operand is bitwise-and, and at the start of an operand it is a reference.
 - `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 

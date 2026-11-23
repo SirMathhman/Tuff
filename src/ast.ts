@@ -50,7 +50,7 @@ interface IfNode {
  */
 export interface Link {
   /** The operator applied to the running value. */
-  op: "+" | "-" | "*" | "/";
+  op: "+" | "-" | "*" | "/" | "|" | "&" | "<<" | ">>";
   /** The right-hand operand. */
   operand: Expr;
   /** Where the operator appears in the token list. */
