@@ -1,6 +1,6 @@
 import { type Result, type TuffError } from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
-import { parseExpr, invalidAt } from "./parser.ts";
+import { blockBody, invalidAt, parseExpr } from "./parser.ts";
 import { evaluate } from "./evaluator.ts";
 
 export * from "./errors.ts";
@@ -12,7 +12,7 @@ export * from "./errors.ts";
  */
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tokenize(tuffSource);
-  const parsed = parseExpr(tokens, 0, 0);
+  const parsed = blockBody(tokens, 0, 0, parseExpr);
 
   if (!parsed.ok) {
     return parsed;

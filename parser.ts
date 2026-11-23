@@ -8,12 +8,16 @@ import {
 } from "./errors.ts";
 
 // Grammar, implemented by the functions below:
-//   expr    := term (("+" | "-") term)*
-//   term    := factor ("*" factor)*
-//   factor  := "-"? primary
-//   primary := number | "(" expr ")" | "{" expr "}"
-// The parser builds an AST; the evaluator computes its value. primary
-// receives expr as a parameter, so the rules form no static cycle.
+//   program  := body
+//   body     := ("let" name "=" expr ";")* expr
+//   expr     := term (("+" | "-") term)*
+//   term     := factor ("*" factor)*
+//   factor   := "-"? primary
+//   primary  := number | name | "(" expr ")" | "{" body "}"
+// A name starts with a letter or underscore and continues with letters,
+// digits, or underscores; "let" is reserved. The parser builds an AST; the
+// evaluator computes its value. primary receives expr as a parameter, so the
+// rules form no static cycle.
 
 interface NumberNode {
   kind: "number";
@@ -23,6 +27,12 @@ interface NumberNode {
 interface NegateNode {
   kind: "negate";
   operand: Expr;
+}
+
+interface ReferenceNode {
+  kind: "reference";
+  name: string;
+  where: ErrorWhere;
 }
 
 /**
@@ -44,12 +54,38 @@ interface ChainNode {
 }
 
 /**
- * A parsed expression: a number, a negation, or a chain of operators.
+ * A let statement: a name bound to the value of an expression.
  */
-export type Expr = NumberNode | NegateNode | ChainNode;
+export interface Binding {
+  /** The declared name. */
+  name: string;
+  /** The expression whose value the name is bound to. */
+  value: Expr;
+}
+
+interface BlockNode {
+  kind: "block";
+  bindings: Binding[];
+  result: Expr;
+}
+
+/**
+ * A parsed expression: a number, a name, a negation, a chain of operators, or a block.
+ */
+export type Expr =
+  | NumberNode
+  | NegateNode
+  | ReferenceNode
+  | ChainNode
+  | BlockNode;
 
 interface Parsed {
   value: Expr;
+  next: number;
+}
+
+interface BindingParsed {
+  binding: Binding;
   next: number;
 }
 
@@ -59,9 +95,26 @@ type ExprRule = (tokens: string[], pos: number, depth: number) => Parse;
 
 const MAX_NESTING_DEPTH = 1000;
 
+function isDigit(char: string): boolean {
+  return char >= "0" && char <= "9";
+}
+
+function isLetterOrUnderscore(char: string): boolean {
+  return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_";
+}
+
 function isDigits(text: string): boolean {
+  return text.length > 0 && [...text].every(isDigit);
+}
+
+function isIdentifier(text: string): boolean {
+  const chars = [...text];
+
   return (
-    text.length > 0 && [...text].every((char) => char >= "0" && char <= "9")
+    text !== "let" &&
+    chars.length > 0 &&
+    isLetterOrUnderscore(chars[0] ?? "") &&
+    chars.every((char) => isLetterOrUnderscore(char) || isDigit(char))
   );
 }
 
@@ -170,7 +223,10 @@ function parsePrimary(
     }
 
     const closer = token === "(" ? ")" : "}";
-    const inner = expr(tokens, pos + 1, depth + 1);
+    const inner =
+      token === "{"
+        ? blockBody(tokens, pos + 1, depth + 1, expr)
+        : expr(tokens, pos + 1, depth + 1);
 
     if (!inner.ok) {
       return inner;
@@ -196,11 +252,15 @@ function parsePrimary(
     return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
   }
 
+  if (token !== undefined && isIdentifier(token)) {
+    return ok({ value: { kind: "reference", name: token, where: whereAt(tokens, pos) }, next: pos + 1 });
+  }
+
   return invalidAt(
     tokens,
     pos,
-    "a number, '-', or '('",
-    "Put a number, a '-' before a number, or a parenthesized expression here.",
+    "a number, a name, '-', or '('",
+    "Put a number, a name, a '-' before a number, or a parenthesized expression here.",
   );
 }
 
@@ -243,4 +303,77 @@ export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
   return parseChain(tokens, pos, ["+", "-"], (next) =>
     parseTerm(tokens, next, depth, parseExpr),
   );
+}
+
+function parseBinding(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Result<BindingParsed, TuffError> {
+  const name = tokens[pos + 1];
+
+  if (name === undefined || !isIdentifier(name)) {
+    return invalidAt(tokens, pos + 1, "a name after 'let'", "Write a name such as x after 'let'.");
+  }
+
+  if (tokens[pos + 2] !== "=") {
+    return invalidAt(tokens, pos + 2, "'=' after the name", "Write '=' and a value after the name.");
+  }
+
+  const value = expr(tokens, pos + 3, depth);
+
+  if (!value.ok) {
+    return value;
+  }
+
+  if (tokens[value.value.next] !== ";") {
+    return invalidAt(tokens, value.value.next, "';' after the value", "End the let statement with ';'.");
+  }
+
+  return ok({ binding: { name, value: value.value.value }, next: value.value.next + 1 });
+}
+
+/**
+ * Parses a block body: any let statements followed by the final expression.
+ * @param tokens - The token list to parse.
+ * @param pos - The index of the first token of the body.
+ * @param depth - The number of groups enclosing this position.
+ * @param expr - The expression rule used for values and the final expression.
+ * @returns The body as an expression, or a block when it has let statements.
+ */
+export function blockBody(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
+  const bindings: Binding[] = [];
+  let next = pos;
+
+  while (tokens[next] === "let") {
+    const declared = parseBinding(tokens, next, depth, expr);
+
+    if (!declared.ok) {
+      return declared;
+    }
+
+    bindings.push(declared.value.binding);
+    next = declared.value.next;
+  }
+
+  const result = expr(tokens, next, depth);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (bindings.length === 0) {
+    return result;
+  }
+
+  return ok({
+    value: { kind: "block", bindings, result: result.value.value },
+    next: result.value.next,
+  });
 }

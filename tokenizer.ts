@@ -13,6 +13,7 @@ export function tokenize(tuffSource: string): string[] {
     .replaceAll("+", " + ")
     .replaceAll("-", " - ")
     .replaceAll("*", " * ")
+    .replaceAll(";", " ; ")
     .split(" ")
     .filter((token) => token !== "");
 }

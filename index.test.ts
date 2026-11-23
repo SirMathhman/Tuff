@@ -174,6 +174,30 @@ test("interpretTuff with 50000 nested braces returns NestingTooDeep", () => {
   expectErrorKind("{".repeat(50000) + "1" + "}".repeat(50000), "NestingTooDeep");
 });
 
+test("interpretTuff('{ let x = 2 + 3; x } * 4') returns Ok(20)", () => {
+  expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual(ok(20));
+});
+
+test("interpretTuff('let x = 2; x * 3') returns Ok(6)", () => {
+  expect(interpretTuff("let x = 2; x * 3")).toEqual(ok(6));
+});
+
+test("interpretTuff inner let shadows an outer name and the outer value is restored", () => {
+  expect(interpretTuff("{ let x = 1; let y = { let x = 2; x }; x + y }")).toEqual(ok(3));
+});
+
+test("interpretTuff('let x = 1; let x = 2; x') returns Ok(2)", () => {
+  expect(interpretTuff("let x = 1; let x = 2; x")).toEqual(ok(2));
+});
+
+test("interpretTuff('y') is an UndefinedName error", () => {
+  expectErrorKind("y", "UndefinedName");
+});
+
+test("interpretTuff('{ let x = 2; }') is an InvalidTerm error", () => {
+  expectErrorKind("{ let x = 2; }", "InvalidTerm");
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });

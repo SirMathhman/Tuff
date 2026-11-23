@@ -39,7 +39,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket. Spaces and tabs separate tokens.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket. Spaces and tabs separate tokens. Names bind with `let name = expr;` at top level or inside braces, ending in a final expression: the last declaration wins, inner blocks shadow outer names, and undeclared names are errors.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Grammar follows JavaScript number syntax; changing it later is breaking.
 

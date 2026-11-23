@@ -78,13 +78,22 @@ export interface NestingTooDeep extends TuffErrorDetails {
 }
 
 /**
+ * A name is referenced but no let statement declares it.
+ */
+export interface UndefinedName extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "UndefinedName";
+}
+
+/**
  * Any error that interpretTuff can return.
  */
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
   | ResultTooLarge
-  | NestingTooDeep;
+  | NestingTooDeep
+  | UndefinedName;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -117,6 +126,20 @@ export function ok<T>(value: T): Ok<T> {
  */
 export function err<E>(error: E): Err<E> {
   return { ok: false, error };
+}
+
+/**
+ * Builds an UndefinedName error for a reference to an undeclared name.
+ * @param where - The token where the name is referenced.
+ * @returns An Err result holding the UndefinedName error.
+ */
+export function undefinedNameAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    kind: "UndefinedName",
+    why: `${JSON.stringify(where.text)} is not declared.`,
+    where,
+    fix: `Declare it first with let ${where.text} = ...; before using it.`,
+  });
 }
 
 /**
