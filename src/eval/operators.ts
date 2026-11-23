@@ -2,7 +2,10 @@ import { type CompareOp, type Link } from "../ast.ts";
 
 // Each operator is listed once. The Record type makes the compiler reject a missing operator.
 // Numbers are safe integers, and bitwise operators treat them as 32-bit values.
-const NUMBER_OPERATORS: Record<Link["op"], (left: number, right: number) => number> = {
+const NUMBER_OPERATORS: Record<
+  Link["op"],
+  (left: number, right: number) => number
+> = {
   "+": (left: number, right: number): number => left + right,
   "-": (left: number, right: number): number => left - right,
   "*": (left: number, right: number): number => left * right,
@@ -13,7 +16,10 @@ const NUMBER_OPERATORS: Record<Link["op"], (left: number, right: number) => numb
   ">>": (left: number, right: number): number => left >> right,
 };
 
-const INTEGER_OPERATORS: Record<Link["op"], (left: bigint, right: bigint) => bigint> = {
+const INTEGER_OPERATORS: Record<
+  Link["op"],
+  (left: bigint, right: bigint) => bigint
+> = {
   "+": (left, right) => left + right,
   "-": (left, right) => left - right,
   "*": (left, right) => left * right,
@@ -42,7 +48,11 @@ export function apply(op: Link["op"], left: number, right: number): number {
  * @param right - The right operand.
  * @returns The exact result, which the caller checks against its type's range.
  */
-export function applyInteger(op: Link["op"], left: bigint, right: bigint): bigint {
+export function applyInteger(
+  op: Link["op"],
+  left: bigint,
+  right: bigint,
+): bigint {
   return INTEGER_OPERATORS[op](left, right);
 }
 
@@ -53,7 +63,11 @@ export function applyInteger(op: Link["op"], left: bigint, right: bigint): bigin
  * @param right - The right operand.
  * @returns The comparison result.
  */
-export function numericCompare<T extends number | bigint>(op: CompareOp, left: T, right: T): boolean {
+export function numericCompare<T extends number | bigint>(
+  op: CompareOp,
+  left: T,
+  right: T,
+): boolean {
   if (op === "<") {
     return left < right;
   }

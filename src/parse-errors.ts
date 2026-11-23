@@ -1,5 +1,11 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { err, type Err, type ErrorWhere, type Result, type TuffError } from "./errors.ts";
+import {
+  err,
+  type Err,
+  type ErrorWhere,
+  type Result,
+  type TuffError,
+} from "./errors.ts";
 import { type Expr } from "./ast.ts";
 
 export const MAX_NESTING_DEPTH = 1000;
@@ -16,7 +22,12 @@ export type ExprRule = (tokens: Token[], pos: number, depth: number) => Parse;
 /**
  * A comparison-level rule that receives the full rule set, so it can be passed as a value.
  */
-export type ComparisonRule = (tokens: Token[], pos: number, depth: number, rules: ParseRules) => Parse;
+export type ComparisonRule = (
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+) => Parse;
 
 /**
  * The rules a parser function needs from above, passed as a parameter so no function calls a rule by name.
@@ -87,7 +98,10 @@ export function termTooLargeAt(tokens: Token[], index: number): Err<TuffError> {
  * @param index - The position of the group that exceeds the limit.
  * @returns An Err result holding the NestingTooDeep error.
  */
-export function nestingTooDeepAt(tokens: Token[], index: number): Err<TuffError> {
+export function nestingTooDeepAt(
+  tokens: Token[],
+  index: number,
+): Err<TuffError> {
   return err({
     kind: "NestingTooDeep",
     why: `Groups nest deeper than ${MAX_NESTING_DEPTH} levels.`,

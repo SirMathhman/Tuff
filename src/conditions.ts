@@ -10,9 +10,19 @@ import { invalidAt, type Parse, type ExprRule } from "./parse-errors.ts";
  * @param expr - The expression rule used for the condition.
  * @returns The condition and the index just after its closing parenthesis, or an error.
  */
-export function parseCondition(tokens: Token[], pos: number, depth: number, expr: ExprRule): Parse {
+export function parseCondition(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
   if (textAt(tokens, pos + 1) !== "(") {
-    return invalidAt(tokens, pos + 1, "'(' after 'if'", "Write the condition in parentheses after 'if'.");
+    return invalidAt(
+      tokens,
+      pos + 1,
+      "'(' after 'if'",
+      "Write the condition in parentheses after 'if'.",
+    );
   }
 
   const condition = expr(tokens, pos + 2, depth + 1);
@@ -22,7 +32,12 @@ export function parseCondition(tokens: Token[], pos: number, depth: number, expr
   }
 
   if (textAt(tokens, condition.value.next) !== ")") {
-    return invalidAt(tokens, condition.value.next, "')' after the condition", "Close the condition with ')'.");
+    return invalidAt(
+      tokens,
+      condition.value.next,
+      "')' after the condition",
+      "Close the condition with ')'.",
+    );
   }
 
   return ok({ value: condition.value.value, next: condition.value.next + 1 });

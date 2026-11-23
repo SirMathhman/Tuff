@@ -1,4 +1,10 @@
-import { ok, programResultTooLargeAt, typeMismatchAt, type Result, type TuffError } from "./errors.ts";
+import {
+  ok,
+  programResultTooLargeAt,
+  typeMismatchAt,
+  type Result,
+  type TuffError,
+} from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
 import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
@@ -63,7 +69,9 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     name: "",
     cell: { value: 0, moved: false },
     mutable: false,
-    structs: new Map(declared.value.structs.map((decl) => [decl.name, decl] as const)),
+    structs: new Map(
+      declared.value.structs.map((decl) => [decl.name, decl] as const),
+    ),
     functions: functions.value.functions,
   };
   const result = evaluate(parsed.value.value, root);
@@ -88,12 +96,24 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     const digits = result.value.value;
     const safe = BigInt(Number.MAX_SAFE_INTEGER);
 
-    return digits >= -safe && digits <= safe ? ok(Number(digits)) : programResultTooLargeAt(whereAt(tokens, 0), digits);
+    return digits >= -safe && digits <= safe
+      ? ok(Number(digits))
+      : programResultTooLargeAt(whereAt(tokens, 0), digits);
   }
 
-  const found = Array.isArray(result.value) ? "an array" : isRecord(result.value) ? "a record" : isFunction(result.value) ? "a function" : "a reference";
+  const found = Array.isArray(result.value)
+    ? "an array"
+    : isRecord(result.value)
+      ? "a record"
+      : isFunction(result.value)
+        ? "a function"
+        : "a reference";
 
-  return typeMismatchAt(whereAt(tokens, 0), "a number, boolean, or string", found);
+  return typeMismatchAt(
+    whereAt(tokens, 0),
+    "a number, boolean, or string",
+    found,
+  );
 }
 
 // TODO: simple repl with interpretTuff

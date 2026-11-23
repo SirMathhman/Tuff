@@ -1,12 +1,24 @@
-import { type Annotation, type FunctionAnnotation, type FunctionDecl, type IntType, type StructDecl } from "../ast.ts";
-import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
+import {
+  type Annotation,
+  type FunctionAnnotation,
+  type FunctionDecl,
+  type IntType,
+  type StructDecl,
+} from "../ast.ts";
+import {
+  type ErrorWhere,
+  type Result,
+  type TuffError,
+  ok,
+  typeMismatchAt,
+} from "../errors.ts";
 
 /**
  * A borrow of a binding: reads see the binding's current value, and writes go to it.
  */
 export interface Reference {
-    /** The discriminant: always "reference". */
-    kind: "reference";
+  /** The discriminant: always "reference". */
+  kind: "reference";
   /** The binding the reference points to. */
   target: Scope;
   /** True for a writable borrow (&mut), false for a read-only one. */
@@ -17,8 +29,8 @@ export interface Reference {
  * A sized integer. Its value is a bigint, so every type's range is exact, and it never equals a plain number.
  */
 export interface Integer {
-    /** The discriminant: always "integer". */
-    kind: "integer";
+  /** The discriminant: always "integer". */
+  kind: "integer";
   /** The sized type, such as U8 or I64. */
   type: IntType;
   /** The value, within the type's range. */
@@ -32,27 +44,35 @@ export interface Integer {
  * A record: named fields, each holding a value. A record is never changed in place; a field write makes a new record.
  */
 export interface RecordValue {
-    /** The discriminant: always "record". */
-    kind: "record";
+  /** The discriminant: always "record". */
+  kind: "record";
   /** The fields, keyed by name, in declaration order. */
   fields: Map<string, Value>;
   /** The struct this record was built from by a constructor. An anonymous record has none. */
-  struct ?: string;
+  struct?: string;
 }
 
 /**
  * A function value: a declaration, with the functions declared before it, which its body may call.
  */
 export interface FunctionValue {
-    /** The discriminant: always "function". */
-    kind: "function";
+  /** The discriminant: always "function". */
+  kind: "function";
   /** The declaration the value calls. */
   decl: FunctionDecl;
   /** The functions declared before this one, which its body may call. */
   visible: FunctionDecl[];
 }
 
-export type Value = number | Integer | boolean | string | Value[] | Reference | RecordValue | FunctionValue;
+export type Value =
+  | number
+  | Integer
+  | boolean
+  | string
+  | Value[]
+  | Reference
+  | RecordValue
+  | FunctionValue;
 
 /**
  * Reports whether a value is a record.
@@ -60,7 +80,11 @@ export type Value = number | Integer | boolean | string | Value[] | Reference | 
  * @returns True when the value is a RecordValue.
  */
 export function isRecord(value: Value): value is RecordValue {
-    return typeof value === "object" && !Array.isArray(value) && value.kind === "record";
+  return (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.kind === "record"
+  );
 }
 
 /**
@@ -78,7 +102,11 @@ export function copyValue(value: Value): Value {
  * @returns True when the value is an Integer.
  */
 export function isInteger(value: Value): value is Integer {
-    return typeof value === "object" && !Array.isArray(value) && value.kind === "integer";
+  return (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.kind === "integer"
+  );
 }
 
 /**
@@ -87,7 +115,11 @@ export function isInteger(value: Value): value is Integer {
  * @returns True when the value is a Reference.
  */
 export function isReference(value: Value): value is Reference {
-    return typeof value === "object" && !Array.isArray(value) && value.kind === "reference";
+  return (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.kind === "reference"
+  );
 }
 
 /**
@@ -142,7 +174,7 @@ export interface Cell {
   /** True when a whole array was used by name and must be assigned before reuse. */
   moved: boolean;
   /** The type the binding was declared with, if any. Every later assignment must keep it. */
-  annotation ?: Annotation;
+  annotation?: Annotation;
 }
 
 /**
@@ -174,7 +206,9 @@ export function typeName(value: Value): string {
   }
 
   if (isRecord(value)) {
-    return value.struct === undefined ? `a record with fields ${[...value.fields.keys()].join(", ")}` : `a ${value.struct}`;
+    return value.struct === undefined
+      ? `a record with fields ${[...value.fields.keys()].join(", ")}`
+      : `a ${value.struct}`;
   }
 
   if (isInteger(value)) {
@@ -199,7 +233,9 @@ export function typeName(value: Value): string {
 
   const first = value[0];
 
-  return first === undefined ? "an array" : `an array whose elements are ${typeName(first)}`;
+  return first === undefined
+    ? "an array"
+    : `an array whose elements are ${typeName(first)}`;
 }
 
 /**
@@ -215,11 +251,17 @@ export function sameType(left: Value, right: Value): boolean {
   }
 
   if (isRecord(left) || isRecord(right)) {
-    return isRecord(left) && isRecord(right) && left.struct === right.struct && left.fields.size === right.fields.size && [...left.fields].every(([name, field]) => {
-      const other = right.fields.get(name);
+    return (
+      isRecord(left) &&
+      isRecord(right) &&
+      left.struct === right.struct &&
+      left.fields.size === right.fields.size &&
+      [...left.fields].every(([name, field]) => {
+        const other = right.fields.get(name);
 
-      return other !== undefined && sameType(field, other);
-    });
+        return other !== undefined && sameType(field, other);
+      })
+    );
   }
 
   if (isReference(left) || isReference(right)) {
@@ -227,7 +269,11 @@ export function sameType(left: Value, right: Value): boolean {
   }
 
   if (isFunction(left) || isFunction(right)) {
-    return isFunction(left) && isFunction(right) && sameSignature(left.decl, right.decl);
+    return (
+      isFunction(left) &&
+      isFunction(right) &&
+      sameSignature(left.decl, right.decl)
+    );
   }
 
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -250,7 +296,10 @@ export function sameType(left: Value, right: Value): boolean {
  * @param where - The token that needs a number.
  * @returns The number, or a TypeMismatch error.
  */
-export function asNumber(value: Value, where: ErrorWhere): Result<number, TuffError> {
+export function asNumber(
+  value: Value,
+  where: ErrorWhere,
+): Result<number, TuffError> {
   if (typeof value === "number") {
     return ok(value);
   }
@@ -264,7 +313,10 @@ export function asNumber(value: Value, where: ErrorWhere): Result<number, TuffEr
  * @param where - The token that needs a boolean.
  * @returns The boolean, or a TypeMismatch error.
  */
-export function asBoolean(value: Value, where: ErrorWhere): Result<boolean, TuffError> {
+export function asBoolean(
+  value: Value,
+  where: ErrorWhere,
+): Result<boolean, TuffError> {
   if (typeof value === "boolean") {
     return ok(value);
   }
@@ -278,7 +330,11 @@ export function asBoolean(value: Value, where: ErrorWhere): Result<boolean, Tuff
  * @returns True when the value is a FunctionValue.
  */
 export function isFunction(value: Value): value is FunctionValue {
-    return typeof value === "object" && !Array.isArray(value) && value.kind === "function";
+  return (
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.kind === "function"
+  );
 }
 
 /**
@@ -293,14 +349,23 @@ export function sameAnnotation(left: Annotation, right: Annotation): boolean {
   }
 
   if (left.kind === "array") {
-    return right.kind === "array" && left.element === right.element && left.length === right.length;
+    return (
+      right.kind === "array" &&
+      left.element === right.element &&
+      left.length === right.length
+    );
   }
 
   if (left.kind === "struct") {
     return right.kind === "struct" && left.name === right.name;
   }
 
-  return right.kind === "function" && left.returns === right.returns && left.params.length === right.params.length && left.params.every((param, index) => param === right.params[index]);
+  return (
+    right.kind === "function" &&
+    left.returns === right.returns &&
+    left.params.length === right.params.length &&
+    left.params.every((param, index) => param === right.params[index])
+  );
 }
 
 /**
@@ -309,12 +374,21 @@ export function sameAnnotation(left: Annotation, right: Annotation): boolean {
  * @param annotation - The function type.
  * @returns True when the parameter and result types match.
  */
-export function signatureMatches(decl: FunctionDecl, annotation: FunctionAnnotation): boolean {
-  return decl.params.length === annotation.params.length && decl.params.every((param, index) => {
-    const expected = annotation.params[index];
+export function signatureMatches(
+  decl: FunctionDecl,
+  annotation: FunctionAnnotation,
+): boolean {
+  return (
+    decl.params.length === annotation.params.length &&
+    decl.params.every((param, index) => {
+      const expected = annotation.params[index];
 
-    return expected !== undefined && sameAnnotation(param.annotation, expected);
-  }) && sameAnnotation(decl.returns, annotation.returns);
+      return (
+        expected !== undefined && sameAnnotation(param.annotation, expected)
+      );
+    }) &&
+    sameAnnotation(decl.returns, annotation.returns)
+  );
 }
 
 /**
@@ -323,10 +397,20 @@ export function signatureMatches(decl: FunctionDecl, annotation: FunctionAnnotat
  * @param right - The second declaration.
  * @returns True when the signatures match.
  */
-export function sameSignature(left: FunctionDecl, right: FunctionDecl): boolean {
-  return left.params.length === right.params.length && left.params.every((param, index) => {
-    const other = right.params[index];
+export function sameSignature(
+  left: FunctionDecl,
+  right: FunctionDecl,
+): boolean {
+  return (
+    left.params.length === right.params.length &&
+    left.params.every((param, index) => {
+      const other = right.params[index];
 
-    return other !== undefined && sameAnnotation(param.annotation, other.annotation);
-  }) && sameAnnotation(left.returns, right.returns);
+      return (
+        other !== undefined &&
+        sameAnnotation(param.annotation, other.annotation)
+      );
+    }) &&
+    sameAnnotation(left.returns, right.returns)
+  );
 }

@@ -67,9 +67,44 @@ export function tokenize(tuffSource: string): Token[] {
 
 const SPACE = [" ", "\t", "\n", "\r"];
 
-const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||", "<<", ">>", "+=", "-=", "*=", "/=", "=>"];
+const TWO_CHAR_OPERATORS = [
+  "<=",
+  ">=",
+  "==",
+  "!=",
+  "&&",
+  "||",
+  "<<",
+  ">>",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "=>",
+];
 
-const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "[", "]", ",", "+", "-", "*", "/", ";", "=", "<", ">", "!", "&", "|", ":", "."];
+const SINGLE_CHAR_TOKENS = [
+  "(",
+  ")",
+  "{",
+  "}",
+  "[",
+  "]",
+  ",",
+  "+",
+  "-",
+  "*",
+  "/",
+  ";",
+  "=",
+  "<",
+  ">",
+  "!",
+  "&",
+  "|",
+  ":",
+  ".",
+];
 
 // Returns the index of the single quote that closes the string opened at start,
 // skipping backslash-escaped characters, or undefined when the string is never closed.
@@ -96,7 +131,9 @@ function isDigit(char: string): boolean {
 }
 
 function isLetterOrUnderscore(char: string): boolean {
-  return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_";
+  return (
+    (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_"
+  );
 }
 
 /**
@@ -114,7 +151,9 @@ export function isDigits(text: string): boolean {
  * @returns The suffix's type, or undefined when the token is not a sized literal.
  */
 export function intLiteralType(text: string): IntType | undefined {
-  return INT_TYPES.find((type) => text.endsWith(type) && isDigits(text.slice(0, -type.length)));
+  return INT_TYPES.find(
+    (type) => text.endsWith(type) && isDigits(text.slice(0, -type.length)),
+  );
 }
 
 /**

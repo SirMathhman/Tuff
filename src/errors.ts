@@ -257,7 +257,11 @@ export function err<E>(error: E): Err<E> {
  * @param length - The length of the array.
  * @returns An Err result holding the IndexOutOfRange error.
  */
-export function indexOutOfRangeAt(where: ErrorWhere, index: number, length: number): Err<TuffError> {
+export function indexOutOfRangeAt(
+  where: ErrorWhere,
+  index: number,
+  length: number,
+): Err<TuffError> {
   return err({
     where,
     fix: `Use an index from 0 to ${length - 1}.`,
@@ -287,7 +291,11 @@ export function referenceEscapesAt(where: ErrorWhere): Err<TuffError> {
  * @param allowed - A description of the allowed range.
  * @returns An Err result holding the BitwiseOutOfRange error.
  */
-export function bitwiseOutOfRangeAt(where: ErrorWhere, value: number, allowed: string): Err<TuffError> {
+export function bitwiseOutOfRangeAt(
+  where: ErrorWhere,
+  value: number,
+  allowed: string,
+): Err<TuffError> {
   return err({
     where,
     fix: `Use a value that is ${allowed}.`,
@@ -305,7 +313,13 @@ export function bitwiseOutOfRangeAt(where: ErrorWhere, value: number, allowed: s
  * @param max - The largest value of the type.
  * @returns An Err result holding the out-of-range error.
  */
-export function integerOutOfRangeAt(where: ErrorWhere, value: bigint, type: string, min: bigint, max: bigint): Err<TuffError> {
+export function integerOutOfRangeAt(
+  where: ErrorWhere,
+  value: bigint,
+  type: string,
+  min: bigint,
+  max: bigint,
+): Err<TuffError> {
   return err({
     where,
     fix: `Use a ${type} value from ${min} to ${max}.`,
@@ -320,7 +334,10 @@ export function integerOutOfRangeAt(where: ErrorWhere, value: bigint, type: stri
  * @param name - The struct name that was used.
  * @returns An Err result holding the InvalidTerm error.
  */
-export function undeclaredTypeAt(where: ErrorWhere, name: string): Err<TuffError> {
+export function undeclaredTypeAt(
+  where: ErrorWhere,
+  name: string,
+): Err<TuffError> {
   return err({
     where,
     fix: `Declare struct ${name} { ... } at the start of the program, or use a sized integer type, Bool, or an array type.`,
@@ -337,7 +354,11 @@ export function undeclaredTypeAt(where: ErrorWhere, name: string): Err<TuffError
  * @param struct - The struct the record was built from, or undefined for an anonymous record.
  * @returns An Err result holding the ImmutableAssignment error.
  */
-export function immutableFieldAt(where: ErrorWhere, field: string, struct: string | undefined): Err<TuffError> {
+export function immutableFieldAt(
+  where: ErrorWhere,
+  field: string,
+  struct: string | undefined,
+): Err<TuffError> {
   if (struct === undefined) {
     return err({
       where,
@@ -361,7 +382,10 @@ export function immutableFieldAt(where: ErrorWhere, field: string, struct: strin
  * @param name - The struct name that was used.
  * @returns An Err result holding the UndefinedStruct error.
  */
-export function undefinedStructAt(where: ErrorWhere, name: string): Err<TuffError> {
+export function undefinedStructAt(
+  where: ErrorWhere,
+  name: string,
+): Err<TuffError> {
   return err({
     where,
     fix: `Declare the struct first with struct ${name} { ... } before the statements.`,
@@ -377,7 +401,11 @@ export function undefinedStructAt(where: ErrorWhere, name: string): Err<TuffErro
  * @param missing - The names of the fields that were left out.
  * @returns An Err result holding the MissingField error.
  */
-export function missingFieldAt(where: ErrorWhere, name: string, missing: string[]): Err<TuffError> {
+export function missingFieldAt(
+  where: ErrorWhere,
+  name: string,
+  missing: string[],
+): Err<TuffError> {
   return err({
     where,
     fix: `Give a value for each of these fields: ${missing.join(", ")}.`,
@@ -393,7 +421,11 @@ export function missingFieldAt(where: ErrorWhere, name: string, missing: string[
  * @param fields - The names of the record's fields.
  * @returns An Err result holding the UndefinedField error.
  */
-export function fieldNotFoundAt(where: ErrorWhere, name: string, fields: string[]): Err<TuffError> {
+export function fieldNotFoundAt(
+  where: ErrorWhere,
+  name: string,
+  fields: string[],
+): Err<TuffError> {
   return err({
     where,
     fix: `Use one of the record's fields: ${fields.join(", ")}.`,
@@ -408,7 +440,10 @@ export function fieldNotFoundAt(where: ErrorWhere, name: string, fields: string[
  * @param operand - What is being divided, such as "A number" or "A U64".
  * @returns An Err result holding the DivisionByZero error.
  */
-export function divisionByZeroAt(where: ErrorWhere, operand: string): Err<TuffError> {
+export function divisionByZeroAt(
+  where: ErrorWhere,
+  operand: string,
+): Err<TuffError> {
   return err({
     where,
     fix: "Use a divisor other than zero.",
@@ -466,7 +501,11 @@ export function undefinedNameAt(where: ErrorWhere): Err<TuffError> {
  * @param found - A description of the type that was supplied.
  * @returns An Err result holding the TypeMismatch error.
  */
-export function typeMismatchAt(where: ErrorWhere, expected: string, found: string): Err<TuffError> {
+export function typeMismatchAt(
+  where: ErrorWhere,
+  expected: string,
+  found: string,
+): Err<TuffError> {
   return err({
     where,
     fix: `Use ${expected} here.`,
@@ -495,7 +534,10 @@ export function immutableAssignmentAt(where: ErrorWhere): Err<TuffError> {
  * @param value - The result that cannot be returned exactly as a number.
  * @returns An Err result holding the ResultTooLarge error.
  */
-export function programResultTooLargeAt(where: ErrorWhere, value: bigint): Err<TuffError> {
+export function programResultTooLargeAt(
+  where: ErrorWhere,
+  value: bigint,
+): Err<TuffError> {
   return err({
     kind: "ResultTooLarge",
     why: `The program's result, ${value}, is outside ±${Number.MAX_SAFE_INTEGER}, so it cannot be returned as a number without losing digits.`,

@@ -118,11 +118,16 @@ test("interpretTuff('(1 + 2') is an error", () => {
 });
 
 test("interpretTuff with 50000 nested parentheses returns NestingTooDeep", () => {
-  expectErrorKind("(".repeat(50000) + "1" + ")".repeat(50000), "NestingTooDeep");
+  expectErrorKind(
+    "(".repeat(50000) + "1" + ")".repeat(50000),
+    "NestingTooDeep",
+  );
 });
 
 test("interpretTuff with 1000 nested parentheses returns Ok(1)", () => {
-  expect(interpretTuff("(".repeat(1000) + "1" + ")".repeat(1000))).toEqual(ok(1));
+  expect(interpretTuff("(".repeat(1000) + "1" + ")".repeat(1000))).toEqual(
+    ok(1),
+  );
 });
 
 test("NestingTooDeep has why, where, and fix", () => {
@@ -135,7 +140,9 @@ test("NestingTooDeep has why, where, and fix", () => {
 });
 
 test("interpretTuff with a 100000-term chain returns Ok(100000)", () => {
-  expect(interpretTuff(Array(100000).fill("1").join(" + "))).toEqual(ok(100000));
+  expect(interpretTuff(Array(100000).fill("1").join(" + "))).toEqual(
+    ok(100000),
+  );
 });
 
 function expectWhere(
@@ -164,15 +171,25 @@ test("interpretTuff('{ 1 } }') is an InvalidTerm error at the stray '}'", () => 
 });
 
 test("interpretTuff with 1001 nested braces returns NestingTooDeep at index 1000", () => {
-  expectWhere("{".repeat(1001) + "1" + "}".repeat(1001), "NestingTooDeep", "{", 1000);
+  expectWhere(
+    "{".repeat(1001) + "1" + "}".repeat(1001),
+    "NestingTooDeep",
+    "{",
+    1000,
+  );
 });
 
 test("interpretTuff with 1000 nested braces returns Ok(1)", () => {
-  expect(interpretTuff("{".repeat(1000) + "1" + "}".repeat(1000))).toEqual(ok(1));
+  expect(interpretTuff("{".repeat(1000) + "1" + "}".repeat(1000))).toEqual(
+    ok(1),
+  );
 });
 
 test("interpretTuff with 50000 nested braces returns NestingTooDeep", () => {
-  expectErrorKind("{".repeat(50000) + "1" + "}".repeat(50000), "NestingTooDeep");
+  expectErrorKind(
+    "{".repeat(50000) + "1" + "}".repeat(50000),
+    "NestingTooDeep",
+  );
 });
 
 test("interpretTuff('{ let x = 2 + 3; x } * 4') returns Ok(20)", () => {
@@ -184,7 +201,9 @@ test("interpretTuff('let x = 2; x * 3') returns Ok(6)", () => {
 });
 
 test("interpretTuff inner let shadows an outer name and the outer value is restored", () => {
-  expect(interpretTuff("{ let x = 1; let y = { let x = 2; x }; x + y }")).toEqual(ok(3));
+  expect(
+    interpretTuff("{ let x = 1; let y = { let x = 2; x }; x + y }"),
+  ).toEqual(ok(3));
 });
 
 test("interpretTuff('let x = 1; let x = 2; x') returns Ok(2)", () => {
@@ -204,7 +223,9 @@ test("interpretTuff('let mut x = 0; { x = 1; }') returns Ok(0), a program made o
 });
 
 test("interpretTuff inner shadowing across blocks returns Ok(20)", () => {
-  expect(interpretTuff("let a = 1; let b = a + 1; { let a = b * 10; a }")).toEqual(ok(20));
+  expect(
+    interpretTuff("let a = 1; let b = a + 1; { let a = b * 10; a }"),
+  ).toEqual(ok(20));
 });
 
 test("interpretTuff block scope does not leak", () => {
@@ -228,7 +249,9 @@ test("interpretTuff assigning to a name declared without mut is an ImmutableAssi
 });
 
 test("interpretTuff assignment inside a nested block persists after the block", () => {
-  expect(interpretTuff("let mut x = 0; let y = { x = 5; x }; x + y")).toEqual(ok(10));
+  expect(interpretTuff("let mut x = 0; let y = { x = 5; x }; x + y")).toEqual(
+    ok(10),
+  );
 });
 
 test("interpretTuff('let mut x = 0; { x = 1; } x') returns Ok(1)", () => {
@@ -236,7 +259,9 @@ test("interpretTuff('let mut x = 0; { x = 1; } x') returns Ok(1)", () => {
 });
 
 test("interpretTuff inner let bindings in a statement block are discarded", () => {
-  expect(interpretTuff("let mut x = 0; { let mut x = 5; x = 1; } x")).toEqual(ok(0));
+  expect(interpretTuff("let mut x = 0; { let mut x = 5; x = 1; } x")).toEqual(
+    ok(0),
+  );
 });
 
 test("interpretTuff a statement block followed by a name is a statement block", () => {
@@ -252,7 +277,10 @@ test("interpretTuff assigning to a plain let inside a block is an ImmutableAssig
 });
 
 test("interpretTuff with 1001 nested statement blocks returns NestingTooDeep", () => {
-  expectErrorKind("let mut x = 0; " + "{ x = 1; ".repeat(1001) + "}".repeat(1001) + " x", "NestingTooDeep");
+  expectErrorKind(
+    "let mut x = 0; " + "{ x = 1; ".repeat(1001) + "}".repeat(1001) + " x",
+    "NestingTooDeep",
+  );
 });
 
 test("interpretTuff assigning to an undeclared name is an UndefinedName error", () => {
@@ -276,31 +304,49 @@ test("interpretTuff('let b = true; if (b) 1 else 2') returns Ok(1)", () => {
 });
 
 test("interpretTuff('let mut x = 0; if (true) { x = 1; } else { x = 2; } x') returns Ok(1)", () => {
-  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x")).toEqual(ok(1));
+  expect(
+    interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; } x"),
+  ).toEqual(ok(1));
 });
 
 test("interpretTuff ending in an if statement with statement branches returns Ok(0)", () => {
-  expect(interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; }")).toEqual(ok(0));
+  expect(
+    interpretTuff("let mut x = 0; if (true) { x = 1; } else { x = 2; }"),
+  ).toEqual(ok(0));
 });
 
 test("interpretTuff an if with statement branches followed by an operator is an InvalidTerm error", () => {
-  expectErrorKind("let mut x = 0; if (true) { x = 1; } else { x = 2; } + 1", "InvalidTerm");
+  expectErrorKind(
+    "let mut x = 0; if (true) { x = 1; } else { x = 2; } + 1",
+    "InvalidTerm",
+  );
 });
 
 test("interpretTuff with 1001 nested if branches returns NestingTooDeep", () => {
-  expectErrorKind("if (true) ".repeat(1001) + "1 " + " else 2".repeat(1001), "NestingTooDeep");
+  expectErrorKind(
+    "if (true) ".repeat(1001) + "1 " + " else 2".repeat(1001),
+    "NestingTooDeep",
+  );
 });
 
 test("interpretTuff a statement block followed by an if statement returns Ok(2)", () => {
-  expect(interpretTuff("let mut x = 0; { x = 1; } if (true) { x = 2; } else { x = 3; } x")).toEqual(ok(2));
+  expect(
+    interpretTuff(
+      "let mut x = 0; { x = 1; } if (true) { x = 2; } else { x = 3; } x",
+    ),
+  ).toEqual(ok(2));
 });
 
 test("interpretTuff('let mut x = 0; if (false) { x = 1; } x') returns Ok(0)", () => {
-  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } x")).toEqual(ok(0));
+  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } x")).toEqual(
+    ok(0),
+  );
 });
 
 test("interpretTuff a block whose first statement is an if returns Ok(1)", () => {
-  expect(interpretTuff("let mut x = 0; { if (true) { x = 1; } } x")).toEqual(ok(1));
+  expect(interpretTuff("let mut x = 0; { if (true) { x = 1; } } x")).toEqual(
+    ok(1),
+  );
 });
 
 test("interpretTuff: 1 < 2 returns Ok(1)", () => {
@@ -485,7 +531,9 @@ test("interpretTuff: a string in a let binding compares equal", () => {
 });
 
 test("interpretTuff: let array = [1, 2, 3]; array[0] + array[1] + array[2] returns Ok(6)", () => {
-  expect(interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toEqual(ok(6));
+  expect(
+    interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]"),
+  ).toEqual(ok(6));
 });
 
 test("interpretTuff: an index past the end is an IndexOutOfRange error", () => {
@@ -501,7 +549,9 @@ test("interpretTuff: a whole array used after a move is a UseAfterMove error", (
 });
 
 test("interpretTuff: an element assignment updates the element: 5 + 2 returns Ok(7)", () => {
-  expect(interpretTuff("let mut a = [1, 2]; a[0] = 5; a[0] + a[1]")).toEqual(ok(7));
+  expect(interpretTuff("let mut a = [1, 2]; a[0] = 5; a[0] + a[1]")).toEqual(
+    ok(7),
+  );
 });
 
 test("interpretTuff: an element of the wrong type is a TypeMismatch error", () => {
@@ -513,7 +563,9 @@ test("interpretTuff: mixed element types are a TypeMismatch error", () => {
 });
 
 test("interpretTuff: nested indexing grid[1][0] returns Ok(3)", () => {
-  expect(interpretTuff("let grid = [[1, 2], [3, 4]]; grid[1][0]")).toEqual(ok(3));
+  expect(interpretTuff("let grid = [[1, 2], [3, 4]]; grid[1][0]")).toEqual(
+    ok(3),
+  );
 });
 
 test("interpretTuff: reassigning a number array to a string array is a TypeMismatch error", () => {
@@ -525,7 +577,9 @@ test("interpretTuff: a nested array of mixed element types is a TypeMismatch err
 });
 
 test("interpretTuff: replacing a nested array with another of the same type returns Ok(2)", () => {
-  expect(interpretTuff("let mut g = [[1]]; g[0] = [2]; g[0][0]")).toEqual(ok(2));
+  expect(interpretTuff("let mut g = [[1]]; g[0] = [2]; g[0][0]")).toEqual(
+    ok(2),
+  );
 });
 
 test("interpretTuff: an empty array literal is an EmptyArrayLiteral error", () => {
@@ -545,7 +599,9 @@ test("interpretTuff: let x = 1; let y = &x; *y returns Ok(1)", () => {
 });
 
 test("interpretTuff: writing through &mut changes the borrowed name: Ok(2)", () => {
-  expect(interpretTuff("let mut x = 1; let y = &mut x; *y = 2; x")).toEqual(ok(2));
+  expect(interpretTuff("let mut x = 1; let y = &mut x; *y = 2; x")).toEqual(
+    ok(2),
+  );
 });
 
 test("interpretTuff: writing through a read-only reference is an ImmutableAssignment error", () => {
@@ -561,15 +617,25 @@ test("interpretTuff: a reference that outlives its block is a ReferenceEscapes e
 });
 
 test("interpretTuff: an outer reference reassigned to an inner name is a ReferenceEscapes error", () => {
-  expectErrorKind("let mut x = 1; let mut h = &x; let u = { let y = 2; h = &y; 0 }; *h", "ReferenceEscapes");
+  expectErrorKind(
+    "let mut x = 1; let mut h = &x; let u = { let y = 2; h = &y; 0 }; *h",
+    "ReferenceEscapes",
+  );
 });
 
 test("interpretTuff: an array holding an inner reference is a ReferenceEscapes error", () => {
-  expectErrorKind("let mut x = 1; let mut a = [&x]; let u = { let y = 2; a = [&y]; 0 }; *a[0]", "ReferenceEscapes");
+  expectErrorKind(
+    "let mut x = 1; let mut a = [&x]; let u = { let y = 2; a = [&y]; 0 }; *a[0]",
+    "ReferenceEscapes",
+  );
 });
 
 test("interpretTuff: a block-local reference stored in a block-local holder stays valid: Ok(1)", () => {
-  expect(interpretTuff("let mut x = 1; let mut h = &x; let u = { let mut y = 2; let k = &mut y; h = &x; 0 }; *h")).toEqual(ok(1));
+  expect(
+    interpretTuff(
+      "let mut x = 1; let mut h = &x; let u = { let mut y = 2; let k = &mut y; h = &x; 0 }; *h",
+    ),
+  ).toEqual(ok(1));
 });
 
 test("interpretTuff: 7 / 2 truncates toward zero and returns Ok(3)", () => {
@@ -613,7 +679,10 @@ test("interpretTuff: an operand outside 32 bits is a BitwiseOutOfRange error", (
 });
 
 test("interpretTuff: a block-branch if followed by | is an InvalidTerm error", () => {
-  expectErrorKind("{ let mut x = 0; if (true) { x = 1; } else { x = 2; } | 2 }", "InvalidTerm");
+  expectErrorKind(
+    "{ let mut x = 0; if (true) { x = 1; } else { x = 2; } | 2 }",
+    "InvalidTerm",
+  );
 });
 
 test("interpretTuff: { if (true) { 1 } else { 2 } | 2 } returns Ok(3)", () => {
@@ -644,7 +713,7 @@ test("interpretTuff: -1 & 0 returns positive zero", () => {
   expect(Object.is(result.ok ? result.value : undefined, 0)).toBe(true);
 });
 
-test("interpretTuff: \"100U64\" => 100", () => {
+test('interpretTuff: "100U64" => 100', () => {
   expect(interpretTuff("100U64")).toEqual(ok(100));
 });
 
@@ -687,7 +756,9 @@ test("interpretTuff: 9007199254740993U64 is a ResultTooLarge error that describe
 });
 
 test("interpretTuff: 9007199254740992U64 - 1U64 returns Ok(9007199254740991)", () => {
-  expect(interpretTuff("9007199254740992U64 - 1U64")).toEqual(ok(9007199254740991));
+  expect(interpretTuff("9007199254740992U64 - 1U64")).toEqual(
+    ok(9007199254740991),
+  );
 });
 
 test("interpretTuff: 9007199254740991U64 + 1U64 is a ResultTooLarge error", () => {
@@ -735,7 +806,14 @@ test("interpretTuff: the maximum literal of each sized type returns its value", 
 });
 
 test("interpretTuff: one above the maximum of each sized type is an IntegerOutOfRange error", () => {
-  ["256U8", "65536U16", "4294967296U32", "128I8", "32768I16", "2147483648I32"].forEach((source) => {
+  [
+    "256U8",
+    "65536U16",
+    "4294967296U32",
+    "128I8",
+    "32768I16",
+    "2147483648I32",
+  ].forEach((source) => {
     expectErrorKind(source, "IntegerOutOfRange");
   });
 });
@@ -786,11 +864,11 @@ test("interpretTuff: 1I8 << -1I8 is a BitwiseOutOfRange error", () => {
   expectErrorKind("1I8 << -1I8", "BitwiseOutOfRange");
 });
 
-test("interpretTuff: \"let x : U8 = 100U8; x\" => 100", () => {
+test('interpretTuff: "let x : U8 = 100U8; x" => 100', () => {
   expect(interpretTuff("let x : U8 = 100U8; x")).toEqual(ok(100));
 });
 
-test("interpretTuff: \"let x : Bool =  true; x\" => 1", () => {
+test('interpretTuff: "let x : Bool =  true; x" => 1', () => {
   expect(interpretTuff("let x : Bool =  true; x")).toEqual(ok(1));
 });
 
@@ -808,8 +886,12 @@ test("interpretTuff: a lowercase bool is not a type name, and a bracketed value 
   expectErrorKind("let x : Bool = [true]; x", "TypeMismatch");
 });
 
-test("interpretTuff: \"let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]\" => 1", () => {
-  expect(interpretTuff("let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]")).toEqual(ok(1));
+test('interpretTuff: "let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]" => 1', () => {
+  expect(
+    interpretTuff(
+      "let x : [Bool; 3]=  [true, true, true]; x[0] && x[1] && x[2]",
+    ),
+  ).toEqual(ok(1));
 });
 
 test("interpretTuff: an array whose length differs from its annotation is a TypeMismatch error", () => {
@@ -817,21 +899,38 @@ test("interpretTuff: an array whose length differs from its annotation is a Type
 });
 
 test("interpretTuff: an annotated array keeps its length on reassignment", () => {
-  expectErrorKind("let mut x : [Bool; 3] = [true, true, true]; x = [false]; x[0]", "TypeMismatch");
-  expect(interpretTuff("let mut x : [Bool; 3] = [true, true, true]; x = [false, true, false]; x[2]")).toEqual(ok(0));
+  expectErrorKind(
+    "let mut x : [Bool; 3] = [true, true, true]; x = [false]; x[0]",
+    "TypeMismatch",
+  );
+  expect(
+    interpretTuff(
+      "let mut x : [Bool; 3] = [true, true, true]; x = [false, true, false]; x[2]",
+    ),
+  ).toEqual(ok(0));
 });
 
 test("interpretTuff: an element write must keep the element type of an annotated array", () => {
-  expect(interpretTuff("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 9U8; x[0]")).toEqual(ok(9));
-  expectErrorKind("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 1; x[0]", "TypeMismatch");
+  expect(
+    interpretTuff("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 9U8; x[0]"),
+  ).toEqual(ok(9));
+  expectErrorKind(
+    "let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 1; x[0]",
+    "TypeMismatch",
+  );
 });
 
-test("interpretTuff: \"let pt = { x : 3, y : 4 }; pt.x + pt.y\" => 7", () => {
-  expect(interpretTuff("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toEqual(ok(7));
+test('interpretTuff: "let pt = { x : 3, y : 4 }; pt.x + pt.y" => 7', () => {
+  expect(interpretTuff("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toEqual(
+    ok(7),
+  );
 });
 
 test("interpretTuff: an anonymous record field cannot be assigned, and a nested field can be read", () => {
-  expectErrorKind("let mut pt = { x : 3, y : 4 }; pt.x = 10; pt.x + pt.y", "ImmutableAssignment");
+  expectErrorKind(
+    "let mut pt = { x : 3, y : 4 }; pt.x = 10; pt.x + pt.y",
+    "ImmutableAssignment",
+  );
   expect(interpretTuff("let pt = { a : { b : 5 } }; pt.a.b")).toEqual(ok(5));
 });
 
@@ -855,35 +954,62 @@ test("interpretTuff: assigning a field the record does not have is an UndefinedF
 });
 
 test("interpretTuff: a struct with I32 fields, built with I32 values, returns the sum of its fields", () => {
-  expect(interpretTuff("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3I32, y : 4I32 }; pt.x + pt.y")).toEqual(ok(7));
+  expect(
+    interpretTuff(
+      "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3I32, y : 4I32 }; pt.x + pt.y",
+    ),
+  ).toEqual(ok(7));
 });
 
 test("interpretTuff: a struct constructor with plain number fields is a TypeMismatch error", () => {
-  expectErrorKind("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y", "TypeMismatch");
+  expectErrorKind(
+    "struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a struct keeps its struct name when one of its fields is written", () => {
-  expect(interpretTuff("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = p; q.x")).toEqual(ok(5));
+  expect(
+    interpretTuff(
+      "struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = p; q.x",
+    ),
+  ).toEqual(ok(5));
 });
 
 test("interpretTuff: an anonymous record does not match a struct annotation even with the same fields", () => {
-  expectErrorKind("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = { x : 5I32, y : 2I32 }; 1", "TypeMismatch");
+  expectErrorKind(
+    "struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = { x : 5I32, y : 2I32 }; 1",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: assigning a struct field the declaration does not mark mut is an ImmutableAssignment error", () => {
-  expectErrorKind("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.y = 5I32; p.y", "ImmutableAssignment");
+  expectErrorKind(
+    "struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.y = 5I32; p.y",
+    "ImmutableAssignment",
+  );
 });
 
 test("interpretTuff: assigning a mut struct field through a binding that is not mut is an ImmutableAssignment error", () => {
-  expectErrorKind("struct P { mut x : I32 } let p : P = P { x : 1I32 }; p.x = 2I32; p.x", "ImmutableAssignment");
+  expectErrorKind(
+    "struct P { mut x : I32 } let p : P = P { x : 1I32 }; p.x = 2I32; p.x",
+    "ImmutableAssignment",
+  );
 });
 
 test("interpretTuff: assigning a mut struct field through a mut binding returns the new value", () => {
-  expect(interpretTuff("struct P { mut x : I32 } let mut p : P = P { x : 1I32 }; p.x = 2I32; p.x")).toEqual(ok(2));
+  expect(
+    interpretTuff(
+      "struct P { mut x : I32 } let mut p : P = P { x : 1I32 }; p.x = 2I32; p.x",
+    ),
+  ).toEqual(ok(2));
 });
 
 test("interpretTuff: a struct constructor that leaves out a field is a MissingField error", () => {
-  expectErrorKind("struct Point { x : I32, y : I32 } let pt = Point { x : 3I32 }; pt.x", "MissingField");
+  expectErrorKind(
+    "struct Point { x : I32, y : I32 } let pt = Point { x : 3I32 }; pt.x",
+    "MissingField",
+  );
 });
 
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
@@ -914,26 +1040,38 @@ test("interpretTuff: let x : Foo = 1; x is an InvalidTerm error", () => {
   expectErrorKind("let x : Foo = 1; x", "InvalidTerm");
 });
 
-test("interpretTuff: \"let mut x = 0; while (x < 4) { x += 1; } x\" => 4", () => {
-  expect(interpretTuff("let mut x = 0; while (x < 4) { x += 1; } x")).toEqual(ok(4));
+test('interpretTuff: "let mut x = 0; while (x < 4) { x += 1; } x" => 4', () => {
+  expect(interpretTuff("let mut x = 0; while (x < 4) { x += 1; } x")).toEqual(
+    ok(4),
+  );
 });
 
-test("interpretTuff: \"let mut x = 0; while (x < 4) x += 1; x\" => 4", () => {
-  expect(interpretTuff("let mut x = 0; while (x < 4) x += 1; x")).toEqual(ok(4));
+test('interpretTuff: "let mut x = 0; while (x < 4) x += 1; x" => 4', () => {
+  expect(interpretTuff("let mut x = 0; while (x < 4) x += 1; x")).toEqual(
+    ok(4),
+  );
 });
 
-test("interpretTuff: \"let mut x = 0; if (x < 4) x += 1; x\" => 1", () => {
+test('interpretTuff: "let mut x = 0; if (x < 4) x += 1; x" => 1', () => {
   expect(interpretTuff("let mut x = 0; if (x < 4) x += 1; x")).toEqual(ok(1));
 });
 
 test("interpretTuff: an if may mix a braced then branch with an unbraced else branch", () => {
-  expect(interpretTuff("let mut x = 0; if (true) { x += 1; } else x += 2; x")).toEqual(ok(1));
-  expect(interpretTuff("let mut x = 0; if (false) { x += 1; } else x += 2; x")).toEqual(ok(2));
+  expect(
+    interpretTuff("let mut x = 0; if (true) { x += 1; } else x += 2; x"),
+  ).toEqual(ok(1));
+  expect(
+    interpretTuff("let mut x = 0; if (false) { x += 1; } else x += 2; x"),
+  ).toEqual(ok(2));
 });
 
 test("interpretTuff: an if may be the unbraced branch of another if, and the else binds to the inner if", () => {
-  expect(interpretTuff("let mut x = 0; if (true) if (true) x += 1; x")).toEqual(ok(1));
-  expect(interpretTuff("let mut x = 0; if (true) if (false) x += 1; else x += 2; x")).toEqual(ok(2));
+  expect(interpretTuff("let mut x = 0; if (true) if (true) x += 1; x")).toEqual(
+    ok(1),
+  );
+  expect(
+    interpretTuff("let mut x = 0; if (true) if (false) x += 1; else x += 2; x"),
+  ).toEqual(ok(2));
 });
 
 test("interpretTuff: a let as an unbraced if body is an InvalidTerm error that names the rule", () => {
@@ -948,21 +1086,33 @@ test("interpretTuff: a let as an unbraced if body is an InvalidTerm error that n
 });
 
 test("interpretTuff: unbraced if branches choose one statement each", () => {
-  expect(interpretTuff("let mut x = 5; if (x < 4) x += 1; else x += 2; x")).toEqual(ok(7));
+  expect(
+    interpretTuff("let mut x = 5; if (x < 4) x += 1; else x += 2; x"),
+  ).toEqual(ok(7));
 });
 
 test("interpretTuff: nested while loops run to completion", () => {
-  expect(interpretTuff("let mut x = 0; while (x < 2) while (x < 2) x += 1; x")).toEqual(ok(2));
-  expect(interpretTuff("let mut x = 0; while (x < 3) { while (x < 2) { x += 1; } x += 1; } x")).toEqual(ok(3));
+  expect(
+    interpretTuff("let mut x = 0; while (x < 2) while (x < 2) x += 1; x"),
+  ).toEqual(ok(2));
+  expect(
+    interpretTuff(
+      "let mut x = 0; while (x < 3) { while (x < 2) { x += 1; } x += 1; } x",
+    ),
+  ).toEqual(ok(3));
 });
 
 test("interpretTuff: a U8 loop stops at its bound, and a compound assignment past the range is IntegerOutOfRange", () => {
-  expect(interpretTuff("let mut x : U8 = 250U8; while (x < 255U8) { x += 1U8; } x")).toEqual(ok(255));
+  expect(
+    interpretTuff("let mut x : U8 = 250U8; while (x < 255U8) { x += 1U8; } x"),
+  ).toEqual(ok(255));
   expectErrorKind("let mut x : U8 = 0U8; x += 300U8; x", "IntegerOutOfRange");
 });
 
 test("interpretTuff: a let inside a braced loop body is scoped to each pass, and a missing ';' before '}' is an InvalidTerm error", () => {
-  expect(interpretTuff("let mut x = 0; while (x < 3) { let y = 1; x += y; } x")).toEqual(ok(3));
+  expect(
+    interpretTuff("let mut x = 0; while (x < 3) { let y = 1; x += y; } x"),
+  ).toEqual(ok(3));
   expectErrorKind("let mut x = 0; while (x < 2) { x += 1 } x", "InvalidTerm");
 });
 
@@ -971,7 +1121,9 @@ test("interpretTuff: an unbraced while body that is a let is an InvalidTerm erro
 });
 
 test("interpretTuff: a while loop whose condition is false runs zero times", () => {
-  expect(interpretTuff("let mut x = 0; while (false) { x += 1; } x")).toEqual(ok(0));
+  expect(interpretTuff("let mut x = 0; while (false) { x += 1; } x")).toEqual(
+    ok(0),
+  );
 });
 
 test("interpretTuff: while (1) { } is a TypeMismatch error", () => {
@@ -1023,15 +1175,25 @@ test("interpretTuff('0x1F') is an error", () => {
 });
 
 test("interpretTuff: fn add(first : I32, second : I32) : I32 => first + second; add(3I32, 4I32) returns Ok(7)", () => {
-  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; add(3I32, 4I32)")).toEqual(ok(7));
+  expect(
+    interpretTuff(
+      "fn add(first : I32, second : I32) : I32 => first + second; add(3I32, 4I32)",
+    ),
+  ).toEqual(ok(7));
 });
 
 test("interpretTuff: a plain number argument for an I32 parameter is a TypeMismatch error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)", "TypeMismatch");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a call with the wrong number of arguments is a TypeMismatch error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; add(3I32)", "TypeMismatch");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; add(3I32)",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a body whose value differs from the return type is a TypeMismatch error", () => {
@@ -1039,27 +1201,45 @@ test("interpretTuff: a body whose value differs from the return type is a TypeMi
 });
 
 test("interpretTuff: a function body cannot read a name that is not its parameter", () => {
-  expectErrorKind("fn f(first : I32) : I32 => second; f(1I32)", "UndefinedName");
+  expectErrorKind(
+    "fn f(first : I32) : I32 => second; f(1I32)",
+    "UndefinedName",
+  );
 });
 
 test("interpretTuff: a function cannot call itself", () => {
-  expectErrorKind("fn f(first : I32) : I32 => f(first); f(1I32)", "UndefinedName");
+  expectErrorKind(
+    "fn f(first : I32) : I32 => f(first); f(1I32)",
+    "UndefinedName",
+  );
 });
 
 test("interpretTuff: a function cannot call a function declared after it", () => {
-  expectErrorKind("fn f(first : I32) : I32 => g(first); fn g(second : I32) : I32 => second; f(1I32)", "UndefinedName");
+  expectErrorKind(
+    "fn f(first : I32) : I32 => g(first); fn g(second : I32) : I32 => second; f(1I32)",
+    "UndefinedName",
+  );
 });
 
 test("interpretTuff: two functions with one name are an InvalidTerm error", () => {
-  expectErrorKind("fn f(first : I32) : I32 => first; fn f(second : I32) : I32 => second; f(1I32)", "InvalidTerm");
+  expectErrorKind(
+    "fn f(first : I32) : I32 => first; fn f(second : I32) : I32 => second; f(1I32)",
+    "InvalidTerm",
+  );
 });
 
 test("interpretTuff: a struct type as a parameter is an InvalidTerm error", () => {
-  expectErrorKind("struct P { x : I32 } fn f(p : P) : I32 => 1I32; f(P { x : 1I32 })", "InvalidTerm");
+  expectErrorKind(
+    "struct P { x : I32 } fn f(p : P) : I32 => 1I32; f(P { x : 1I32 })",
+    "InvalidTerm",
+  );
 });
 
 test("interpretTuff: two parameters with one name are an InvalidTerm error", () => {
-  expectErrorKind("fn f(first : I32, first : I32) : I32 => first; f(1I32, 2I32)", "InvalidTerm");
+  expectErrorKind(
+    "fn f(first : I32, first : I32) : I32 => first; f(1I32, 2I32)",
+    "InvalidTerm",
+  );
 });
 
 test("interpretTuff: a function body without a closing ';' is an InvalidTerm error", () => {
@@ -1067,39 +1247,70 @@ test("interpretTuff: a function body without a closing ';' is an InvalidTerm err
 });
 
 test("interpretTuff: a body result past the parameter's type range is an IntegerOutOfRange error", () => {
-  expectErrorKind("fn f(first : U8) : U8 => first + 1U8; f(255U8)", "IntegerOutOfRange");
+  expectErrorKind(
+    "fn f(first : U8) : U8 => first + 1U8; f(255U8)",
+    "IntegerOutOfRange",
+  );
 });
 
 test("interpretTuff: a let holding &add calls it, returning Ok(7)", () => {
-  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; let foo : &(I32, I32) => I32 = &add; foo(3I32, 4I32)")).toEqual(ok(7));
+  expect(
+    interpretTuff(
+      "fn add(first : I32, second : I32) : I32 => first + second; let foo : &(I32, I32) => I32 = &add; foo(3I32, 4I32)",
+    ),
+  ).toEqual(ok(7));
 });
 
 test("interpretTuff: a function value passed as a parameter is called in the body, returning Ok(7)", () => {
-  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(I32, I32) => I32, a : I32, b : I32) : I32 => g(a, b); apply(&add, 3I32, 4I32)")).toEqual(ok(7));
+  expect(
+    interpretTuff(
+      "fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(I32, I32) => I32, a : I32, b : I32) : I32 => g(a, b); apply(&add, 3I32, 4I32)",
+    ),
+  ).toEqual(ok(7));
 });
 
 test("interpretTuff: a mut function let can be reassigned to another function of the same type, returning Ok(3)", () => {
-  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; fn sub(first : I32, second : I32) : I32 => first - second; let mut foo : &(I32, I32) => I32 = &add; foo = &sub; foo(5I32, 2I32)")).toEqual(ok(3));
+  expect(
+    interpretTuff(
+      "fn add(first : I32, second : I32) : I32 => first + second; fn sub(first : I32, second : I32) : I32 => first - second; let mut foo : &(I32, I32) => I32 = &add; foo = &sub; foo(5I32, 2I32)",
+    ),
+  ).toEqual(ok(3));
 });
 
 test("interpretTuff: a function whose signature differs from its let annotation is a TypeMismatch error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; let foo : &(Bool) => I32 = &add; 1", "TypeMismatch");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; let foo : &(Bool) => I32 = &add; 1",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a function value as the program result is a TypeMismatch error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; &add", "TypeMismatch");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; &add",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a struct with fields named decl and visible is still a record, returning Ok(1)", () => {
-  expect(interpretTuff("struct P { decl : I32, visible : I32 } let p : P = P { decl : 1I32, visible : 2I32 }; p.decl")).toEqual(ok(1));
+  expect(
+    interpretTuff(
+      "struct P { decl : I32, visible : I32 } let p : P = P { decl : 1I32, visible : 2I32 }; p.decl",
+    ),
+  ).toEqual(ok(1));
 });
 
 test("interpretTuff: &name of a name that is neither bound nor declared is an UndefinedName error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; &missing", "UndefinedName");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; &missing",
+    "UndefinedName",
+  );
 });
 
 test("interpretTuff: passing a function value whose signature differs from a function-typed parameter is a TypeMismatch error", () => {
-  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(Bool) => I32) : I32 => 1I32; apply(&add)", "TypeMismatch");
+  expectErrorKind(
+    "fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(Bool) => I32) : I32 => 1I32; apply(&add)",
+    "TypeMismatch",
+  );
 });
 
 test("interpretTuff: a let annotated with a nested function type is an InvalidTerm error", () => {

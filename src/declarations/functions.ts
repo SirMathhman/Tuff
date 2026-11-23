@@ -1,6 +1,10 @@
 import { textAt, isIdentifier, type Token } from "../tokenizer.ts";
 import { ok, type Result, type TuffError } from "../errors.ts";
-import { type FunctionDecl, type FunctionParam, type ScalarAnnotation } from "../ast.ts";
+import {
+  type FunctionDecl,
+  type FunctionParam,
+  type ScalarAnnotation,
+} from "../ast.ts";
 import { invalidAt, type ExprRule } from "../parse-errors.ts";
 import { parseAnnotation } from "../statements.ts";
 
@@ -21,7 +25,11 @@ export interface FunctionsParsed {
  * @param expr - The expression rule used for each function body.
  * @returns The declarations and the index after them, or a structured error.
  */
-export function parseFunctions(tokens: Token[], start: number, expr: ExprRule): Result<FunctionsParsed, TuffError> {
+export function parseFunctions(
+  tokens: Token[],
+  start: number,
+  expr: ExprRule,
+): Result<FunctionsParsed, TuffError> {
   const functions: FunctionDecl[] = [];
   let next = start;
 
@@ -45,19 +53,39 @@ interface FunctionParsed {
 }
 
 // One declaration at pos. Parameters and the return type are scalar types, and the body is one expression.
-function parseFunction(tokens: Token[], pos: number, earlier: FunctionDecl[], expr: ExprRule): Result<FunctionParsed, TuffError> {
+function parseFunction(
+  tokens: Token[],
+  pos: number,
+  earlier: FunctionDecl[],
+  expr: ExprRule,
+): Result<FunctionParsed, TuffError> {
   const name = textAt(tokens, pos + 1);
 
   if (!isIdentifier(name)) {
-    return invalidAt(tokens, pos + 1, "a function name", "Write the function name after fn, such as fn add(...) : I32 => ...;.");
+    return invalidAt(
+      tokens,
+      pos + 1,
+      "a function name",
+      "Write the function name after fn, such as fn add(...) : I32 => ...;.",
+    );
   }
 
   if (earlier.some((decl) => decl.name === name)) {
-    return invalidAt(tokens, pos + 1, "a function name not declared before", "Give each function a different name.");
+    return invalidAt(
+      tokens,
+      pos + 1,
+      "a function name not declared before",
+      "Give each function a different name.",
+    );
   }
 
   if (textAt(tokens, pos + 2) !== "(") {
-    return invalidAt(tokens, pos + 2, "'(' after the function name", "Write the parameters between '(' and ')'.");
+    return invalidAt(
+      tokens,
+      pos + 2,
+      "'(' after the function name",
+      "Write the parameters between '(' and ')'.",
+    );
   }
 
   const params = parseParams(tokens, pos + 3);
@@ -67,7 +95,12 @@ function parseFunction(tokens: Token[], pos: number, earlier: FunctionDecl[], ex
   }
 
   if (textAt(tokens, params.value.next) !== ":") {
-    return invalidAt(tokens, params.value.next, "':' before the return type", "Write the return type after ')', such as : I32.");
+    return invalidAt(
+      tokens,
+      params.value.next,
+      "':' before the return type",
+      "Write the return type after ')', such as : I32.",
+    );
   }
 
   const returns = parseScalarType(tokens, params.value.next + 1);
@@ -77,7 +110,12 @@ function parseFunction(tokens: Token[], pos: number, earlier: FunctionDecl[], ex
   }
 
   if (textAt(tokens, returns.value.next) !== "=>") {
-    return invalidAt(tokens, returns.value.next, "'=>' before the body", "Write the body after '=>', such as => first + second;.");
+    return invalidAt(
+      tokens,
+      returns.value.next,
+      "'=>' before the body",
+      "Write the body after '=>', such as => first + second;.",
+    );
   }
 
   const body = expr(tokens, returns.value.next + 1, 0);
@@ -87,11 +125,21 @@ function parseFunction(tokens: Token[], pos: number, earlier: FunctionDecl[], ex
   }
 
   if (textAt(tokens, body.value.next) !== ";") {
-    return invalidAt(tokens, body.value.next, "';' after the function body", "End the function declaration with ';'.");
+    return invalidAt(
+      tokens,
+      body.value.next,
+      "';' after the function body",
+      "End the function declaration with ';'.",
+    );
   }
 
   return ok({
-    decl: { name, params: params.value.params, returns: returns.value.type, body: body.value.value },
+    decl: {
+      name,
+      params: params.value.params,
+      returns: returns.value.type,
+      body: body.value.value,
+    },
     next: body.value.next + 1,
   });
 }
@@ -102,7 +150,10 @@ interface ParamsParsed {
 }
 
 // The parameters from pos through the closing ')': name : Type, separated by commas, each name used once.
-function parseParams(tokens: Token[], pos: number): Result<ParamsParsed, TuffError> {
+function parseParams(
+  tokens: Token[],
+  pos: number,
+): Result<ParamsParsed, TuffError> {
   const params: FunctionParam[] = [];
 
   if (textAt(tokens, pos) === ")") {
@@ -115,15 +166,30 @@ function parseParams(tokens: Token[], pos: number): Result<ParamsParsed, TuffErr
     const name = textAt(tokens, next);
 
     if (!isIdentifier(name)) {
-      return invalidAt(tokens, next, "a parameter name", "Write each parameter as name : Type, such as first : I32.");
+      return invalidAt(
+        tokens,
+        next,
+        "a parameter name",
+        "Write each parameter as name : Type, such as first : I32.",
+      );
     }
 
     if (params.some((param) => param.name === name)) {
-      return invalidAt(tokens, next, "a parameter name not used before in this function", "Give each parameter a different name.");
+      return invalidAt(
+        tokens,
+        next,
+        "a parameter name not used before in this function",
+        "Give each parameter a different name.",
+      );
     }
 
     if (textAt(tokens, next + 1) !== ":") {
-      return invalidAt(tokens, next + 1, "':' after the parameter name", "Write each parameter as name : Type.");
+      return invalidAt(
+        tokens,
+        next + 1,
+        "':' after the parameter name",
+        "Write each parameter as name : Type.",
+      );
     }
 
     const type = parseParamType(tokens, next + 2);
@@ -140,7 +206,12 @@ function parseParams(tokens: Token[], pos: number): Result<ParamsParsed, TuffErr
     }
 
     if (textAt(tokens, next) !== ",") {
-      return invalidAt(tokens, next, "',' or ')' after the parameter", "Separate parameters with ',' and close the list with ')'.");
+      return invalidAt(
+        tokens,
+        next,
+        "',' or ')' after the parameter",
+        "Separate parameters with ',' and close the list with ')'.",
+      );
     }
 
     next += 1;
@@ -153,7 +224,10 @@ interface ScalarParsed {
 }
 
 // A parameter type: a sized integer type, Bool, or a function type. Struct and array types are not allowed here yet.
-function parseParamType(tokens: Token[], start: number): Result<ParamTypeParsed, TuffError> {
+function parseParamType(
+  tokens: Token[],
+  start: number,
+): Result<ParamTypeParsed, TuffError> {
   const annotation = parseAnnotation(tokens, start);
 
   if (!annotation.ok) {
@@ -166,7 +240,12 @@ function parseParamType(tokens: Token[], start: number): Result<ParamTypeParsed,
     return ok({ type, next: annotation.value.next });
   }
 
-  return invalidAt(tokens, start, "a sized integer type, Bool, or a function type", "Declare each parameter as a sized integer, Bool, or a function type such as &(I32) => I32.");
+  return invalidAt(
+    tokens,
+    start,
+    "a sized integer type, Bool, or a function type",
+    "Declare each parameter as a sized integer, Bool, or a function type such as &(I32) => I32.",
+  );
 }
 
 interface ParamTypeParsed {
@@ -175,7 +254,10 @@ interface ParamTypeParsed {
 }
 
 // A return type: a sized integer type or Bool. Struct, array, and function types are not allowed here.
-function parseScalarType(tokens: Token[], start: number): Result<ScalarParsed, TuffError> {
+function parseScalarType(
+  tokens: Token[],
+  start: number,
+): Result<ScalarParsed, TuffError> {
   const annotation = parseAnnotation(tokens, start);
 
   if (!annotation.ok) {
@@ -183,7 +265,12 @@ function parseScalarType(tokens: Token[], start: number): Result<ScalarParsed, T
   }
 
   if (typeof annotation.value.annotation !== "string") {
-    return invalidAt(tokens, start, "a sized integer type or Bool", "Declare parameter and return types as a sized integer or Bool, such as I32.");
+    return invalidAt(
+      tokens,
+      start,
+      "a sized integer type or Bool",
+      "Declare parameter and return types as a sized integer or Bool, such as I32.",
+    );
   }
 
   return ok({ type: annotation.value.annotation, next: annotation.value.next });

@@ -1,8 +1,29 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { emptyArrayAt, integerOutOfRangeAt, ok, type Result, type TuffError } from "./errors.ts";
-import { INT_RANGES, type CompareOp, type Expr, type Link, type LogicalOp, type RecordField } from "./ast.ts";
+import {
+  emptyArrayAt,
+  integerOutOfRangeAt,
+  ok,
+  type Result,
+  type TuffError,
+} from "./errors.ts";
+import {
+  INT_RANGES,
+  type CompareOp,
+  type Expr,
+  type Link,
+  type LogicalOp,
+  type RecordField,
+} from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
-import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
+import {
+  whereAt,
+  invalidAt,
+  termTooLargeAt,
+  nestingTooDeepAt,
+  MAX_NESTING_DEPTH,
+  type Parse,
+  type ParseRules,
+} from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
 import { blockBody } from "./statements.ts";
 
@@ -55,13 +76,20 @@ function parseChain(
       return right;
     }
 
-    links.push({ op, operand: right.value.value, where: whereAt(tokens, next) });
+    links.push({
+      op,
+      operand: right.value.value,
+      where: whereAt(tokens, next),
+    });
     next = right.value.next;
     op = operatorAt(textAt(tokens, next), allowed);
   }
 
   return ok({
-    value: links.length === 0 ? first.value.value : { kind: "chain", first: first.value.value, links },
+    value:
+      links.length === 0
+        ? first.value.value
+        : { kind: "chain", first: first.value.value, links },
     next,
   });
 }
@@ -75,14 +103,31 @@ function parsePrimary(
   if (isRecordLiteral(tokens, pos)) {
     const record = parseFields(tokens, pos, depth, rules);
 
-    return record.ok ? ok({ value: { kind: "record", fields: record.value.fields, where: whereAt(tokens, pos) }, next: record.value.next }) : record;
+    return record.ok
+      ? ok({
+          value: {
+            kind: "record",
+            fields: record.value.fields,
+            where: whereAt(tokens, pos),
+          },
+          next: record.value.next,
+        })
+      : record;
   }
 
   if (isIdentifier(textAt(tokens, pos)) && isRecordLiteral(tokens, pos + 1)) {
     const record = parseFields(tokens, pos + 1, depth, rules);
 
     return record.ok
-      ? ok({ value: { kind: "construct", name: textAt(tokens, pos), fields: record.value.fields, where: whereAt(tokens, pos) }, next: record.value.next })
+      ? ok({
+          value: {
+            kind: "construct",
+            name: textAt(tokens, pos),
+            fields: record.value.fields,
+            where: whereAt(tokens, pos),
+          },
+          next: record.value.next,
+        })
       : record;
   }
 
@@ -120,7 +165,10 @@ function parsePrimary(
   }
 
   if (token === "true" || token === "false") {
-    return ok({ value: { kind: "boolean", value: token === "true" }, next: pos + 1 });
+    return ok({
+      value: { kind: "boolean", value: token === "true" },
+      next: pos + 1,
+    });
   }
 
   if (token === "if") {
@@ -130,7 +178,12 @@ function parsePrimary(
   const current = tokens[pos];
 
   if (current?.kind === "unclosedString") {
-    return invalidAt(tokens, pos, "a closing ' after the string", "Close the string with a single quote.");
+    return invalidAt(
+      tokens,
+      pos,
+      "a closing ' after the string",
+      "Close the string with a single quote.",
+    );
   }
 
   if (current?.kind === "string") {
@@ -142,7 +195,10 @@ function parsePrimary(
       return termTooLargeAt(tokens, pos);
     }
 
-    return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
+    return ok({
+      value: { kind: "number", value: Number(token) },
+      next: pos + 1,
+    });
   }
 
   const sized = literalAt(tokens, pos, false);
@@ -151,12 +207,19 @@ function parsePrimary(
     return sized;
   }
 
-  if (token !== undefined && isIdentifier(token) && textAt(tokens, pos + 1) === "(") {
+  if (
+    token !== undefined &&
+    isIdentifier(token) &&
+    textAt(tokens, pos + 1) === "("
+  ) {
     return parseCall(tokens, pos, depth, rules);
   }
 
   if (token !== undefined && isIdentifier(token)) {
-    return ok({ value: { kind: "reference", name: token, where: whereAt(tokens, pos) }, next: pos + 1 });
+    return ok({
+      value: { kind: "reference", name: token, where: whereAt(tokens, pos) },
+      next: pos + 1,
+    });
   }
 
   return invalidAt(
@@ -202,11 +265,21 @@ function parseString(tokens: Token[], pos: number): Parse {
   const text = decodeEscapes(textAt(tokens, pos).slice(1, -1));
 
   if (text === undefined) {
-    return invalidAt(tokens, pos, "a valid escape: \\\\, \\', \\n, or \\t", "Use only \\\\, \\', \\n, or \\t inside a string.");
+    return invalidAt(
+      tokens,
+      pos,
+      "a valid escape: \\\\, \\', \\n, or \\t",
+      "Use only \\\\, \\', \\n, or \\t inside a string.",
+    );
   }
 
   if ([...text].length !== 1) {
-    return invalidAt(tokens, pos, "a string of exactly one character", "Put exactly one character between the quotes.");
+    return invalidAt(
+      tokens,
+      pos,
+      "a string of exactly one character",
+      "Put exactly one character between the quotes.",
+    );
   }
 
   return ok({ value: { kind: "string", value: text }, next: pos + 1 });
@@ -235,10 +308,20 @@ function parseIf(
   }
 
   if (textAt(tokens, then.value.next) !== "else") {
-    return invalidAt(tokens, then.value.next, "'else' after the then branch", "Every if needs an else branch.");
+    return invalidAt(
+      tokens,
+      then.value.next,
+      "'else' after the then branch",
+      "Every if needs an else branch.",
+    );
   }
 
-  const otherwise = rules.comparison(tokens, then.value.next + 1, depth + 1, rules);
+  const otherwise = rules.comparison(
+    tokens,
+    then.value.next + 1,
+    depth + 1,
+    rules,
+  );
 
   if (!otherwise.ok) {
     return otherwise;
@@ -256,7 +339,12 @@ function parseIf(
   });
 }
 
-function parseArray(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseArray(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
@@ -283,14 +371,27 @@ function parseArray(tokens: Token[], pos: number, depth: number, rules: ParseRul
   }
 
   if (textAt(tokens, next) !== "]") {
-    return invalidAt(tokens, next, "']' to close the array", "Close the array with ']'.");
+    return invalidAt(
+      tokens,
+      next,
+      "']' to close the array",
+      "Close the array with ']'.",
+    );
   }
 
-  return ok({ value: { kind: "array", elements, where: whereAt(tokens, pos) }, next: next + 1 });
+  return ok({
+    value: { kind: "array", elements, where: whereAt(tokens, pos) },
+    next: next + 1,
+  });
 }
 
 // A call such as add(3I32, 4I32): a name, then comma-separated argument expressions in parentheses.
-function parseCall(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseCall(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
@@ -316,14 +417,32 @@ function parseCall(tokens: Token[], pos: number, depth: number, rules: ParseRule
   }
 
   if (textAt(tokens, next) !== ")") {
-    return invalidAt(tokens, next, "')' to close the call", "Close the argument list with ')'.");
+    return invalidAt(
+      tokens,
+      next,
+      "')' to close the call",
+      "Close the argument list with ')'.",
+    );
   }
 
-  return ok({ value: { kind: "call", name: textAt(tokens, pos), args, where: whereAt(tokens, pos) }, next: next + 1 });
+  return ok({
+    value: {
+      kind: "call",
+      name: textAt(tokens, pos),
+      args,
+      where: whereAt(tokens, pos),
+    },
+    next: next + 1,
+  });
 }
 
 // A primary followed by any number of index suffixes, as in grid[0][1].
-function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseIndexed(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
   const base = parsePrimary(tokens, pos, depth, rules);
 
   if (!base.ok) {
@@ -338,10 +457,20 @@ function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseR
       const field = textAt(tokens, next + 1);
 
       if (!isIdentifier(field)) {
-        return invalidAt(tokens, next + 1, "a field name after '.'", "Write the name of a field after the '.'.");
+        return invalidAt(
+          tokens,
+          next + 1,
+          "a field name after '.'",
+          "Write the name of a field after the '.'.",
+        );
       }
 
-      target = { kind: "field", target, name: field, where: whereAt(tokens, next) };
+      target = {
+        kind: "field",
+        target,
+        name: field,
+        where: whereAt(tokens, next),
+      };
       next += 2;
     } else {
       const index = rules.expr(tokens, next + 1, depth + 1);
@@ -351,10 +480,20 @@ function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseR
       }
 
       if (textAt(tokens, index.value.next) !== "]") {
-        return invalidAt(tokens, index.value.next, "']' after the index", "Close the index with ']'.");
+        return invalidAt(
+          tokens,
+          index.value.next,
+          "']' after the index",
+          "Close the index with ']'.",
+        );
       }
 
-      target = { kind: "index", target, index: index.value.value, where: whereAt(tokens, next) };
+      target = {
+        kind: "index",
+        target,
+        index: index.value.value,
+        where: whereAt(tokens, next),
+      };
       next = index.value.next + 1;
     }
   }
@@ -364,7 +503,11 @@ function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseR
 
 // A record literal starts with "{", a field name, and ":", which no block can begin with.
 function isRecordLiteral(tokens: Token[], pos: number): boolean {
-  return textAt(tokens, pos) === "{" && isIdentifier(textAt(tokens, pos + 1)) && textAt(tokens, pos + 2) === ":";
+  return (
+    textAt(tokens, pos) === "{" &&
+    isIdentifier(textAt(tokens, pos + 1)) &&
+    textAt(tokens, pos + 2) === ":"
+  );
 }
 
 // { name : value, name : value }: each field name is used once. Returns the fields and the index after "}".
@@ -373,7 +516,12 @@ interface FieldsParsed {
   next: number;
 }
 
-function parseFields(tokens: Token[], pos: number, depth: number, rules: ParseRules): Result<FieldsParsed, TuffError> {
+function parseFields(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Result<FieldsParsed, TuffError> {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
@@ -385,15 +533,30 @@ function parseFields(tokens: Token[], pos: number, depth: number, rules: ParseRu
     const name = textAt(tokens, next);
 
     if (!isIdentifier(name)) {
-      return invalidAt(tokens, next, "a field name", "Write a field as name : value.");
+      return invalidAt(
+        tokens,
+        next,
+        "a field name",
+        "Write a field as name : value.",
+      );
     }
 
     if (textAt(tokens, next + 1) !== ":") {
-      return invalidAt(tokens, next + 1, "':' after the field name", "Write each field as name : value.");
+      return invalidAt(
+        tokens,
+        next + 1,
+        "':' after the field name",
+        "Write each field as name : value.",
+      );
     }
 
     if (fields.some((field) => field.name === name)) {
-      return invalidAt(tokens, next, "a field name not used before in this record", "Give each field a different name.");
+      return invalidAt(
+        tokens,
+        next,
+        "a field name not used before in this record",
+        "Give each field a different name.",
+      );
     }
 
     const value = rules.expr(tokens, next + 2, depth + 1);
@@ -410,7 +573,12 @@ function parseFields(tokens: Token[], pos: number, depth: number, rules: ParseRu
     }
 
     if (textAt(tokens, next) !== ",") {
-      return invalidAt(tokens, next, "',' or '}' after the field", "Separate fields with ',' and close the record with '}'.");
+      return invalidAt(
+        tokens,
+        next,
+        "',' or '}' after the field",
+        "Separate fields with ',' and close the record with '}'.",
+      );
     }
 
     next += 1;
@@ -424,15 +592,27 @@ function parseRef(tokens: Token[], pos: number): Parse {
   const name = textAt(tokens, nameIndex);
 
   if (!isIdentifier(name)) {
-    return invalidAt(tokens, nameIndex, "a name after '&'", "Write the name of the value to borrow after '&'.");
+    return invalidAt(
+      tokens,
+      nameIndex,
+      "a name after '&'",
+      "Write the name of the value to borrow after '&'.",
+    );
   }
 
-  return ok({ value: { kind: "ref", name, mutable, where: whereAt(tokens, pos) }, next: nameIndex + 1 });
+  return ok({
+    value: { kind: "ref", name, mutable, where: whereAt(tokens, pos) },
+    next: nameIndex + 1,
+  });
 }
 
 // A sized literal such as 100U8 at pos. A minus sign folds into a signed literal, so -128I8 is in range,
 // but a minus before an unsigned literal stays a unary operator, which rejects unsigned values.
-function literalAt(tokens: Token[], pos: number, negative: boolean): Parse | undefined {
+function literalAt(
+  tokens: Token[],
+  pos: number,
+  negative: boolean,
+): Parse | undefined {
   const token = textAt(tokens, pos);
   const type = intLiteralType(token);
 
@@ -450,7 +630,13 @@ function literalAt(tokens: Token[], pos: number, negative: boolean): Parse | und
   const value = negative ? -magnitude : magnitude;
 
   if (value < range.min || value > range.max) {
-    return integerOutOfRangeAt(whereAt(tokens, pos), value, type, range.min, range.max);
+    return integerOutOfRangeAt(
+      whereAt(tokens, pos),
+      value,
+      type,
+      range.min,
+      range.max,
+    );
   }
 
   return ok({ value: { kind: "int", type, value }, next: pos + 1 });
@@ -472,7 +658,14 @@ function parseFactor(
     const operand = parseIndexed(tokens, pos + 1, depth, rules);
 
     return operand.ok
-      ? ok({ value: { kind: "negate", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
+      ? ok({
+          value: {
+            kind: "negate",
+            operand: operand.value.value,
+            where: whereAt(tokens, pos),
+          },
+          next: operand.value.next,
+        })
       : operand;
   }
 
@@ -484,7 +677,14 @@ function parseFactor(
     const operand = parseFactor(tokens, pos + 1, depth + 1, rules);
 
     return operand.ok
-      ? ok({ value: { kind: "not", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
+      ? ok({
+          value: {
+            kind: "not",
+            operand: operand.value.value,
+            where: whereAt(tokens, pos),
+          },
+          next: operand.value.next,
+        })
       : operand;
   }
 
@@ -500,7 +700,14 @@ function parseFactor(
     const operand = parseFactor(tokens, pos + 1, depth + 1, rules);
 
     return operand.ok
-      ? ok({ value: { kind: "deref", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
+      ? ok({
+          value: {
+            kind: "deref",
+            operand: operand.value.value,
+            where: whereAt(tokens, pos),
+          },
+          next: operand.value.next,
+        })
       : operand;
   }
 
@@ -518,11 +725,23 @@ function parseTerm(
   );
 }
 
-function parseShift(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  return parseChain(tokens, pos, ["<<", ">>"], (next) => parseSum(tokens, next, depth, rules));
+function parseShift(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
+  return parseChain(tokens, pos, ["<<", ">>"], (next) =>
+    parseSum(tokens, next, depth, rules),
+  );
 }
 
-function parseSum(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseSum(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
   return parseChain(tokens, pos, ["+", "-"], (next) =>
     parseTerm(tokens, next, depth, rules),
   );
@@ -542,7 +761,12 @@ function comparisonAt(token: string | undefined): CompareOp | undefined {
  * @param rules - The rules this parse needs from above.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
-function parseComparison(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseComparison(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
   const left = parseShift(tokens, pos, depth, rules);
 
   if (!left.ok) {
@@ -603,23 +827,50 @@ function parseLogical(
       return right;
     }
 
-    left = { kind: "logical", op: operator, left, right: right.value.value, where: whereAt(tokens, next) };
+    left = {
+      kind: "logical",
+      op: operator,
+      left,
+      right: right.value.value,
+      where: whereAt(tokens, next),
+    };
     next = right.value.next;
   }
 
   return ok({ value: left, next });
 }
 
-function parseBitAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  return parseChain(tokens, pos, ["&"], (next) => parseComparison(tokens, next, depth, rules));
+function parseBitAnd(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
+  return parseChain(tokens, pos, ["&"], (next) =>
+    parseComparison(tokens, next, depth, rules),
+  );
 }
 
-function parseBitOr(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  return parseChain(tokens, pos, ["|"], (next) => parseBitAnd(tokens, next, depth, rules));
+function parseBitOr(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
+  return parseChain(tokens, pos, ["|"], (next) =>
+    parseBitAnd(tokens, next, depth, rules),
+  );
 }
 
-function parseAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
-  return parseLogical(tokens, pos, "&&", (next) => parseBitOr(tokens, next, depth, rules));
+function parseAnd(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  rules: ParseRules,
+): Parse {
+  return parseLogical(tokens, pos, "&&", (next) =>
+    parseBitOr(tokens, next, depth, rules),
+  );
 }
 
 /**
@@ -632,5 +883,7 @@ function parseAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules
 export function parseExpr(tokens: Token[], pos: number, depth: number): Parse {
   const rules: ParseRules = { expr: parseExpr, comparison: parseComparison };
 
-  return parseLogical(tokens, pos, "||", (next) => parseAnd(tokens, next, depth, rules));
+  return parseLogical(tokens, pos, "||", (next) =>
+    parseAnd(tokens, next, depth, rules),
+  );
 }

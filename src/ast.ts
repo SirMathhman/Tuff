@@ -67,7 +67,7 @@ interface LetStatement {
   kind: "let";
   name: string;
   mutable: boolean;
-  annotation ?: Annotation;
+  annotation?: Annotation;
   value: Expr;
   where: ErrorWhere;
 }
@@ -168,7 +168,8 @@ export interface FunctionAnnotation {
 }
 
 /** The type a let annotation names. */
-export type Annotation = ScalarAnnotation | ArrayAnnotation | StructAnnotation | FunctionAnnotation;
+export type Annotation =
+  ScalarAnnotation | ArrayAnnotation | StructAnnotation | FunctionAnnotation;
 
 /**
  * One field of a struct declaration, with a scalar or array type.
@@ -309,7 +310,16 @@ interface IndexNode {
 }
 
 /** The sized integer types. A literal's suffix is its type name, such as 100U8 or -5I32. */
-export const INT_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"] as const;
+export const INT_TYPES = [
+  "U8",
+  "U16",
+  "U32",
+  "U64",
+  "I8",
+  "I16",
+  "I32",
+  "I64",
+] as const;
 
 /**
  * A sized integer type's name.

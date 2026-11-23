@@ -20,32 +20,85 @@ import {
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { INT_RANGES, type Annotation, type FunctionDecl, type FunctionParam, type ScalarAnnotation, type StructDecl, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
-import { type Cell, type FunctionValue, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isFunction, isInteger, isRecord, isReference, escapes, isVisible, signatureMatches, typeName, sameType, asNumber, asBoolean } from "./values.ts";
+import {
+  INT_RANGES,
+  type Annotation,
+  type FunctionDecl,
+  type FunctionParam,
+  type ScalarAnnotation,
+  type StructDecl,
+  type AssignStatement,
+  type CompareOp,
+  type Expr,
+  type FieldAssignStatement,
+  type Link,
+  type LogicalOp,
+  type RecordField,
+  type Statement,
+} from "../ast.ts";
+import {
+  type Cell,
+  type FunctionValue,
+  type Integer,
+  type RecordValue,
+  type Reference,
+  type Scope,
+  type Value,
+  copyValue,
+  isFunction,
+  isInteger,
+  isRecord,
+  isReference,
+  escapes,
+  isVisible,
+  signatureMatches,
+  typeName,
+  sameType,
+  asNumber,
+  asBoolean,
+} from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
-type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
+type EvalRule = (
+  expr: Expr,
+  scope: Scope | undefined,
+) => Result<Value, TuffError>;
 
 // Runs a list of statements, returning the scope they leave behind.
-type StatementsRunner = (statements: Statement[], scope: Scope | undefined, evaluateRule: EvalRule) => Result<Scope | undefined, TuffError>;
+type StatementsRunner = (
+  statements: Statement[],
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+) => Result<Scope | undefined, TuffError>;
 
 function isInt32(value: number): boolean {
   return value >= -2147483648 && value <= 2147483647;
 }
 
 // Bitwise operators work on 32-bit signed integers; a shift amount must be from 0 to 31.
-function bitwiseProblem(op: Link["op"], left: number, right: number, where: ErrorWhere): Err<TuffError> | undefined {
+function bitwiseProblem(
+  op: Link["op"],
+  left: number,
+  right: number,
+  where: ErrorWhere,
+): Err<TuffError> | undefined {
   if (op === "<<" || op === ">>") {
     if (!isInt32(left)) {
       return bitwiseOutOfRangeAt(where, left, "a 32-bit signed integer");
     }
 
-    return right < 0 || right > 31 ? bitwiseOutOfRangeAt(where, right, "a shift from 0 to 31") : undefined;
+    return right < 0 || right > 31
+      ? bitwiseOutOfRangeAt(where, right, "a shift from 0 to 31")
+      : undefined;
   }
 
   if (op === "|" || op === "&") {
     if (!isInt32(left) || !isInt32(right)) {
-      return bitwiseOutOfRangeAt(where, isInt32(left) ? right : left, "a 32-bit signed integer");
+      return bitwiseOutOfRangeAt(
+        where,
+        isInt32(left) ? right : left,
+        "a 32-bit signed integer",
+      );
     }
   }
 
@@ -53,7 +106,11 @@ function bitwiseProblem(op: Link["op"], left: number, right: number, where: Erro
 }
 
 // Both operands are sized integers of one type. Division truncates toward zero, and a shift amount is from 0 to 31.
-function combineInteger(link: Link, left: Value, right: Value): Result<Value, TuffError> {
+function combineInteger(
+  link: Link,
+  left: Value,
+  right: Value,
+): Result<Value, TuffError> {
   if (!isInteger(left) || !isInteger(right) || left.type !== right.type) {
     return typeMismatchAt(link.where, typeName(left), typeName(right));
   }
@@ -62,8 +119,15 @@ function combineInteger(link: Link, left: Value, right: Value): Result<Value, Tu
     return divisionByZeroAt(link.where, `A ${left.type}`);
   }
 
-  if ((link.op === "<<" || link.op === ">>") && (right.value < 0n || right.value > 31n)) {
-    return bitwiseOutOfRangeAt(link.where, Number(right.value), "a shift from 0 to 31");
+  if (
+    (link.op === "<<" || link.op === ">>") &&
+    (right.value < 0n || right.value > 31n)
+  ) {
+    return bitwiseOutOfRangeAt(
+      link.where,
+      Number(right.value),
+      "a shift from 0 to 31",
+    );
   }
 
   const value = applyInteger(link.op, left.value, right.value);
@@ -75,11 +139,18 @@ function combineInteger(link: Link, left: Value, right: Value): Result<Value, Tu
 }
 
 // Negation needs a signed type, since an unsigned value has no negative to produce.
-function negateInteger(value: Integer, where: ErrorWhere): Result<Value, TuffError> {
+function negateInteger(
+  value: Integer,
+  where: ErrorWhere,
+): Result<Value, TuffError> {
   const range = INT_RANGES[value.type];
 
   if (range.min === 0n) {
-    return typeMismatchAt(where, "a number or a signed integer", typeName(value));
+    return typeMismatchAt(
+      where,
+      "a number or a signed integer",
+      typeName(value),
+    );
   }
 
   const negated = -value.value;
@@ -100,7 +171,11 @@ function lookup(name: string, scope: Scope | undefined): Scope | undefined {
 }
 
 // The cell of a name that is declared and not moved.
-function findCell(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Cell, TuffError> {
+function findCell(
+  name: string,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+): Result<Cell, TuffError> {
   const found = lookup(name, scope);
 
   if (found === undefined) {
@@ -115,7 +190,11 @@ function findCell(name: string, where: ErrorWhere, scope: Scope | undefined): Re
 }
 
 // Using a whole array by name moves it: a second use is an error until the name is assigned again.
-function readWhole(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+function readWhole(
+  name: string,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+): Result<Value, TuffError> {
   const cell = findCell(name, where, scope);
 
   if (!cell.ok) {
@@ -151,7 +230,11 @@ function assign(
   }
 
   if (!acceptsValue(target.cell, value.value)) {
-    return typeMismatchAt(statement.where, expectedName(target.cell), typeName(value.value));
+    return typeMismatchAt(
+      statement.where,
+      expectedName(target.cell),
+      typeName(value.value),
+    );
   }
 
   if (escapes(value.value, target)) {
@@ -165,7 +248,13 @@ function assign(
 }
 
 // The position of an element: a number inside an array of the given length.
-function resolveSlot(index: Expr, length: number, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<number, TuffError> {
+function resolveSlot(
+  index: Expr,
+  length: number,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<number, TuffError> {
   const position = evaluateRule(index, scope);
 
   if (!position.ok) {
@@ -228,7 +317,11 @@ function assignElement(
   const current = array[slot.value];
 
   if (current !== undefined && !sameType(current, replacement.value)) {
-    return typeMismatchAt(where, typeName(current), typeName(replacement.value));
+    return typeMismatchAt(
+      where,
+      typeName(current),
+      typeName(replacement.value),
+    );
   }
 
   if (escapes(replacement.value, target)) {
@@ -263,7 +356,11 @@ function matchesAnnotation(value: Value, annotation: Annotation): boolean {
     return isFunction(value) && signatureMatches(value.decl, annotation);
   }
 
-  return Array.isArray(value) && value.length === annotation.length && value.every((element) => matchesScalar(element, annotation.element));
+  return (
+    Array.isArray(value) &&
+    value.length === annotation.length &&
+    value.every((element) => matchesScalar(element, annotation.element))
+  );
 }
 
 function annotationName(annotation: Annotation): string {
@@ -306,7 +403,14 @@ function argumentCount(count: number): string {
 }
 
 // Binds each argument to its parameter, in a new scope chain above root. Each argument is evaluated in the caller's scope and must have its parameter's type.
-function bindArguments(params: FunctionParam[], args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule, root: Scope): Result<Scope, TuffError> {
+function bindArguments(
+  params: FunctionParam[],
+  args: Expr[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+  root: Scope,
+): Result<Scope, TuffError> {
   return params.reduce<Result<Scope, TuffError>>((frame, param, index) => {
     const arg = args[index];
 
@@ -322,22 +426,39 @@ function bindArguments(params: FunctionParam[], args: Expr[], where: ErrorWhere,
     }
 
     if (!matchesAnnotation(value.value, param.annotation)) {
-      return typeMismatchAt(where, annotationName(param.annotation), typeName(value.value));
+      return typeMismatchAt(
+        where,
+        annotationName(param.annotation),
+        typeName(value.value),
+      );
     }
 
-    return ok({ name: param.name, cell: { value: value.value, moved: false, annotation: param.annotation }, mutable: false, parent: frame.value });
+    return ok({
+      name: param.name,
+      cell: { value: value.value, moved: false, annotation: param.annotation },
+      mutable: false,
+      parent: frame.value,
+    });
   }, ok(root));
 }
 
 // A call runs the body in a scope that sees only its parameters, the program's structs, and the functions declared before it.
 // A call names a let binding that holds a function value, or else a declared function.
-function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateCall(
+  name: string,
+  args: Expr[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   const bound = lookup(name, scope);
 
   if (bound !== undefined) {
     const callee = bound.cell.value;
 
-    return isFunction(callee) ? invokeFunction(callee, args, where, scope, evaluateRule) : typeMismatchAt(where, "a function", typeName(callee));
+    return isFunction(callee)
+      ? invokeFunction(callee, args, where, scope, evaluateRule)
+      : typeMismatchAt(where, "a function", typeName(callee));
   }
 
   const declared = functionsOf(scope);
@@ -348,11 +469,22 @@ function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scop
     return undefinedNameAt(where);
   }
 
-  return invokeFunction({ kind: "function", decl, visible: declared.slice(0, index) }, args, where, scope, evaluateRule);
+  return invokeFunction(
+    { kind: "function", decl, visible: declared.slice(0, index) },
+    args,
+    where,
+    scope,
+    evaluateRule,
+  );
 }
 
 // &name for a declared function that no binding shadows: a function value, which cannot be borrowed writably.
-function functionReference(name: string, mutable: boolean, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+function functionReference(
+  name: string,
+  mutable: boolean,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+): Result<Value, TuffError> {
   const declared = functionsOf(scope);
   const index = declared.findIndex((decl) => decl.name === name);
   const decl = declared[index];
@@ -361,19 +493,44 @@ function functionReference(name: string, mutable: boolean, where: ErrorWhere, sc
     return undefinedNameAt(where);
   }
 
-  return mutable ? typeMismatchAt(where, "a binding", "a function") : ok({ kind: "function", decl, visible: declared.slice(0, index) });
+  return mutable
+    ? typeMismatchAt(where, "a binding", "a function")
+    : ok({ kind: "function", decl, visible: declared.slice(0, index) });
 }
 
 // Runs a function value's body on the arguments. The body sees only its parameters, the structs, and the functions the value was declared after.
-function invokeFunction(callee: FunctionValue, args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function invokeFunction(
+  callee: FunctionValue,
+  args: Expr[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   const { decl } = callee;
 
   if (args.length !== decl.params.length) {
-    return typeMismatchAt(where, argumentCount(decl.params.length), argumentCount(args.length));
+    return typeMismatchAt(
+      where,
+      argumentCount(decl.params.length),
+      argumentCount(args.length),
+    );
   }
 
-  const root: Scope = { name: "", cell: { value: 0, moved: false }, mutable: false, structs: structTableOf(scope), functions: callee.visible };
-  const frame = bindArguments(decl.params, args, where, scope, evaluateRule, root);
+  const root: Scope = {
+    name: "",
+    cell: { value: 0, moved: false },
+    mutable: false,
+    structs: structTableOf(scope),
+    functions: callee.visible,
+  };
+  const frame = bindArguments(
+    decl.params,
+    args,
+    where,
+    scope,
+    evaluateRule,
+    root,
+  );
 
   if (!frame.ok) {
     return frame;
@@ -385,11 +542,23 @@ function invokeFunction(callee: FunctionValue, args: Expr[], where: ErrorWhere, 
     return result;
   }
 
-  return matchesScalar(result.value, decl.returns) ? result : typeMismatchAt(where, annotationName(decl.returns), typeName(result.value));
+  return matchesScalar(result.value, decl.returns)
+    ? result
+    : typeMismatchAt(
+        where,
+        annotationName(decl.returns),
+        typeName(result.value),
+      );
 }
 
 // A constructor builds a record of a declared struct: every field once, each with its declared type.
-function evaluateConstruct(name: string, fields: RecordField[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateConstruct(
+  name: string,
+  fields: RecordField[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   const decl = structTableOf(scope).get(name);
 
   if (decl === undefined) {
@@ -403,26 +572,40 @@ function evaluateConstruct(name: string, fields: RecordField[], where: ErrorWher
   }
 
   const given = record.value.fields;
-  const missing = decl.fields.filter((field) => !given.has(field.name)).map((field) => field.name);
+  const missing = decl.fields
+    .filter((field) => !given.has(field.name))
+    .map((field) => field.name);
 
   if (missing.length > 0) {
     return missingFieldAt(where, name, missing);
   }
 
-  const extra = [...given.keys()].find((field) => !decl.fields.some((declared) => declared.name === field));
+  const extra = [...given.keys()].find(
+    (field) => !decl.fields.some((declared) => declared.name === field),
+  );
 
   if (extra !== undefined) {
-    return fieldNotFoundAt(where, extra, decl.fields.map((field) => field.name));
+    return fieldNotFoundAt(
+      where,
+      extra,
+      decl.fields.map((field) => field.name),
+    );
   }
 
   const wrong = decl.fields.flatMap((field) => {
     const value = given.get(field.name);
 
-    return value !== undefined && !matchesAnnotation(value, field.annotation) ? [{ annotation: field.annotation, value }] : [];
+    return value !== undefined && !matchesAnnotation(value, field.annotation)
+      ? [{ annotation: field.annotation, value }]
+      : [];
   })[0];
 
   if (wrong !== undefined) {
-    return typeMismatchAt(where, annotationName(wrong.annotation), typeName(wrong.value));
+    return typeMismatchAt(
+      where,
+      annotationName(wrong.annotation),
+      typeName(wrong.value),
+    );
   }
 
   return ok({ kind: "record", fields: given, struct: name });
@@ -430,11 +613,15 @@ function evaluateConstruct(name: string, fields: RecordField[], where: ErrorWher
 
 // A binding with an annotation keeps it, so an assignment must match the annotation, not just the old element type.
 function acceptsValue(cell: Cell, value: Value): boolean {
-  return cell.annotation === undefined ? sameType(cell.value, value) : matchesAnnotation(value, cell.annotation);
+  return cell.annotation === undefined
+    ? sameType(cell.value, value)
+    : matchesAnnotation(value, cell.annotation);
 }
 
 function expectedName(cell: Cell): string {
-  return cell.annotation === undefined ? typeName(cell.value) : annotationName(cell.annotation);
+  return cell.annotation === undefined
+    ? typeName(cell.value)
+    : annotationName(cell.annotation);
 }
 
 // Runs the body while the condition is true. The body's bindings end with each pass, and its
@@ -486,15 +673,32 @@ function runStatements(
       }
 
       if (statement.kind === "derefAssign") {
-        return assignThroughReference(statement.name, statement.value, statement.where, acc.value, evaluateRule);
+        return assignThroughReference(
+          statement.name,
+          statement.value,
+          statement.where,
+          acc.value,
+          evaluateRule,
+        );
       }
 
       if (statement.kind === "element") {
-        return assignElement(statement.name, statement.index, statement.value, statement.where, acc.value, evaluateRule);
+        return assignElement(
+          statement.name,
+          statement.index,
+          statement.value,
+          statement.where,
+          acc.value,
+          evaluateRule,
+        );
       }
 
       if (statement.kind === "scope") {
-        const inner = runStatements(statement.statements, acc.value, evaluateRule);
+        const inner = runStatements(
+          statement.statements,
+          acc.value,
+          evaluateRule,
+        );
 
         return inner.ok ? ok(acc.value) : inner;
       }
@@ -507,16 +711,31 @@ function runStatements(
         }
 
         if (typeof condition.value !== "boolean") {
-          return typeMismatchAt(statement.where, "a boolean condition", typeName(condition.value));
+          return typeMismatchAt(
+            statement.where,
+            "a boolean condition",
+            typeName(condition.value),
+          );
         }
 
-        const chosen = runStatements(condition.value ? statement.then : statement.otherwise, acc.value, evaluateRule);
+        const chosen = runStatements(
+          condition.value ? statement.then : statement.otherwise,
+          acc.value,
+          evaluateRule,
+        );
 
         return chosen.ok ? ok(acc.value) : chosen;
       }
 
       if (statement.kind === "while") {
-        return runWhile(statement.condition, statement.body, statement.where, acc.value, evaluateRule, runStatements);
+        return runWhile(
+          statement.condition,
+          statement.body,
+          statement.where,
+          acc.value,
+          evaluateRule,
+          runStatements,
+        );
       }
 
       if (statement.kind === "fieldAssign") {
@@ -529,12 +748,24 @@ function runStatements(
         return value;
       }
 
-      if (statement.annotation !== undefined && typeof statement.annotation !== "string" && statement.annotation.kind === "struct" && !structTableOf(acc.value).has(statement.annotation.name)) {
+      if (
+        statement.annotation !== undefined &&
+        typeof statement.annotation !== "string" &&
+        statement.annotation.kind === "struct" &&
+        !structTableOf(acc.value).has(statement.annotation.name)
+      ) {
         return undeclaredTypeAt(statement.where, statement.annotation.name);
       }
 
-      if (statement.annotation !== undefined && !matchesAnnotation(value.value, statement.annotation)) {
-        return typeMismatchAt(statement.where, annotationName(statement.annotation), typeName(value.value));
+      if (
+        statement.annotation !== undefined &&
+        !matchesAnnotation(value.value, statement.annotation)
+      ) {
+        return typeMismatchAt(
+          statement.where,
+          annotationName(statement.annotation),
+          typeName(value.value),
+        );
       }
 
       if (escapes(value.value, acc.value)) {
@@ -543,7 +774,11 @@ function runStatements(
 
       return ok({
         name: statement.name,
-        cell: { value: value.value, moved: false, annotation: statement.annotation },
+        cell: {
+          value: value.value,
+          moved: false,
+          annotation: statement.annotation,
+        },
         mutable: statement.mutable,
         parent: acc.value,
       });
@@ -582,7 +817,12 @@ function evaluateUnary(
   return apply(inner.value);
 }
 
-function evaluateNegate(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateNegate(
+  operand: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   return evaluateUnary(operand, scope, evaluateRule, (value) => {
     if (isInteger(value)) {
       return negateInteger(value, where);
@@ -615,7 +855,12 @@ function evaluateIf(
   return evaluateRule(test.value ? then : otherwise, scope);
 }
 
-function evaluateNot(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateNot(
+  operand: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   return evaluateUnary(operand, scope, evaluateRule, (value) => {
     const boolean = asBoolean(value, where);
 
@@ -659,7 +904,12 @@ function evaluateLogical(
 }
 
 // Sized integers compare only with a value of their own type.
-function compareIntegers(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+function compareIntegers(
+  op: CompareOp,
+  left: Value,
+  right: Value,
+  where: ErrorWhere,
+): Result<Value, TuffError> {
   if (!isInteger(left) || !isInteger(right) || left.type !== right.type) {
     return typeMismatchAt(where, typeName(left), typeName(right));
   }
@@ -673,13 +923,22 @@ function compareIntegers(op: CompareOp, left: Value, right: Value, where: ErrorW
   return ok(numericCompare(op, left.value, right.value));
 }
 
-function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+function compare(
+  op: CompareOp,
+  left: Value,
+  right: Value,
+  where: ErrorWhere,
+): Result<Value, TuffError> {
   if (isInteger(left) || isInteger(right)) {
     return compareIntegers(op, left, right, where);
   }
 
   if (typeof left === "object" || typeof right === "object") {
-    return typeMismatchAt(where, "a number, boolean, or string", typeName(typeof left === "object" ? left : right));
+    return typeMismatchAt(
+      where,
+      "a number, boolean, or string",
+      typeName(typeof left === "object" ? left : right),
+    );
   }
 
   if (op === "==" || op === "!=") {
@@ -707,7 +966,12 @@ function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): R
   return ok(numericCompare(op, a.value, b.value));
 }
 
-function evaluatePair(left: Expr, right: Expr, scope: Scope | undefined, evaluateRule: EvalRule): Result<[Value, Value], TuffError> {
+function evaluatePair(
+  left: Expr,
+  right: Expr,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<[Value, Value], TuffError> {
   const leftValue = evaluateRule(left, scope);
 
   if (!leftValue.ok) {
@@ -740,7 +1004,12 @@ function evaluateCompare(
   return compare(op, pair.value[0], pair.value[1], where);
 }
 
-function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateChain(
+  first: Expr,
+  links: Link[],
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   return links.reduce<Result<Value, TuffError>>(
     (acc, link) => {
       if (!acc.ok) {
@@ -773,7 +1042,12 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
         return divisionByZeroAt(link.where, "A number");
       }
 
-      const bitwise = bitwiseProblem(link.op, left.value, rightNumber.value, link.where);
+      const bitwise = bitwiseProblem(
+        link.op,
+        left.value,
+        rightNumber.value,
+        link.where,
+      );
 
       if (bitwise !== undefined) {
         return bitwise;
@@ -781,56 +1055,77 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
 
       const value = apply(link.op, left.value, rightNumber.value);
 
-      return Number.isSafeInteger(value) ? ok(value) : resultTooLargeAt(link.where);
+      return Number.isSafeInteger(value)
+        ? ok(value)
+        : resultTooLargeAt(link.where);
     },
     evaluateRule(first, scope),
   );
 }
 
 // Each element must have the type of the first element, so an array has one element type.
-function evaluateArray(elements: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value[], TuffError> {
-  return elements.reduce<Result<Value[], TuffError>>(
-    (acc, element) => {
-      if (!acc.ok) {
-        return acc;
-      }
+function evaluateArray(
+  elements: Expr[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value[], TuffError> {
+  return elements.reduce<Result<Value[], TuffError>>((acc, element) => {
+    if (!acc.ok) {
+      return acc;
+    }
 
-      const value = evaluateRule(element, scope);
+    const value = evaluateRule(element, scope);
 
-      if (!value.ok) {
-        return value;
-      }
+    if (!value.ok) {
+      return value;
+    }
 
-      if (escapes(value.value, scope)) {
-        return referenceEscapesAt(where);
-      }
+    if (escapes(value.value, scope)) {
+      return referenceEscapesAt(where);
+    }
 
-      const first = acc.value[0];
+    const first = acc.value[0];
 
-      if (first !== undefined && !sameType(first, value.value)) {
-        return typeMismatchAt(where, typeName(first), typeName(value.value));
-      }
+    if (first !== undefined && !sameType(first, value.value)) {
+      return typeMismatchAt(where, typeName(first), typeName(value.value));
+    }
 
-      return ok([...acc.value, value.value]);
-    },
-    ok([]),
-  );
+    return ok([...acc.value, value.value]);
+  }, ok([]));
 }
 
 // Runs check on the value of an indexed or field-read expression, or returns the error that reading it gave.
-function withContainer<T>(target: Expr, scope: Scope | undefined, evaluateRule: EvalRule, check: (container: Value) => Result<T, TuffError>): Result<T, TuffError> {
+function withContainer<T>(
+  target: Expr,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+  check: (container: Value) => Result<T, TuffError>,
+): Result<T, TuffError> {
   const container = readContainer(target, scope, evaluateRule);
 
   return container.ok ? check(container.value) : container;
 }
 
 // The value of an indexed or field-read expression. A name is read without moving it.
-function readContainer(target: Expr, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
-  return target.kind === "reference" ? readWithoutMoving(target.name, target.where, scope) : evaluateRule(target, scope);
+function readContainer(
+  target: Expr,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
+  return target.kind === "reference"
+    ? readWithoutMoving(target.name, target.where, scope)
+    : evaluateRule(target, scope);
 }
 
 // Indexing does not move the array. A nested array is copied on read, so the copy can be changed independently.
-function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateIndex(
+  target: Expr,
+  index: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   const container = readContainer(target, scope, evaluateRule);
 
   if (!container.ok) {
@@ -841,7 +1136,13 @@ function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scop
     return typeMismatchAt(where, "an array", typeName(container.value));
   }
 
-  const slot = resolveSlot(index, container.value.length, where, scope, evaluateRule);
+  const slot = resolveSlot(
+    index,
+    container.value.length,
+    where,
+    scope,
+    evaluateRule,
+  );
 
   if (!slot.ok) {
     return slot;
@@ -849,11 +1150,16 @@ function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scop
 
   const element = container.value[slot.value];
 
-  return ok(Array.isArray(element) ? [...element] : element ?? 0);
+  return ok(Array.isArray(element) ? [...element] : (element ?? 0));
 }
 
 // A record literal evaluates its fields in order. A field may not hold a reference that would outlive its target.
-function evaluateRecord(fields: RecordField[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<RecordValue, TuffError> {
+function evaluateRecord(
+  fields: RecordField[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<RecordValue, TuffError> {
   return fields.reduce<Result<RecordValue, TuffError>>(
     (acc, field) => {
       if (!acc.ok) {
@@ -870,14 +1176,26 @@ function evaluateRecord(fields: RecordField[], where: ErrorWhere, scope: Scope |
         return referenceEscapesAt(where);
       }
 
-      return ok({ kind: "record", fields: new Map<string, Value>([...acc.value.fields, [field.name, value.value]]) });
+      return ok({
+        kind: "record",
+        fields: new Map<string, Value>([
+          ...acc.value.fields,
+          [field.name, value.value],
+        ]),
+      });
     },
     ok({ kind: "record", fields: new Map<string, Value>() }),
   );
 }
 
 // Reading a field copies any array in it, so the copy can change without touching the record.
-function evaluateField(target: Expr, name: string, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateField(
+  target: Expr,
+  name: string,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   return withContainer(target, scope, evaluateRule, (container) => {
     if (!isRecord(container)) {
       return typeMismatchAt(where, "a record", typeName(container));
@@ -885,12 +1203,18 @@ function evaluateField(target: Expr, name: string, where: ErrorWhere, scope: Sco
 
     const field = container.fields.get(name);
 
-    return field === undefined ? fieldNotFoundAt(where, name, [...container.fields.keys()]) : ok(copyValue(field));
+    return field === undefined
+      ? fieldNotFoundAt(where, name, [...container.fields.keys()])
+      : ok(copyValue(field));
   });
 }
 
 // pt.x = value; replaces the record in its mut binding with a copy that has the new field value.
-function assignField(statement: FieldAssignStatement, scope: Scope | undefined, evaluateRule: EvalRule): Result<Scope | undefined, TuffError> {
+function assignField(
+  statement: FieldAssignStatement,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Scope | undefined, TuffError> {
   const holder = lookup(statement.name, scope);
 
   if (holder === undefined) {
@@ -916,10 +1240,17 @@ function assignField(statement: FieldAssignStatement, scope: Scope | undefined, 
   const old = record.fields.get(statement.field);
 
   if (old === undefined) {
-    return fieldNotFoundAt(statement.where, statement.field, [...record.fields.keys()]);
+    return fieldNotFoundAt(statement.where, statement.field, [
+      ...record.fields.keys(),
+    ]);
   }
 
-  const declared = record.struct === undefined ? undefined : structTableOf(scope).get(record.struct)?.fields.find((field) => field.name === statement.field);
+  const declared =
+    record.struct === undefined
+      ? undefined
+      : structTableOf(scope)
+          .get(record.struct)
+          ?.fields.find((field) => field.name === statement.field);
 
   if (declared === undefined || !declared.mutable) {
     return immutableFieldAt(statement.where, statement.field, record.struct);
@@ -932,25 +1263,45 @@ function assignField(statement: FieldAssignStatement, scope: Scope | undefined, 
   }
 
   if (!sameType(old, replacement.value)) {
-    return typeMismatchAt(statement.where, typeName(old), typeName(replacement.value));
+    return typeMismatchAt(
+      statement.where,
+      typeName(old),
+      typeName(replacement.value),
+    );
   }
 
   if (escapes(replacement.value, holder)) {
     return referenceEscapesAt(statement.where);
   }
 
-  cell.value.value = { kind: "record", fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value), struct: record.struct };
+  cell.value.value = {
+    kind: "record",
+    fields: new Map<string, Value>(record.fields).set(
+      statement.field,
+      replacement.value,
+    ),
+    struct: record.struct,
+  };
 
   return ok(scope);
 }
 
-function readWithoutMoving(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+function readWithoutMoving(
+  name: string,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+): Result<Value, TuffError> {
   const cell = findCell(name, where, scope);
 
   return cell.ok ? ok(cell.value.value) : cell;
 }
 
-function evaluateRef(name: string, mutable: boolean, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+function evaluateRef(
+  name: string,
+  mutable: boolean,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+): Result<Value, TuffError> {
   const found = lookup(name, scope);
 
   if (found === undefined) {
@@ -964,7 +1315,12 @@ function evaluateRef(name: string, mutable: boolean, where: ErrorWhere, scope: S
   return ok({ kind: "reference", target: found, mutable });
 }
 
-function evaluateDeref(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+function evaluateDeref(
+  operand: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Value, TuffError> {
   const inner = evaluateRule(operand, scope);
 
   if (!inner.ok) {
@@ -1019,7 +1375,11 @@ function assignThroughReference(
   const target = reference.target;
 
   if (!acceptsValue(target.cell, replacement.value)) {
-    return typeMismatchAt(where, expectedName(target.cell), typeName(replacement.value));
+    return typeMismatchAt(
+      where,
+      expectedName(target.cell),
+      typeName(replacement.value),
+    );
   }
 
   if (escapes(replacement.value, target)) {
@@ -1037,7 +1397,10 @@ interface HasKind<K extends string> {
   kind: K;
 }
 
-type KindRule<K extends Expr["kind"]> = (expr: Extract<Expr, HasKind<K>>, scope: Scope | undefined) => Result<Value, TuffError>;
+type KindRule<K extends Expr["kind"]> = (
+  expr: Extract<Expr, HasKind<K>>,
+  scope: Scope | undefined,
+) => Result<Value, TuffError>;
 
 // One rule per expression kind. The interface makes the table cover every kind.
 interface KindRules {
@@ -1064,30 +1427,63 @@ interface KindRules {
 }
 
 const RULES: KindRules = {
-  call: (expr, scope) => evaluateCall(expr.name, expr.args, expr.where, scope, evaluate),
+  call: (expr, scope) =>
+    evaluateCall(expr.name, expr.args, expr.where, scope, evaluate),
   number: (expr) => ok(expr.value),
   boolean: (expr) => ok(expr.value),
   string: (expr) => ok(expr.value),
   int: (expr) => ok({ kind: "integer", type: expr.type, value: expr.value }),
-  record: (expr, scope) => evaluateRecord(expr.fields, expr.where, scope, evaluate),
-  construct: (expr, scope) => evaluateConstruct(expr.name, expr.fields, expr.where, scope, evaluate),
-  field: (expr, scope) => evaluateField(expr.target, expr.name, expr.where, scope, evaluate),
-  negate: (expr, scope) => evaluateNegate(expr.operand, expr.where, scope, evaluate),
+  record: (expr, scope) =>
+    evaluateRecord(expr.fields, expr.where, scope, evaluate),
+  construct: (expr, scope) =>
+    evaluateConstruct(expr.name, expr.fields, expr.where, scope, evaluate),
+  field: (expr, scope) =>
+    evaluateField(expr.target, expr.name, expr.where, scope, evaluate),
+  negate: (expr, scope) =>
+    evaluateNegate(expr.operand, expr.where, scope, evaluate),
   reference: (expr, scope) => readWhole(expr.name, expr.where, scope),
   ref: (expr, scope) => evaluateRef(expr.name, expr.mutable, expr.where, scope),
-  deref: (expr, scope) => evaluateDeref(expr.operand, expr.where, scope, evaluate),
+  deref: (expr, scope) =>
+    evaluateDeref(expr.operand, expr.where, scope, evaluate),
   array: (expr, scope) => {
     const elements = evaluateArray(expr.elements, expr.where, scope, evaluate);
 
     return elements.ok ? ok(elements.value) : elements;
   },
-  index: (expr, scope) => evaluateIndex(expr.target, expr.index, expr.where, scope, evaluate),
-  if: (expr, scope) => evaluateIf(expr.condition, expr.then, expr.otherwise, expr.where, scope, evaluate),
+  index: (expr, scope) =>
+    evaluateIndex(expr.target, expr.index, expr.where, scope, evaluate),
+  if: (expr, scope) =>
+    evaluateIf(
+      expr.condition,
+      expr.then,
+      expr.otherwise,
+      expr.where,
+      scope,
+      evaluate,
+    ),
   not: (expr, scope) => evaluateNot(expr.operand, expr.where, scope, evaluate),
-  logical: (expr, scope) => evaluateLogical(expr.op, expr.left, expr.right, expr.where, scope, evaluate),
-  compare: (expr, scope) => evaluateCompare(expr.op, expr.left, expr.right, expr.where, scope, evaluate),
-  block: (expr, scope) => evaluateBlock(expr.statements, expr.result, scope, evaluate),
-  chain: (expr, scope) => evaluateChain(expr.first, expr.links, scope, evaluate),
+  logical: (expr, scope) =>
+    evaluateLogical(
+      expr.op,
+      expr.left,
+      expr.right,
+      expr.where,
+      scope,
+      evaluate,
+    ),
+  compare: (expr, scope) =>
+    evaluateCompare(
+      expr.op,
+      expr.left,
+      expr.right,
+      expr.where,
+      scope,
+      evaluate,
+    ),
+  block: (expr, scope) =>
+    evaluateBlock(expr.statements, expr.result, scope, evaluate),
+  chain: (expr, scope) =>
+    evaluateChain(expr.first, expr.links, scope, evaluate),
 };
 
 /**
@@ -1097,7 +1493,10 @@ const RULES: KindRules = {
  * @returns The computed value, a number, boolean, string, or array, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
-  const rule = RULES[expr.kind] as (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
+  const rule = RULES[expr.kind] as (
+    expr: Expr,
+    scope: Scope | undefined,
+  ) => Result<Value, TuffError>;
 
   return rule(expr, scope);
 }

@@ -22,7 +22,9 @@ export interface StructsParsed {
  * @param tokens - The token list of the program.
  * @returns The declarations and the index after them, or a structured error.
  */
-export function parseStructs(tokens: Token[]): Result<StructsParsed, TuffError> {
+export function parseStructs(
+  tokens: Token[],
+): Result<StructsParsed, TuffError> {
   const structs: StructDecl[] = [];
   let next = 0;
 
@@ -47,19 +49,38 @@ interface StructParsed {
 
 // One declaration at pos. The fields are required, each name is used once, and a field's type is a
 // scalar or array type, not another struct.
-function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Result<StructParsed, TuffError> {
+function parseStruct(
+  tokens: Token[],
+  pos: number,
+  earlier: StructDecl[],
+): Result<StructParsed, TuffError> {
   const name = textAt(tokens, pos + 1);
 
   if (!isStructName(name)) {
-    return invalidAt(tokens, pos + 1, "a struct name that starts with a capital letter", "Write the struct name with a capital first letter, such as struct Point { ... }.");
+    return invalidAt(
+      tokens,
+      pos + 1,
+      "a struct name that starts with a capital letter",
+      "Write the struct name with a capital first letter, such as struct Point { ... }.",
+    );
   }
 
   if (earlier.some((decl) => decl.name === name)) {
-    return invalidAt(tokens, pos + 1, "a struct name not declared before", "Give each struct a different name.");
+    return invalidAt(
+      tokens,
+      pos + 1,
+      "a struct name not declared before",
+      "Give each struct a different name.",
+    );
   }
 
   if (textAt(tokens, pos + 2) !== "{") {
-    return invalidAt(tokens, pos + 2, "'{' after the struct name", "Write the fields between '{' and '}'.");
+    return invalidAt(
+      tokens,
+      pos + 2,
+      "'{' after the struct name",
+      "Write the fields between '{' and '}'.",
+    );
   }
 
   const fields: StructField[] = [];
@@ -71,15 +92,30 @@ function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Resul
     const fieldName = textAt(tokens, nameAt);
 
     if (!isIdentifier(fieldName)) {
-      return invalidAt(tokens, nameAt, "a field name", "Write each field as mut name : Type or name : Type.");
+      return invalidAt(
+        tokens,
+        nameAt,
+        "a field name",
+        "Write each field as mut name : Type or name : Type.",
+      );
     }
 
     if (fields.some((field) => field.name === fieldName)) {
-      return invalidAt(tokens, nameAt, "a field name not used before in this struct", "Give each field a different name.");
+      return invalidAt(
+        tokens,
+        nameAt,
+        "a field name not used before in this struct",
+        "Give each field a different name.",
+      );
     }
 
     if (textAt(tokens, nameAt + 1) !== ":") {
-      return invalidAt(tokens, nameAt + 1, "':' after the field name", "Write each field as name : Type.");
+      return invalidAt(
+        tokens,
+        nameAt + 1,
+        "':' after the field name",
+        "Write each field as name : Type.",
+      );
     }
 
     const type = parseAnnotation(tokens, nameAt + 2);
@@ -88,11 +124,24 @@ function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Resul
       return type;
     }
 
-    if (typeof type.value.annotation !== "string" && (type.value.annotation.kind === "struct" || type.value.annotation.kind === "function")) {
-      return invalidAt(tokens, nameAt + 2, "a sized integer type, Bool, or an array type", "Struct-typed fields are not supported yet; use a scalar or array type.");
+    if (
+      typeof type.value.annotation !== "string" &&
+      (type.value.annotation.kind === "struct" ||
+        type.value.annotation.kind === "function")
+    ) {
+      return invalidAt(
+        tokens,
+        nameAt + 2,
+        "a sized integer type, Bool, or an array type",
+        "Struct-typed fields are not supported yet; use a scalar or array type.",
+      );
     }
 
-    fields.push({ name: fieldName, mutable, annotation: type.value.annotation });
+    fields.push({
+      name: fieldName,
+      mutable,
+      annotation: type.value.annotation,
+    });
     next = type.value.next;
 
     if (textAt(tokens, next) === "}") {
@@ -100,7 +149,12 @@ function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Resul
     }
 
     if (textAt(tokens, next) !== ",") {
-      return invalidAt(tokens, next, "',' or '}' after the field", "Separate fields with ',' and close the struct with '}'.");
+      return invalidAt(
+        tokens,
+        next,
+        "',' or '}' after the field",
+        "Separate fields with ',' and close the struct with '}'.",
+      );
     }
 
     next += 1;
