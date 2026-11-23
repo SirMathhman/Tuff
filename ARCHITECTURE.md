@@ -33,7 +33,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 ### Recursion
 
-Recursion is limited to the parser and evaluator over the AST. Mutual recursion between stages is forbidden; a stage receives the next stage as a parameter.
+Recursion is limited to the parser and evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. The evaluator never runs during parsing.
 
 ## Potential Problems
 
@@ -46,6 +46,8 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 ### Resources and failure modes
 
 - Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
+- Stack exhaustion is prevented by a nesting limit of 1000 levels, which returns a `NestingTooDeep` error instead of a thrown `RangeError`.
+- Operator chains are parsed with loops, so their length does not depend on tail-call elimination.
 - Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
 
 ## Security Concerns
@@ -64,7 +66,7 @@ Source is untrusted input. It arrives from the REPL, from files, and potentially
 
 ### Known gaps
 
-None of these controls exist yet: no size, depth, or step limits are enforced. Model-driven prompt injection can reach the evaluator through source text, so the host-capability whitelist must be designed before any host function is added.
+Nesting depth is limited to 1000 levels; source size and step limits are not enforced yet. Model-driven prompt injection can reach the evaluator through source text, so the host-capability whitelist must be designed before any host function is added.
 
 ## Future Work
 

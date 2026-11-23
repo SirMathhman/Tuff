@@ -33,7 +33,15 @@ export interface ResultTooLarge extends TuffErrorDetails {
   kind: "ResultTooLarge";
 }
 
-export type TuffError = InvalidTerm | TermTooLarge | ResultTooLarge;
+export interface NestingTooDeep extends TuffErrorDetails {
+  kind: "NestingTooDeep";
+}
+
+export type TuffError =
+  | InvalidTerm
+  | TermTooLarge
+  | ResultTooLarge
+  | NestingTooDeep;
 
 interface Parsed {
   value: number;
@@ -41,6 +49,10 @@ interface Parsed {
 }
 
 type Parse = Result<Parsed, TuffError>;
+
+type ExprRule = (tokens: string[], pos: number, depth: number) => Parse;
+
+const MAX_NESTING_DEPTH = 1000;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -106,17 +118,35 @@ function resultTooLargeAt(tokens: string[], index: number): Err<TuffError> {
   });
 }
 
+function nestingTooDeepAt(tokens: string[], index: number): Err<TuffError> {
+  return err({
+    kind: "NestingTooDeep",
+    why: `Parentheses nest deeper than ${MAX_NESTING_DEPTH} levels.`,
+    where: whereAt(tokens, index),
+    fix: `Reduce the nesting to at most ${MAX_NESTING_DEPTH} levels.`,
+  });
+}
+
 // Grammar:
 //   expr    := term (("+" | "-") term)*
 //   term    := factor ("*" factor)*
 //   factor  := "-"? primary
 //   primary := number | "(" expr ")"
 // Each rule returns the value and the index of the next unread token.
+// primary receives expr as a parameter, so the rules form no static cycle.
 
-function parsePrimary(tokens: string[], pos: number): Parse {
+function parsePrimary(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
   const token = tokens[pos];
   if (token === "(") {
-    const inner = parseExpr(tokens, pos + 1);
+    if (depth >= MAX_NESTING_DEPTH) {
+      return nestingTooDeepAt(tokens, pos);
+    }
+    const inner = expr(tokens, pos + 1, depth + 1);
     if (!inner.ok) {
       return inner;
     }
@@ -144,62 +174,72 @@ function parsePrimary(tokens: string[], pos: number): Parse {
   );
 }
 
-function parseFactor(tokens: string[], pos: number): Parse {
+function parseFactor(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
   if (tokens[pos] === "-") {
-    const operand = parsePrimary(tokens, pos + 1);
+    const operand = parsePrimary(tokens, pos + 1, depth, expr);
     return operand.ok
       ? ok({ value: -operand.value.value, next: operand.value.next })
       : operand;
   }
-  return parsePrimary(tokens, pos);
+  return parsePrimary(tokens, pos, depth, expr);
 }
 
-function parseTermTail(tokens: string[], left: number, pos: number): Parse {
-  if (tokens[pos] !== "*") {
-    return ok({ value: left, next: pos });
-  }
-  const right = parseFactor(tokens, pos + 1);
-  if (!right.ok) {
-    return right;
-  }
-  const product = left * right.value.value;
-  if (!Number.isSafeInteger(product)) {
-    return resultTooLargeAt(tokens, pos);
-  }
-  return parseTermTail(tokens, product, right.value.next);
-}
-
-function parseTerm(tokens: string[], pos: number): Parse {
-  const first = parseFactor(tokens, pos);
+// Folds a left-associative chain: first, then (operator, operand) pairs.
+function foldChain(
+  tokens: string[],
+  first: Parse,
+  isOperator: (token: string | undefined) => boolean,
+  operand: (pos: number) => Parse,
+  apply: (op: string, left: number, right: number) => number,
+): Parse {
   if (!first.ok) {
     return first;
   }
-  return parseTermTail(tokens, first.value.value, first.value.next);
+  let value = first.value.value;
+  let next = first.value.next;
+  while (isOperator(tokens[next])) {
+    const op = tokens[next] ?? "";
+    const right = operand(next + 1);
+    if (!right.ok) {
+      return right;
+    }
+    value = apply(op, value, right.value.value);
+    if (!Number.isSafeInteger(value)) {
+      return resultTooLargeAt(tokens, next);
+    }
+    next = right.value.next;
+  }
+  return ok({ value, next });
 }
 
-function parseExprTail(tokens: string[], left: number, pos: number): Parse {
-  const op = tokens[pos];
-  if (op !== "+" && op !== "-") {
-    return ok({ value: left, next: pos });
-  }
-  const right = parseTerm(tokens, pos + 1);
-  if (!right.ok) {
-    return right;
-  }
-  const sum =
-    op === "+" ? left + right.value.value : left - right.value.value;
-  if (!Number.isSafeInteger(sum)) {
-    return resultTooLargeAt(tokens, pos);
-  }
-  return parseExprTail(tokens, sum, right.value.next);
+function parseTerm(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
+  return foldChain(
+    tokens,
+    parseFactor(tokens, pos, depth, expr),
+    (token) => token === "*",
+    (next) => parseFactor(tokens, next, depth, expr),
+    (_op, left, right) => left * right,
+  );
 }
 
-function parseExpr(tokens: string[], pos: number): Parse {
-  const first = parseTerm(tokens, pos);
-  if (!first.ok) {
-    return first;
-  }
-  return parseExprTail(tokens, first.value.value, first.value.next);
+function parseExpr(tokens: string[], pos: number, depth: number): Parse {
+  return foldChain(
+    tokens,
+    parseTerm(tokens, pos, depth, parseExpr),
+    (token) => token === "+" || token === "-",
+    (next) => parseTerm(tokens, next, depth, parseExpr),
+    (op, left, right) => (op === "+" ? left + right : left - right),
+  );
 }
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
@@ -212,7 +252,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     .replaceAll("*", " * ")
     .split(" ")
     .filter((token) => token !== "");
-  const parsed = parseExpr(tokens, 0);
+  const parsed = parseExpr(tokens, 0, 0);
   if (!parsed.ok) {
     return parsed;
   }

@@ -39,16 +39,18 @@ test("interpretTuff('9007199254740993') is a TermTooLarge error", () => {
   expectErrorKind("9007199254740993", "TermTooLarge");
 });
 
+function expectErrorDetails(source: string): void {
+  const result = interpretTuff(source);
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.why).not.toBe("");
+    expect(result.error.where.index).toBeGreaterThanOrEqual(0);
+    expect(result.error.fix).not.toBe("");
+  }
+}
+
 test("every error has why, where, and fix", () => {
-  ["1+", "9007199254740993", "abc"].forEach((source) => {
-    const result = interpretTuff(source);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.why).not.toBe("");
-      expect(result.error.where.index).toBeGreaterThanOrEqual(0);
-      expect(result.error.fix).not.toBe("");
-    }
-  });
+  ["1+", "9007199254740993", "abc"].forEach(expectErrorDetails);
 });
 
 test("interpretTuff('99999999999 * 99999999999') is a ResultTooLarge error", () => {
@@ -97,6 +99,25 @@ test("interpretTuff('()') is an error", () => {
 
 test("interpretTuff('(1 + 2') is an error", () => {
   expect(interpretTuff("(1 + 2").ok).toBe(false);
+});
+
+test("interpretTuff with 50000 nested parentheses returns NestingTooDeep", () => {
+  expectErrorKind("(".repeat(50000) + "1" + ")".repeat(50000), "NestingTooDeep");
+});
+
+test("interpretTuff with 1000 nested parentheses returns Ok(1)", () => {
+  expect(interpretTuff("(".repeat(1000) + "1" + ")".repeat(1000))).toEqual(ok(1));
+});
+
+test("NestingTooDeep has why, where, and fix", () => {
+  const source = "(".repeat(1001) + "1" + ")".repeat(1001);
+  expectErrorDetails(source);
+  const result = interpretTuff(source);
+  expect(!result.ok && result.error.where.index).toBe(1000);
+});
+
+test("interpretTuff with a 100000-term chain returns Ok(100000)", () => {
+  expect(interpretTuff(Array(100000).fill("1").join(" + "))).toEqual(ok(100000));
 });
 
 test("interpretTuff('') is an error, not 0", () => {
