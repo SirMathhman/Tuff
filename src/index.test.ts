@@ -1089,3 +1089,19 @@ test("interpretTuff: a function whose signature differs from its let annotation 
 test("interpretTuff: a function value as the program result is a TypeMismatch error", () => {
   expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; &add", "TypeMismatch");
 });
+
+test("interpretTuff: a struct with fields named decl and visible is still a record, returning Ok(1)", () => {
+  expect(interpretTuff("struct P { decl : I32, visible : I32 } let p : P = P { decl : 1I32, visible : 2I32 }; p.decl")).toEqual(ok(1));
+});
+
+test("interpretTuff: &name of a name that is neither bound nor declared is an UndefinedName error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; &missing", "UndefinedName");
+});
+
+test("interpretTuff: passing a function value whose signature differs from a function-typed parameter is a TypeMismatch error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(Bool) => I32) : I32 => 1I32; apply(&add)", "TypeMismatch");
+});
+
+test("interpretTuff: a let annotated with a nested function type is an InvalidTerm error", () => {
+  expectErrorKind("let foo : &(&(I32) => I32) => I32 = 1I32; 1", "InvalidTerm");
+});
