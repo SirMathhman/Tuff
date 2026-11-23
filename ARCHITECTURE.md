@@ -9,11 +9,14 @@ as the language grows. It describes the ideal, not the current code.
 - **Tuff source**: a string written by a user or a program. It is untrusted.
 - **Number**: a decimal literal made of ASCII digits. Values use IEEE-754 double
   precision, the same as JavaScript `number`.
-- **Factor**: a number, optionally preceded by a sign.
+- **Factor**: a number, or a parenthesized expression `( expression )`. A sign
+  is never written directly before a factor; a sign is part of an expression.
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
   of its factors.
-- **Expression**: one or more terms joined by `+` or `-`. An expression
-  evaluates to the sum of its signed terms.
+- **Expression**: an optional leading sign, then one or more terms joined by
+  `+` or `-`. An expression evaluates to the sum of its signed terms.
+- **Grouping**: parentheses change precedence. `(2 + 3) * 4` is 20. Empty
+  groups `()` are errors.
 - **Precedence**: `*` binds tighter than `+` and `-`. Evaluation is left to
   right within each level.
 - **Token**: a classified piece of source (number, `+`, `-`, `*`, or
@@ -33,6 +36,12 @@ Invariants:
 4. No regex literals (enforced by ESLint `no-restricted-syntax`). Use string
    methods and character comparisons.
 5. Functions are declared with `function` declarations (ESLint `func-style`).
+6. Parameters never accept `undefined` in a union (ESLint `no-restricted-syntax`).
+   A helper that may run past the end of a list takes the list and an index,
+   and reads the token itself. Helpers that receive a token take a definite
+   `Token`. This keeps the "end of input" case in one place.
+7. Arrays are immutable. `Array.prototype.push` is banned (ESLint
+   `no-restricted-syntax`). Build a new array with spread instead.
 
 ## Structure
 
@@ -62,20 +71,23 @@ Rules:
 - Each stage takes plain data in and returns a `Result`. No stage holds state
   between calls.
 
-Current state: a single file, `index.ts`, with a one-pass character scanner
-that keeps mutable state in closures. Precedence is handled by tracking a
-pending product. This works for `+`, `-`, and `*`, but it cannot report
-errors and it does not extend cleanly to new operators.
+Current state: a single file, `index.ts`, with a tokenizer and a recursive
+descent parser (expression, term, factor, group). It is not yet split into the
+target files above; see Future Work.
 
 ### Recursion
 
-The planned grammar is flat (expression -> terms -> factors), so it can be
-evaluated iteratively. If parentheses are added, the grammar becomes
-recursive. In that case:
+The grammar is recursive because of parentheses (factor -> expression ->
+term -> factor). The target parser must not use recursion that spans files:
 
-- Keep the recursion in a single function where possible.
-- If two functions must call each other, pass one as a parameter instead of
-  importing it. This keeps the file graph acyclic.
+- The target is a non-recursive parser (for example shunting-yard, or
+  recursive descent with an explicit stack). This removes the call-stack
+  limit and any mutual recursion, so the parser can be split across files
+  freely.
+- Until then, if two functions must call each other, pass one as a parameter
+  instead of importing it. This keeps the file graph acyclic.
+- Recursion depth is bounded. Input that nests too deeply is reported as a
+  `TuffError`, never as a thrown `RangeError`.
 
 ## Errors
 
@@ -100,6 +112,14 @@ Planned variants (initial set):
   example `2 - * 3`.
 - `NumberOutOfRange { offset }`: a literal or intermediate result that is not
   finite.
+- `MissingNumber { offset }`: a number is required but the source ends, or
+  an operator or `)` is found. Covers `2 *`, `2 * + 3`, and `()`.
+- `MissingOperator { offset }`: two numbers or groups are adjacent with no
+  operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
+- `UnmatchedParenthesis { offset, kind }`: a `(` with no `)`, or a `)` with
+  no `(`. `kind` is `"open"` or `"close"`.
+- `NestingTooDeep { offset, limit }`: parentheses nest beyond the depth
+  limit.
 
 Error messages are built from the variant. They never echo unbounded source
 text.
@@ -109,9 +129,12 @@ text.
 - **Silent acceptance of malformed input.** The current scanner returns a
   number for `2 *` (2), `2 * + 3` (6), `2 * * 3` (6), and `2 - * 3` (-1).
   These should be `TuffError`s. This is the most important known defect.
-- **Adjacent numbers.** `2 3` currently evaluates to 5. The rule for
-  whitespace-separated numbers is not defined. It must either be an error or
-  a documented feature.
+- **Adjacent numbers.** Whitespace-separated numbers are an error
+  (`MissingOperator`). Whitespace is never a multiplication.
+- **Stack exhaustion.** Nested parentheses recurse once per level. Around
+  10,000 nested `(` the current parser throws a `RangeError` from
+  `interpretTuff`, which breaks the no-exceptions rule. Depth must be limited
+  and reported as `NestingTooDeep`.
 - **Precision.** Large integer literals lose precision as doubles. Results
   that overflow become `Infinity` without an error.
 - **Scanner state coupling.** The closure-based scanner mixes tokenizing and
@@ -140,7 +163,8 @@ Controls the architecture should have:
 | Malformed input is rejected, not coerced | Missing (see Potential Problems) |
 | Input length limit | Missing |
 | Non-finite results are reported as errors | Missing |
-| Error messages do not echo unbounded input | Missing (no errors yet) |
+| Error messages do not echo unbounded input | Present (messages echo one character at most) |
+| Nesting depth limit (no stack exhaustion) | Missing (see Potential Problems) |
 
 Prompt injection: if Tuff source is ever produced by a language model, treat
 the model output as untrusted text. The interpreter stays a pure evaluator.
@@ -160,10 +184,11 @@ performs no state changes.
   described in Structure.
 - Return `Result<number, TuffError>` from `interpretTuff`. Update callers and
   tests together.
-- Define the whitespace-separated number rule (error or feature) and document
-  it here.
+- Make the parser non-recursive, following the Recursion section.
+- Report unmatched `(` as `UnmatchedParenthesis` before parsing the group's
+  contents, not as `MissingNumber`.
+- Add a nesting depth limit that returns `NestingTooDeep`.
 - Add tests for every error variant, with one test per rule violated.
-- Add parentheses, following the recursion guidance above.
 - Add a length limit on source input.
 
 ## Performance
@@ -173,5 +198,5 @@ These are obvious concerns only. Measure with a profiler before optimizing.
 - Tokenizing is linear in source length. This is fine for expected inputs.
 - String concatenation while building digits is linear in the number of
   digits. This is fine for expected inputs.
-- If parentheses are added, deeply nested input can exhaust the call stack.
-  Enforce a nesting depth limit when that happens.
+- Deeply nested parentheses use one stack frame per level. Enforce the
+  nesting depth limit (see Recursion) so input cannot exhaust the stack.

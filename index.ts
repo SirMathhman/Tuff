@@ -63,7 +63,7 @@ function isDigit(char: string): boolean {
 }
 
 function tokenize(source: string): Result<Token[]> {
-  const tokens: Token[] = [];
+  let tokens: Token[] = [];
   let index = 0;
   while (index < source.length) {
     const char = source.charAt(index);
@@ -72,20 +72,23 @@ function tokenize(source: string): Result<Token[]> {
       while (end < source.length && isDigit(source.charAt(end))) {
         end++;
       }
-      tokens.push({
-        kind: "number",
-        value: Number(source.slice(index, end)),
-        pos: index,
-      });
+      tokens = [
+        ...tokens,
+        {
+          kind: "number",
+          value: Number(source.slice(index, end)),
+          pos: index,
+        },
+      ];
       index = end;
     } else if (char === "+" || char === "-" || char === "*") {
-      tokens.push({ kind: "operator", symbol: char, pos: index });
+      tokens = [...tokens, { kind: "operator", symbol: char, pos: index }];
       index++;
     } else if (char === "(") {
-      tokens.push({ kind: "open", pos: index });
+      tokens = [...tokens, { kind: "open", pos: index }];
       index++;
     } else if (char === ")") {
-      tokens.push({ kind: "close", pos: index });
+      tokens = [...tokens, { kind: "close", pos: index }];
       index++;
     } else if (char.trim() === "") {
       index++;

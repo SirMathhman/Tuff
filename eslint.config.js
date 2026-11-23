@@ -28,6 +28,10 @@ export default tseslint.config(
           message: "Regex literals are not allowed. Use string methods instead.",
         },
         {
+          selector: "CallExpression > MemberExpression.callee > Identifier.property[name='push']",
+          message: "Array.push is not allowed. Treat arrays as immutable, e.g. build a new array with spread.",
+        },
+        {
           selector: "ThrowStatement",
           message: "throw is not allowed. Return a Result instead.",
         },
