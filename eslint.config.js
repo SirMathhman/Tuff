@@ -11,6 +11,10 @@ export default tseslint.config(
   {
     rules: {
       "func-style": ["error", "declaration", { allowArrowFunctions: false }],
+      "max-lines": [
+        "error",
+        { max: 1000, skipBlankLines: true, skipComments: true },
+      ],
       "@typescript-eslint/no-restricted-types": [
         "error",
         {
