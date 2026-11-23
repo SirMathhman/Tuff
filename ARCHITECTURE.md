@@ -39,7 +39,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, each optionally negated with a unary `-`. `*` binds tighter than `+` and `-`, which are evaluated left to right. Spaces and tabs separate tokens.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number or a parenthesized group, and parentheses nest. Spaces and tabs separate tokens.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Grammar follows JavaScript number syntax; changing it later is breaking.
 
@@ -70,7 +70,7 @@ None of these controls exist yet: no size, depth, or step limits are enforced. M
 
 ### Near term
 
-1. Replace the split-and-sum implementation with a tokenizer, parser, and evaluator returning `Result`.
+1. Build an AST in the parser and evaluate it in a separate stage, as Structure describes.
 2. Replace the token-index `where` of each `TuffError` with character spans.
 
 ### Later

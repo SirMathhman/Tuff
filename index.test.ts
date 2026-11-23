@@ -81,6 +81,26 @@ test("interpretTuff('2\\t + 3') returns Ok(5)", () => {
   expect(interpretTuff("2\t + 3")).toEqual(ok(5));
 });
 
+test("interpretTuff('(2 + 3) * 4') returns Ok(20)", () => {
+  expect(interpretTuff("(2 + 3) * 4")).toEqual(ok(20));
+});
+
+test("interpretTuff('((1 + 2) * 3)') returns Ok(9)", () => {
+  expect(interpretTuff("((1 + 2) * 3)")).toEqual(ok(9));
+});
+
+test("interpretTuff('-(2 + 3)') returns Ok(-5)", () => {
+  expect(interpretTuff("-(2 + 3)")).toEqual(ok(-5));
+});
+
+test("interpretTuff('()') is an error", () => {
+  expect(interpretTuff("()").ok).toBe(false);
+});
+
+test("interpretTuff('(1 + 2') is an error", () => {
+  expect(interpretTuff("(1 + 2").ok).toBe(false);
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });
