@@ -29,7 +29,11 @@ export interface TermTooLarge extends TuffErrorDetails {
   kind: "TermTooLarge";
 }
 
-export type TuffError = InvalidTerm | TermTooLarge;
+export interface ResultTooLarge extends TuffErrorDetails {
+  kind: "ResultTooLarge";
+}
+
+export type TuffError = InvalidTerm | TermTooLarge | ResultTooLarge;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -143,6 +147,50 @@ function whereAt(tokens: string[], index: number): ErrorWhere {
   return { index, text: tokens[index] ?? "" };
 }
 
+interface Accumulator {
+  sum: number;
+  term: number;
+  sign: number;
+  mul: boolean;
+  overflowAt: number;
+}
+
+// Each "+" or "-" closes the running term; "*" multiplies into it.
+function step(acc: Accumulator, tokens: string[], index: number): Accumulator {
+  const token = tokens[index] ?? "";
+  if (isDigits(token)) {
+    const value = acc.sign * Number(token);
+    return {
+      ...acc,
+      term: acc.mul ? acc.term * value : value,
+      sign: 1,
+      mul: false,
+    };
+  }
+  if (token === "*") {
+    return { ...acc, mul: true };
+  }
+  if (token === "-" && !isDigits(tokens[index - 1] ?? "")) {
+    return { ...acc, sign: -acc.sign };
+  }
+  if (token === "+" || token === "-") {
+    return {
+      ...acc,
+      sum: acc.sum + acc.term,
+      term: 0,
+      sign: token === "-" ? -1 : 1,
+      mul: false,
+    };
+  }
+  return acc;
+}
+
+// Records the first index at which the running sum or term leaves the safe range.
+function flagOverflow(acc: Accumulator, index: number): Accumulator {
+  const safe = Number.isSafeInteger(acc.sum) && Number.isSafeInteger(acc.term);
+  return safe || acc.overflowAt !== -1 ? acc : { ...acc, overflowAt: index };
+}
+
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tuffSource
     .replaceAll("+", " + ")
@@ -174,37 +222,26 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       fix: `Use an integer of at most ${Number.MAX_SAFE_INTEGER}.`,
     });
   }
-  // Each "+" or "-" closes the running term; "*" multiplies into it.
-  const { sum, term } = tokens.reduce(
-    (acc, token, index) => {
-      if (isDigits(token)) {
-        const value = acc.sign * Number(token);
-        return {
-          ...acc,
-          term: acc.mul ? acc.term * value : value,
-          sign: 1,
-          mul: false,
-        };
-      }
-      if (token === "*") {
-        return { ...acc, mul: true };
-      }
-      if (token === "-" && !isDigits(tokens[index - 1] ?? "")) {
-        return { ...acc, sign: -acc.sign };
-      }
-      if (token === "+" || token === "-") {
-        return {
-          sum: acc.sum + acc.term,
-          term: 0,
-          sign: token === "-" ? -1 : 1,
-          mul: false,
-        };
-      }
-      return acc;
-    },
-    { sum: 0, term: 0, sign: 1, mul: false },
+  const result = tokens.reduce(
+    (acc, _token, index) => flagOverflow(step(acc, tokens, index), index),
+    { sum: 0, term: 0, sign: 1, mul: false, overflowAt: -1 },
   );
-  return ok(sum + term);
+  const total = result.sum + result.term;
+  const overflowAt =
+    result.overflowAt !== -1
+      ? result.overflowAt
+      : Number.isSafeInteger(total)
+        ? -1
+        : tokens.length - 1;
+  if (overflowAt !== -1) {
+    return err({
+      kind: "ResultTooLarge",
+      why: `The running value leaves the safe integer range (±${Number.MAX_SAFE_INTEGER}), so its digits can no longer be stored exactly.`,
+      where: whereAt(tokens, overflowAt),
+      fix: `Keep every intermediate and final result within ±${Number.MAX_SAFE_INTEGER}, for example by splitting the calculation.`,
+    });
+  }
+  return ok(total);
 }
 
 // TODO: simple repl with interpretTuff

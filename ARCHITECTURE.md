@@ -40,7 +40,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 ### Grammar and numbers
 
 - Narrow grammar: integers joined by `+`, `-`, or `*`, each optionally negated with a unary `-`. `*` binds tighter than `+` and `-`, which are evaluated left to right. Only spaces separate tokens; tabs are rejected.
-- Numbers are JavaScript doubles: single integers above 2^53 are rejected, but sums of safe integers can still lose precision silently.
+- Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Grammar follows JavaScript number syntax; changing it later is breaking.
 
 ### Resources and failure modes
