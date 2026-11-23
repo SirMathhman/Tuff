@@ -798,6 +798,20 @@ test("interpretTuff: let x : Bool = 1; x is a TypeMismatch error", () => {
   expectErrorKind("let x : Bool = 1; x", "TypeMismatch");
 });
 
+test("interpretTuff: a Bool annotation keeps its type on reassignment", () => {
+  expectErrorKind("let mut x : Bool = true; x = 1; x", "TypeMismatch");
+  expect(interpretTuff("let mut x : Bool = true; x = false; x")).toEqual(ok(0));
+});
+
+test("interpretTuff: a lowercase bool is not a type name, and a bracketed value is not a Bool", () => {
+  expectErrorKind("let x : bool = true; x", "InvalidTerm");
+  expectErrorKind("let x : Bool = [true]; x", "TypeMismatch");
+});
+
+test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
+  expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
+});
+
 test("interpretTuff: let x : U8 = 100; x is a TypeMismatch error", () => {
   expectErrorKind("let x : U8 = 100; x", "TypeMismatch");
 });
