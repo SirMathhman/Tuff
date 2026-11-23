@@ -422,3 +422,39 @@ test('interpretTuff("2 $ 3") => unexpected character error', () => {
     },
   });
 });
+
+test('interpretTuff("2 < 3") => 1', () => {
+  expect(interpretTuff("2 < 3")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("3 < 2") => 0', () => {
+  expect(interpretTuff("3 < 2")).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("1 + 1 < 3 && true") => 1 (< binds tighter than &&)', () => {
+  expect(interpretTuff("1 + 1 < 3 && true")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("1 < 2 < 3") => chained comparison error', () => {
+  expect(interpretTuff("1 < 2 < 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Chained comparison",
+      where: 6,
+      why: 'A comparison takes one "<", so another "<" cannot follow it',
+      fix: 'Join the comparisons with "&&", or remove this "<"',
+    },
+  });
+});
+
+test('interpretTuff("true < 2") => boolean used as a number error', () => {
+  expect(interpretTuff("true < 2")).toEqual({
+    ok: false,
+    error: {
+      what: "Boolean used as a number",
+      where: 0,
+      why: '"true" is a boolean, not a number',
+      fix: "Use a number instead of the boolean, or drop the operator",
+    },
+  });
+});

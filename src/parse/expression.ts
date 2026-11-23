@@ -1,4 +1,4 @@
-import { numberAsBoolean } from "../errors.ts";
+import { chainedComparison, numberAsBoolean } from "../errors.ts";
 import { err, ok } from "../result.ts";
 import type { Operand, Scope } from "../scope.ts";
 import { signAt, textAt } from "../tokenize.ts";
@@ -120,7 +120,59 @@ function parseChain(
   return ok({ value, next, scope: current });
 }
 
-// Parses sums joined by "&&". "&&" binds tighter than "||".
+// Parses a sum, then at most one "<" and another sum. Both sides must be numbers,
+// and the result is a boolean. A second "<" is an error, so "1 < 2 < 3" is
+// rejected rather than chained.
+function parseComparison(
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+): ParseResult<Parsed> {
+  const left = parseSum(tokens, index, scope, end, factor);
+  if (!left.ok) {
+    return left;
+  }
+  const lessToken = tokens[left.value.next];
+  if (lessToken?.kind !== "less") {
+    return left;
+  }
+  const leftPos = tokens[index]?.pos ?? end;
+  const leftValue = numberFrom(
+    left.value.value,
+    leftPos,
+    textAt(tokens, index),
+  );
+  if (!leftValue.ok) {
+    return leftValue;
+  }
+  const rightIndex = left.value.next + 1;
+  const right = parseSum(tokens, rightIndex, left.value.scope, end, factor);
+  if (!right.ok) {
+    return right;
+  }
+  const rightValue = numberFrom(
+    right.value.value,
+    tokens[rightIndex]?.pos ?? end,
+    textAt(tokens, rightIndex),
+  );
+  if (!rightValue.ok) {
+    return rightValue;
+  }
+  const next = right.value.next;
+  if (tokens[next]?.kind === "less") {
+    return err(chainedComparison(tokens[next]?.pos ?? end));
+  }
+  return ok({
+    value: leftValue.value < rightValue.value,
+    next,
+    scope: right.value.scope,
+  });
+}
+
+// Parses comparisons joined by "&&". "&&" binds tighter than "||", and a
+// comparison binds tighter than "&&".
 function parseAnd(
   tokens: Token[],
   index: number,
@@ -128,7 +180,7 @@ function parseAnd(
   end: number,
   factor: Parser,
 ): ParseResult<Parsed> {
-  return parseChain(tokens, index, scope, end, factor, "and", parseSum);
+  return parseChain(tokens, index, scope, end, factor, "and", parseComparison);
 }
 
 // Parses "&&" groups joined by "||". The whole expression of a let, an

@@ -76,6 +76,11 @@ export interface AndToken {
   pos: number;
 }
 
+export interface LessToken {
+  kind: "less";
+  pos: number;
+}
+
 export type Token =
   | NumberToken
   | OperatorToken
@@ -89,7 +94,8 @@ export type Token =
   | SemicolonToken
   | BooleanToken
   | OrToken
-  | AndToken;
+  | AndToken
+  | LessToken;
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
@@ -168,6 +174,10 @@ export function tokenize(source: string): Result<Token[], TuffError> {
       buffer[count] = { kind: "ampersand", pos: index };
       count++;
       index++;
+    } else if (char === "<") {
+      buffer[count] = { kind: "less", pos: index };
+      count++;
+      index++;
     } else if (char === "=") {
       buffer[count] = { kind: "equals", pos: index };
       count++;
@@ -219,6 +229,9 @@ export function tokenText(token: Token): string {
   }
   if (token.kind === "boolean") {
     return token.value ? "true" : "false";
+  }
+  if (token.kind === "less") {
+    return "<";
   }
   if (token.kind === "or") {
     return "||";

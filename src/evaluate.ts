@@ -54,13 +54,15 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   //              | "*" name "=" expression ";"
   //   value      = expression | "&" name | "&" "mut" name
   //   expression = and { "||" and }
-  //   and        = sum { "&&" sum }
+  //   and        = comparison { "&&" comparison }
+  //   comparison = sum [ "<" sum ]
   //   sum        = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
   //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}"
-  // Precedence, tightest first: "*", then "+" and "-", then "&&", then "||".
-  // Operands of "&&" and "||" must be booleans; the right side is skipped when the
-  // left side decides the result. A boolean is a value on its own, but arithmetic
+  // Precedence, tightest first: "*", then "+" and "-", then "<", then "&&", then "||".
+  // "<" takes numbers and gives a boolean; a second "<" is an error. Operands of "&&"
+  // and "||" must be booleans; the right side is skipped when the left side decides
+  // the result. A boolean is a value on its own, but arithmetic
   // needs numbers; a final boolean is returned as 1 or 0. Parentheses group an
   // expression. Braces group a block, whose lets are visible only inside it. Only
   // a `let mut` variable may be assigned, and "&mut" needs one. A reference may not

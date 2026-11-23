@@ -62,10 +62,13 @@ as the language grows. It describes the ideal, not the current code.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
   lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both 20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
   is an error. Empty groups `()` and `{}` are errors.
-- **Precedence**, tightest first: `*`, then `+` and `-`, then `&&`, then `||`.
-  Evaluation is left to right within each level.
+- **Comparison**: `sum < sum` takes two numbers and gives a boolean. A number
+  is required on both sides (`BooleanAsNumber` otherwise). A second `<` in the
+  same comparison is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
+- **Precedence**, tightest first: `*`, then `+` and `-`, then `<`, then `&&`,
+  then `||`. Evaluation is left to right within each level.
 - **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
-  `false`, `=`, `;`, `&`, `&&`, `||`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or
+  `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or
   whitespace). Whitespace is dropped after tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
@@ -120,7 +123,7 @@ src/parse/sequence.ts    let, assignment, and "*name =" statements, then an
                          expression
 src/parse/value.ts       a let or assignment value: "&name", "&mut name", or an
                          expression
-src/parse/expression.ts  signs, "+" and "-"
+src/parse/expression.ts  signs, "+", "-", "<", "&&", and "||"
 src/parse/term.ts        "*"
 ```
 
