@@ -770,6 +770,30 @@ test("interpretTuff: 9007199254740991I64 + 1I64 is a ResultTooLarge error", () =
   expectErrorKind("9007199254740991I64 + 1I64", "ResultTooLarge");
 });
 
+test("interpretTuff: 4I8 >> -1I8 is a BitwiseOutOfRange error at >> that names -1", () => {
+  const result = interpretTuff("4I8 >> -1I8");
+
+  expect(result.ok).toBe(false);
+
+  if (!result.ok) {
+    expect(result.error.kind).toBe("BitwiseOutOfRange");
+    expect(result.error.where.text).toBe(">>");
+    expect(result.error.why).toContain("-1");
+  }
+});
+
+test("interpretTuff: 1I8 << -1I8 is a BitwiseOutOfRange error", () => {
+  expectErrorKind("1I8 << -1I8", "BitwiseOutOfRange");
+});
+
+test("interpretTuff: 4I8 >> 0I8 returns Ok(4)", () => {
+  expect(interpretTuff("4I8 >> 0I8")).toEqual(ok(4));
+});
+
+test("interpretTuff: 1I32 << 32I32 is a BitwiseOutOfRange error", () => {
+  expectErrorKind("1I32 << 32I32", "BitwiseOutOfRange");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
