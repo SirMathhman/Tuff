@@ -62,11 +62,10 @@ as the language grows. It describes the ideal, not the current code.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
   lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both 20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
   is an error. Empty groups `()` and `{}` are errors.
-- **Comparison**: `sum < sum` takes two numbers and gives a boolean. A number
-  is required on both sides (`BooleanAsNumber` otherwise). A second `<` in the
-  same comparison is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
 - **Precedence**, tightest first: `*`, then `+` and `-`, then `<`, then `&&`,
-  then `||`. Evaluation is left to right within each level.
+  then `||`. Evaluation is left to right within each level. `<` takes two
+  numbers (`BooleanAsNumber` otherwise) and gives a boolean. A second `<` in one
+  comparison is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
 - **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
   `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or
   whitespace). Whitespace is dropped after tokenizing.
