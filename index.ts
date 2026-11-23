@@ -10,12 +10,6 @@ export interface ErrResult {
 
 export type Result<T> = OkResult<T> | ErrResult;
 
-enum OperatorSymbol {
-  Plus = "+",
-  Minus = "-",
-  Times = "*",
-}
-
 interface NumberToken {
   kind: "number";
   value: number;
@@ -24,7 +18,7 @@ interface NumberToken {
 
 interface OperatorToken {
   kind: "operator";
-  symbol: OperatorSymbol;
+  symbol: "+" | "-" | "*";
   pos: number;
 }
 
@@ -47,25 +41,11 @@ function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
 }
 
-function operatorFor(char: string): OperatorSymbol | undefined {
-  if (char === "+") {
-    return OperatorSymbol.Plus;
-  }
-  if (char === "-") {
-    return OperatorSymbol.Minus;
-  }
-  if (char === "*") {
-    return OperatorSymbol.Times;
-  }
-  return undefined;
-}
-
 function tokenize(source: string): Result<Token[]> {
   const tokens: Token[] = [];
   let index = 0;
   while (index < source.length) {
     const char = source.charAt(index);
-    const symbol = operatorFor(char);
     if (isDigit(char)) {
       let end = index;
       while (end < source.length && isDigit(source.charAt(end))) {
@@ -73,8 +53,8 @@ function tokenize(source: string): Result<Token[]> {
       }
       tokens.push({ kind: "number", value: Number(source.slice(index, end)), pos: index });
       index = end;
-    } else if (symbol !== undefined) {
-      tokens.push({ kind: "operator", symbol, pos: index });
+    } else if (char === "+" || char === "-" || char === "*") {
+      tokens.push({ kind: "operator", symbol: char, pos: index });
       index++;
     } else if (char.trim() === "") {
       index++;
@@ -89,10 +69,10 @@ function signOf(token: Token | undefined): 1 | -1 | undefined {
   if (token?.kind !== "operator") {
     return undefined;
   }
-  if (token.symbol === OperatorSymbol.Plus) {
+  if (token.symbol === "+") {
     return 1;
   }
-  if (token.symbol === OperatorSymbol.Minus) {
+  if (token.symbol === "-") {
     return -1;
   }
   return undefined;
@@ -120,7 +100,7 @@ function parseTerm(tokens: Token[], index: number, sign: 1 | -1): Result<Parsed>
   let value = sign * first.value.value;
   let next = first.value.next;
   let token = tokens[next];
-  while (token?.kind === "operator" && token.symbol === OperatorSymbol.Times) {
+  while (token?.kind === "operator" && token.symbol === "*") {
     const factor = parseNumber(tokens, next + 1);
     if (!factor.ok) {
       return factor;
