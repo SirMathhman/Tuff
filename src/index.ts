@@ -54,6 +54,10 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     return ok(result.value ? 1 : 0);
   }
 
+  if (typeof result.value === "string") {
+    return ok(result.value.codePointAt(0) ?? 0);
+  }
+
   return ok(result.value);
 }
 

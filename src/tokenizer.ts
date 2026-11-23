@@ -24,6 +24,12 @@ export function tokenize(tuffSource: string): string[] {
       tokens.push(...flush(current), char);
       current = "";
       index += 1;
+    } else if (char === "'") {
+      const end = closingQuoteEnd(tuffSource, index);
+
+      tokens.push(...flush(current), tuffSource.slice(index, end));
+      current = "";
+      index = end;
     } else {
       current += char;
       index += 1;
@@ -38,6 +44,19 @@ const SPACE = [" ", "\t", "\n", "\r"];
 const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||"];
 
 const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "+", "-", "*", ";", "=", "<", ">", "!"];
+
+// Returns the index just after the single quote that closes the string opened
+// at start, skipping backslash-escaped characters. An unclosed string runs to
+// the end of the source, and the parser reports it.
+function closingQuoteEnd(source: string, start: number): number {
+  let index = start + 1;
+
+  while (index < source.length && source.charAt(index) !== "'") {
+    index += source.charAt(index) === "\\" ? 2 : 1;
+  }
+
+  return Math.min(index + 1, source.length);
+}
 
 function flush(current: string): string[] {
   return current === "" ? [] : [current];

@@ -108,6 +108,10 @@ function parsePrimary(
     return parseIf(tokens, pos, depth, rules);
   }
 
+  if (token !== undefined && token.charAt(0) === "'") {
+    return parseString(tokens, pos);
+  }
+
   if (token !== undefined && isDigits(token)) {
     if (Number(token) > Number.MAX_SAFE_INTEGER) {
       return termTooLargeAt(tokens, pos);
@@ -126,6 +130,57 @@ function parsePrimary(
     "a number, a name, '-', or '('",
     "Put a number, a name, a '-' before a number, or a parenthesized expression here.",
   );
+}
+
+const ESCAPES: [string, string][] = [
+  ["\\", "\\"],
+  ["'", "'"],
+  ["n", "\n"],
+  ["t", "\t"],
+];
+
+// Decodes backslash escapes in the body of a string; undefined for an unknown escape.
+function decodeEscapes(body: string): string | undefined {
+  let text = "";
+  let index = 0;
+
+  while (index < body.length) {
+    if (body.charAt(index) !== "\\") {
+      text += body.charAt(index);
+      index += 1;
+    } else {
+      const escaped = ESCAPES.find(([code]) => code === body.charAt(index + 1));
+
+      if (escaped === undefined) {
+        return undefined;
+      }
+
+      text += escaped[1];
+      index += 2;
+    }
+  }
+
+  return text;
+}
+
+function parseString(tokens: string[], pos: number): Parse {
+  const raw = tokens[pos] ?? "";
+
+  if (raw.length < 2 || raw.charAt(raw.length - 1) !== "'") {
+    return invalidAt(tokens, pos, "a closing ' after the string", "Close the string with a single quote.");
+  }
+
+  const text = decodeEscapes(raw.slice(1, -1));
+
+  if (text === undefined) {
+    return invalidAt(tokens, pos, "a valid escape: \\\\, \\', \\n, or \\t", "Use only \\\\, \\', \\n, or \\t inside a string.");
+  }
+
+  if ([...text].length !== 1) {
+    return invalidAt(tokens, pos, "a string of exactly one character", "Put exactly one character between the quotes.");
+  }
+
+  return ok({ value: { kind: "string", value: text }, next: pos + 1 });
 }
 
 function parseIf(

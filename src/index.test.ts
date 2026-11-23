@@ -435,6 +435,34 @@ test("interpretTuff: else-if still works and returns Ok(2)", () => {
   expect(interpretTuff("if (false) 1 else if (true) 2 else 3")).toEqual(ok(2));
 });
 
+test("interpretTuff: 'a' returns its ASCII value 97", () => {
+  expect(interpretTuff("'a'")).toEqual(ok(97));
+});
+
+test("interpretTuff: 'a' == 'a' returns Ok(1)", () => {
+  expect(interpretTuff("'a' == 'a'")).toEqual(ok(1));
+});
+
+test("interpretTuff: 'a' < 'b' is a TypeMismatch error", () => {
+  expectErrorKind("'a' < 'b'", "TypeMismatch");
+});
+
+test("interpretTuff: 'ab' is an InvalidTerm error", () => {
+  expectErrorKind("'ab'", "InvalidTerm");
+});
+
+test("interpretTuff: an unknown escape '\\q' is an InvalidTerm error", () => {
+  expectErrorKind("'\\q'", "InvalidTerm");
+});
+
+test("interpretTuff: an escaped backslash '\\\\' returns its code 92", () => {
+  expect(interpretTuff("'\\\\'")).toEqual(ok(92));
+});
+
+test("interpretTuff: a string in a let binding compares equal", () => {
+  expect(interpretTuff("let c = 'x'; c == 'x'")).toEqual(ok(1));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

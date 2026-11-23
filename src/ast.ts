@@ -10,6 +10,11 @@ interface BooleanNode {
   value: boolean;
 }
 
+interface StringNode {
+  kind: "string";
+  value: string;
+}
+
 interface NegateNode {
   kind: "negate";
   operand: Expr;
@@ -125,6 +130,7 @@ interface NotNode {
 export type Expr =
   | NumberNode
   | BooleanNode
+  | StringNode
   | NegateNode
   | ReferenceNode
   | ChainNode

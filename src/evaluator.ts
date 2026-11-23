@@ -10,7 +10,7 @@ import {
 } from "./errors.ts";
 import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "./ast.ts";
 
-type Value = number | boolean;
+type Value = number | boolean | string;
 
 interface Cell {
   value: Value;
@@ -26,7 +26,11 @@ interface Scope {
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
 
 function typeName(value: Value): string {
-  return typeof value === "number" ? "a number" : "a boolean";
+  if (typeof value === "number") {
+    return "a number";
+  }
+
+  return typeof value === "boolean" ? "a boolean" : "a string";
 }
 
 function asNumber(value: Value, where: ErrorWhere): Result<number, TuffError> {
@@ -370,7 +374,7 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
  * @returns The computed value, a number or a boolean, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
-  if (expr.kind === "number" || expr.kind === "boolean") {
+  if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
     return ok(expr.value);
   }
 

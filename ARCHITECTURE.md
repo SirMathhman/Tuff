@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number or a boolean. A program evaluates to a number; a boolean result is 1 or 0.
+- **Value**: a number, a boolean, or a one-character string. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its ASCII (code point) value.
 
 ### Bindings and scope
 
@@ -96,7 +96,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Tokens
 
 - Brackets, operators, `=`, and `;` are self-delimiting, so spacing never changes meaning.
-- Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans.
+- Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them.
 
 ### Compatibility
 
