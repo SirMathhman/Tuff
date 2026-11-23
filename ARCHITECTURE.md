@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function of the interpreter.
-- **Value**: the result of evaluating a program. Numbers only for now.
+- **Value**: a number or a boolean. A program evaluates to a number; a boolean result is returned as 1 or 0.
 - **Binding**: a name paired with a value, introduced by `let`. A `let mut` binding can be reassigned with `name = expr;`.
 - **Scope**: the bindings visible at a point, innermost first. Inner blocks shadow outer names; the last declaration wins.
 - **Block**: a body of bindings followed by a result expression.
@@ -43,7 +43,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
 - Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, or `}`, or the `}` ends the input and directly follows a `;`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.

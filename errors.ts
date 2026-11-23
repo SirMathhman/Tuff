@@ -94,6 +94,14 @@ export interface ImmutableAssignment extends TuffErrorDetails {
 }
 
 /**
+ * A value of one type is used where another type is required.
+ */
+export interface TypeMismatch extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "TypeMismatch";
+}
+
+/**
  * Any error that interpretTuff can return.
  */
 export type TuffError =
@@ -102,7 +110,8 @@ export type TuffError =
   | ResultTooLarge
   | NestingTooDeep
   | UndefinedName
-  | ImmutableAssignment;
+  | ImmutableAssignment
+  | TypeMismatch;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -148,6 +157,22 @@ export function undefinedNameAt(where: ErrorWhere): Err<TuffError> {
     why: `${JSON.stringify(where.text)} is not declared.`,
     where,
     fix: `Declare it first with let ${where.text} = ...; before using it.`,
+  });
+}
+
+/**
+ * Builds a TypeMismatch error for a value of the wrong type at a position.
+ * @param where - The token where the wrong type was used.
+ * @param expected - A description of the type the position requires.
+ * @param found - A description of the type that was supplied.
+ * @returns An Err result holding the TypeMismatch error.
+ */
+export function typeMismatchAt(where: ErrorWhere, expected: string, found: string): Err<TuffError> {
+  return err({
+    where,
+    fix: `Use ${expected} here.`,
+    why: `Expected ${expected}, but got ${found}.`,
+    kind: "TypeMismatch",
   });
 }
 

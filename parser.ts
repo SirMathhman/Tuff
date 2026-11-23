@@ -15,7 +15,8 @@ import { type Expr, type Link, type Statement } from "./ast.ts";
 //   expr      := term (("+" | "-") term)*
 //   term      := factor ("*" factor)*
 //   factor    := "-"? primary
-//   primary   := number | name | "(" expr ")" | "{" body "}"
+//   primary   := number | "true" | "false" | name | "(" expr ")" | "{" body "}"
+//              | "if" "(" expr ")" expr "else" expr
 // A name starts with a letter or underscore and continues with letters,
 // digits, or underscores; "let" and "mut" are reserved. The parser builds an
 // AST; the evaluator computes its value. primary receives expr as a parameter,
@@ -60,6 +61,10 @@ function isIdentifier(text: string): boolean {
   return (
     text !== "let" &&
     text !== "mut" &&
+    text !== "if" &&
+    text !== "else" &&
+    text !== "true" &&
+    text !== "false" &&
     chars.length > 0 &&
     isLetterOrUnderscore(chars[0] ?? "") &&
     chars.every((char) => isLetterOrUnderscore(char) || isDigit(char))
@@ -192,6 +197,14 @@ function parsePrimary(
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
 
+  if (token === "true" || token === "false") {
+    return ok({ value: { kind: "boolean", value: token === "true" }, next: pos + 1 });
+  }
+
+  if (token === "if") {
+    return parseIf(tokens, pos, depth, expr);
+  }
+
   if (token !== undefined && isDigits(token)) {
     if (Number(token) > Number.MAX_SAFE_INTEGER) {
       return termTooLargeAt(tokens, pos);
@@ -212,6 +225,58 @@ function parsePrimary(
   );
 }
 
+function parseIf(
+  tokens: string[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+): Parse {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  if (tokens[pos + 1] !== "(") {
+    return invalidAt(tokens, pos + 1, "'(' after 'if'", "Write the condition in parentheses after 'if'.");
+  }
+
+  const condition = expr(tokens, pos + 2, depth + 1);
+
+  if (!condition.ok) {
+    return condition;
+  }
+
+  if (tokens[condition.value.next] !== ")") {
+    return invalidAt(tokens, condition.value.next, "')' after the condition", "Close the condition with ')'.");
+  }
+
+  const then = expr(tokens, condition.value.next + 1, depth);
+
+  if (!then.ok) {
+    return then;
+  }
+
+  if (tokens[then.value.next] !== "else") {
+    return invalidAt(tokens, then.value.next, "'else' after the then branch", "Every if needs an else branch.");
+  }
+
+  const otherwise = expr(tokens, then.value.next + 1, depth);
+
+  if (!otherwise.ok) {
+    return otherwise;
+  }
+
+  return ok({
+    value: {
+      kind: "if",
+      condition: condition.value.value,
+      then: then.value.value,
+      otherwise: otherwise.value.value,
+      where: whereAt(tokens, pos),
+    },
+    next: otherwise.value.next,
+  });
+}
+
 function parseFactor(
   tokens: string[],
   pos: number,
@@ -222,7 +287,7 @@ function parseFactor(
     const operand = parsePrimary(tokens, pos + 1, depth, expr);
 
     return operand.ok
-      ? ok({ value: { kind: "negate", operand: operand.value.value }, next: operand.value.next })
+      ? ok({ value: { kind: "negate", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
       : operand;
   }
 

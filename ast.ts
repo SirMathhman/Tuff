@@ -5,14 +5,28 @@ interface NumberNode {
   value: number;
 }
 
+interface BooleanNode {
+  kind: "boolean";
+  value: boolean;
+}
+
 interface NegateNode {
   kind: "negate";
   operand: Expr;
+  where: ErrorWhere;
 }
 
 interface ReferenceNode {
   kind: "reference";
   name: string;
+  where: ErrorWhere;
+}
+
+interface IfNode {
+  kind: "if";
+  condition: Expr;
+  then: Expr;
+  otherwise: Expr;
   where: ErrorWhere;
 }
 
@@ -72,11 +86,13 @@ interface BlockNode {
 }
 
 /**
- * A parsed expression: a number, a name, a negation, a chain of operators, or a block.
+ * A parsed expression: a number, a boolean, a name, a negation, a chain of operators, an if, or a block.
  */
 export type Expr =
   | NumberNode
+  | BooleanNode
   | NegateNode
   | ReferenceNode
   | ChainNode
+  | IfNode
   | BlockNode;

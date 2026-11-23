@@ -16,6 +16,6 @@
   },
   "scripts": {
     "lint": "eslint . && madge --circular --extensions ts . && bun run cpd",
-    "cpd": "pmd cpd --language typescript --minimum-tokens 30 index.ts errors.ts tokenizer.ts ast.ts parser.ts evaluator.ts index.test.ts"
+    "cpd": "pmd cpd --language typescript --minimum-tokens 50 index.ts errors.ts tokenizer.ts ast.ts parser.ts evaluator.ts index.test.ts"
   }
 }

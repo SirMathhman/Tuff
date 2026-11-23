@@ -2,14 +2,18 @@ import {
   ok,
   immutableAssignmentAt,
   resultTooLargeAt,
+  typeMismatchAt,
   undefinedNameAt,
+  type ErrorWhere,
   type Result,
   type TuffError,
 } from "./errors.ts";
 import { type AssignStatement, type Expr, type Link, type Statement } from "./ast.ts";
 
+type Value = number | boolean;
+
 interface Cell {
-  value: number;
+  value: Value;
 }
 
 interface Scope {
@@ -19,7 +23,19 @@ interface Scope {
   parent?: Scope;
 }
 
-type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<number, TuffError>;
+type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
+
+function typeName(value: Value): string {
+  return typeof value === "number" ? "a number" : "a boolean";
+}
+
+function asNumber(value: Value, where: ErrorWhere): Result<number, TuffError> {
+  if (typeof value === "number") {
+    return ok(value);
+  }
+
+  return typeMismatchAt(where, "a number", typeName(value));
+}
 
 function apply(op: Link["op"], left: number, right: number): number {
   if (op === "+") {
@@ -58,6 +74,10 @@ function assign(
 
   if (!value.ok) {
     return value;
+  }
+
+  if (typeof value.value !== typeof target.cell.value) {
+    return typeMismatchAt(statement.where, typeName(target.cell.value), typeName(value.value));
   }
 
   target.cell.value = value.value;
@@ -108,7 +128,7 @@ function evaluateBlock(
   result: Expr,
   scope: Scope | undefined,
   evaluateRule: EvalRule,
-): Result<number, TuffError> {
+): Result<Value, TuffError> {
   const inner = runStatements(statements, scope, evaluateRule);
 
   if (!inner.ok) {
@@ -119,20 +139,26 @@ function evaluateBlock(
 }
 
 /**
- * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, and values that leave the safe integer range.
+ * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
  * @param scope - The let bindings visible to the expression, innermost first.
- * @returns The computed value, or a structured error.
+ * @returns The computed value, a number or a boolean, or a structured error.
  */
-export function evaluate(expr: Expr, scope?: Scope): Result<number, TuffError> {
-  if (expr.kind === "number") {
+export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
+  if (expr.kind === "number" || expr.kind === "boolean") {
     return ok(expr.value);
   }
 
   if (expr.kind === "negate") {
     const inner = evaluate(expr.operand, scope);
 
-    return inner.ok ? ok(-inner.value) : inner;
+    if (!inner.ok) {
+      return inner;
+    }
+
+    const operand = asNumber(inner.value, expr.where);
+
+    return operand.ok ? ok(-operand.value) : operand;
   }
 
   if (expr.kind === "reference") {
@@ -141,11 +167,25 @@ export function evaluate(expr: Expr, scope?: Scope): Result<number, TuffError> {
     return found === undefined ? undefinedNameAt(expr.where) : ok(found.cell.value);
   }
 
+  if (expr.kind === "if") {
+    const condition = evaluate(expr.condition, scope);
+
+    if (!condition.ok) {
+      return condition;
+    }
+
+    if (typeof condition.value !== "boolean") {
+      return typeMismatchAt(expr.where, "a boolean condition", typeName(condition.value));
+    }
+
+    return evaluate(condition.value ? expr.then : expr.otherwise, scope);
+  }
+
   if (expr.kind === "block") {
     return evaluateBlock(expr.statements, expr.result, scope, evaluate);
   }
 
-  return expr.links.reduce<Result<number, TuffError>>(
+  return expr.links.reduce<Result<Value, TuffError>>(
     (acc, link) => {
       if (!acc.ok) {
         return acc;
@@ -157,7 +197,19 @@ export function evaluate(expr: Expr, scope?: Scope): Result<number, TuffError> {
         return right;
       }
 
-      const value = apply(link.op, acc.value, right.value);
+      const left = asNumber(acc.value, link.where);
+
+      if (!left.ok) {
+        return left;
+      }
+
+      const rightNumber = asNumber(right.value, link.where);
+
+      if (!rightNumber.ok) {
+        return rightNumber;
+      }
+
+      const value = apply(link.op, left.value, rightNumber.value);
 
       return Number.isSafeInteger(value) ? ok(value) : resultTooLargeAt(link.where);
     },

@@ -1,4 +1,4 @@
-import { type Result, type TuffError } from "./errors.ts";
+import { ok, type Result, type TuffError } from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
 import { blockBody, invalidAt, parseExpr } from "./parser.ts";
 import { evaluate } from "./evaluator.ts";
@@ -17,6 +17,7 @@ export type {
   NestingTooDeep,
   UndefinedName,
   ImmutableAssignment,
+  TypeMismatch,
 } from "./errors.ts";
 
 /**
@@ -41,7 +42,17 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     );
   }
 
-  return evaluate(parsed.value.value);
+  const result = evaluate(parsed.value.value);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (typeof result.value === "boolean") {
+    return ok(result.value ? 1 : 0);
+  }
+
+  return ok(result.value);
 }
 
 // TODO: simple repl with interpretTuff

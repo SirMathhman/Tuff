@@ -259,6 +259,30 @@ test("interpretTuff assigning to an undeclared name is an UndefinedName error", 
   expectErrorKind("x = 1; x", "UndefinedName");
 });
 
+test("interpretTuff('if (true) 2 else 3') returns Ok(2)", () => {
+  expect(interpretTuff("if (true) 2 else 3")).toEqual(ok(2));
+});
+
+test("interpretTuff('if (false) 2 else 3') returns Ok(3)", () => {
+  expect(interpretTuff("if (false) 2 else 3")).toEqual(ok(3));
+});
+
+test("interpretTuff('if (2) 1 else 0') is a TypeMismatch error", () => {
+  expectErrorKind("if (2) 1 else 0", "TypeMismatch");
+});
+
+test("interpretTuff('let b = true; if (b) 1 else 2') returns Ok(1)", () => {
+  expect(interpretTuff("let b = true; if (b) 1 else 2")).toEqual(ok(1));
+});
+
+test("interpretTuff('true') returns Ok(1)", () => {
+  expect(interpretTuff("true")).toEqual(ok(1));
+});
+
+test("interpretTuff('true + 1') is a TypeMismatch error", () => {
+  expectErrorKind("true + 1", "TypeMismatch");
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });
