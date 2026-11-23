@@ -862,6 +862,14 @@ test("interpretTuff: a struct constructor with plain number fields is a TypeMism
   expectErrorKind("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y", "TypeMismatch");
 });
 
+test("interpretTuff: a struct keeps its struct name when one of its fields is written", () => {
+  expect(interpretTuff("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = p; q.x")).toEqual(ok(5));
+});
+
+test("interpretTuff: an anonymous record does not match a struct annotation even with the same fields", () => {
+  expectErrorKind("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = { x : 5I32, y : 2I32 }; 1", "TypeMismatch");
+});
+
 test("interpretTuff: a struct constructor that leaves out a field is a MissingField error", () => {
   expectErrorKind("struct Point { x : I32, y : I32 } let pt = Point { x : 3I32 }; pt.x", "MissingField");
 });
