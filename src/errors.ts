@@ -120,6 +120,14 @@ export interface UseAfterMove extends TuffErrorDetails {
   kind: "UseAfterMove";
 }
 
+/**
+ * An array literal has no elements, so its element type cannot be checked.
+ */
+export interface EmptyArrayLiteral extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "EmptyArrayLiteral";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -129,7 +137,8 @@ export type TuffError =
   | ImmutableAssignment
   | TypeMismatch
   | IndexOutOfRange
-  | UseAfterMove;
+  | UseAfterMove
+  | EmptyArrayLiteral;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -182,6 +191,20 @@ export function indexOutOfRangeAt(where: ErrorWhere, index: number, length: numb
     fix: `Use an index from 0 to ${length - 1}.`,
     why: `Index ${index} is outside an array of length ${length}.`,
     kind: "IndexOutOfRange",
+  });
+}
+
+/**
+ * Builds an EmptyArrayLiteral error for an array literal with no elements.
+ * @param where - The token that opens the empty array.
+ * @returns An Err result holding the EmptyArrayLiteral error.
+ */
+export function emptyArrayAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    where,
+    fix: "Write at least one element, such as [0]; the first element sets the array's type.",
+    why: "An empty array has no element, so its element type cannot be checked.",
+    kind: "EmptyArrayLiteral",
   });
 }
 

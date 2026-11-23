@@ -1,5 +1,5 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { ok, type Result } from "./errors.ts";
+import { emptyArrayAt, ok, type Result } from "./errors.ts";
 import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
@@ -237,9 +237,13 @@ function parseArray(tokens: Token[], pos: number, depth: number, rules: ParseRul
     return nestingTooDeepAt(tokens, pos);
   }
 
+  if (textAt(tokens, pos + 1) === "]") {
+    return emptyArrayAt(whereAt(tokens, pos));
+  }
+
   const elements: Expr[] = [];
   let next = pos + 1;
-  let more = textAt(tokens, next) !== "]";
+  let more = true;
 
   while (more) {
     const element = rules.expr(tokens, next, depth + 1);

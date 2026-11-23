@@ -37,13 +37,28 @@ function typeName(value: Value): string {
     return "a boolean";
   }
 
-  return typeof value === "string" ? "a string" : "an array";
+  if (typeof value === "string") {
+    return "a string";
+  }
+
+  const first = value[0];
+
+  return first === undefined ? "an array" : `an array whose elements are ${typeName(first)}`;
 }
 
-// Two values have the same type when both are arrays or both are the same primitive type.
+// Two values have the same type when both are the same primitive type, or both are
+// arrays whose elements have the same type. An empty array has no element to
+// compare, so it matches any array.
 function sameType(left: Value, right: Value): boolean {
   if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right);
+    if (!Array.isArray(left) || !Array.isArray(right)) {
+      return false;
+    }
+
+    const first = left[0];
+    const other = right[0];
+
+    return first === undefined || other === undefined || sameType(first, other);
   }
 
   return typeof left === typeof right;

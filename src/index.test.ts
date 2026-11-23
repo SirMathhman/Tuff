@@ -516,6 +516,30 @@ test("interpretTuff: nested indexing grid[1][0] returns Ok(3)", () => {
   expect(interpretTuff("let grid = [[1, 2], [3, 4]]; grid[1][0]")).toEqual(ok(3));
 });
 
+test("interpretTuff: reassigning a number array to a string array is a TypeMismatch error", () => {
+  expectErrorKind("let mut a = [1]; a = ['x']; 0", "TypeMismatch");
+});
+
+test("interpretTuff: a nested array of mixed element types is a TypeMismatch error", () => {
+  expectErrorKind("let g = [[1], ['a']]; 0", "TypeMismatch");
+});
+
+test("interpretTuff: replacing a nested array with another of the same type returns Ok(2)", () => {
+  expect(interpretTuff("let mut g = [[1]]; g[0] = [2]; g[0][0]")).toEqual(ok(2));
+});
+
+test("interpretTuff: an empty array literal is an EmptyArrayLiteral error", () => {
+  expectErrorKind("[]", "EmptyArrayLiteral");
+});
+
+test("interpretTuff: using a whole array after it was moved is a UseAfterMove error", () => {
+  expectErrorKind("let a = [1]; let b = a; a[0]", "UseAfterMove");
+});
+
+test("interpretTuff: indexing an array does not move it: Ok(1)", () => {
+  expect(interpretTuff("let a = [1]; let b = a[0]; a[0]")).toEqual(ok(1));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
