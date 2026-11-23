@@ -423,6 +423,18 @@ test("interpretTuff: the else branch stops before && and is a TypeMismatch", () 
   expectErrorKind("if (true) 1 else 2 && true", "TypeMismatch");
 });
 
+test("interpretTuff: 5000 nested ! returns NestingTooDeep", () => {
+  expectErrorKind("!".repeat(5000) + "true", "NestingTooDeep");
+});
+
+test("interpretTuff: 1001 nested else-if returns NestingTooDeep", () => {
+  expectErrorKind("if (false) 1 else ".repeat(1001) + "2", "NestingTooDeep");
+});
+
+test("interpretTuff: else-if still works and returns Ok(2)", () => {
+  expect(interpretTuff("if (false) 1 else if (true) 2 else 3")).toEqual(ok(2));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
