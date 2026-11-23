@@ -183,6 +183,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
+7. Derive the annotation names, the `let` type check, and the `let` error hint from one declaration in `ast.ts`, instead of writing `Bool` and the type list by hand in three places.
 
 ### Later
 
