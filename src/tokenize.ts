@@ -115,8 +115,12 @@ function wordToken(word: string, pos: number): Token {
   return { kind: "name", name: word, pos };
 }
 
+// Splits the source into tokens in one pass. Tokens go into a local buffer that
+// is written by index only and returned once complete, so the tokenizer is
+// linear. This is the one place where an array is mutated (see invariant 7).
 export function tokenize(source: string): Result<Token[], TuffError> {
-  let tokens: Token[] = [];
+  const buffer: Token[] = [];
+  let count = 0;
   let index = 0;
   while (index < source.length) {
     const char = source.charAt(index);
@@ -125,46 +129,52 @@ export function tokenize(source: string): Result<Token[], TuffError> {
       while (end < source.length && isDigit(source.charAt(end))) {
         end++;
       }
-      tokens = [
-        ...tokens,
-        {
-          kind: "number",
-          value: Number(source.slice(index, end)),
-          pos: index,
-        },
-      ];
+      buffer[count] = {
+        kind: "number",
+        value: Number(source.slice(index, end)),
+        pos: index,
+      };
+      count++;
       index = end;
     } else if (isLetter(char)) {
       let end = index;
       while (end < source.length && isLetter(source.charAt(end))) {
         end++;
       }
-      const word = source.slice(index, end);
-      tokens = [...tokens, wordToken(word, index)];
+      buffer[count] = wordToken(source.slice(index, end), index);
+      count++;
       index = end;
     } else if (char === "+" || char === "-" || char === "*") {
-      tokens = [...tokens, { kind: "operator", symbol: char, pos: index }];
+      buffer[count] = { kind: "operator", symbol: char, pos: index };
+      count++;
       index++;
     } else if (char === "(" || char === "{") {
-      tokens = [...tokens, { kind: "open", symbol: char, pos: index }];
+      buffer[count] = { kind: "open", symbol: char, pos: index };
+      count++;
       index++;
     } else if (char === ")" || char === "}") {
-      tokens = [...tokens, { kind: "close", symbol: char, pos: index }];
+      buffer[count] = { kind: "close", symbol: char, pos: index };
+      count++;
       index++;
     } else if (char === "|" && source.charAt(index + 1) === "|") {
-      tokens = [...tokens, { kind: "or", pos: index }];
+      buffer[count] = { kind: "or", pos: index };
+      count++;
       index += 2;
     } else if (char === "&" && source.charAt(index + 1) === "&") {
-      tokens = [...tokens, { kind: "and", pos: index }];
+      buffer[count] = { kind: "and", pos: index };
+      count++;
       index += 2;
     } else if (char === "&") {
-      tokens = [...tokens, { kind: "ampersand", pos: index }];
+      buffer[count] = { kind: "ampersand", pos: index };
+      count++;
       index++;
     } else if (char === "=") {
-      tokens = [...tokens, { kind: "equals", pos: index }];
+      buffer[count] = { kind: "equals", pos: index };
+      count++;
       index++;
     } else if (char === ";") {
-      tokens = [...tokens, { kind: "semicolon", pos: index }];
+      buffer[count] = { kind: "semicolon", pos: index };
+      count++;
       index++;
     } else if (char.trim() === "") {
       index++;
@@ -177,7 +187,7 @@ export function tokenize(source: string): Result<Token[], TuffError> {
       });
     }
   }
-  return ok(tokens);
+  return ok(buffer.slice(0, count));
 }
 
 // The source text a token stands for, for use in messages.

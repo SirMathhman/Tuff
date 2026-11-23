@@ -88,8 +88,10 @@ Invariants:
    and reads the token itself. Helpers that receive a token take a definite
    `Token`. This keeps the "end of input" case in one place.
 7. Arrays are immutable. `Array.prototype.push` is banned (ESLint
-   `no-restricted-syntax`). Build a new array with spread instead. The cost of
-   this rule is noted in Performance; see Future Work for how it is resolved.
+   `no-restricted-syntax`). Build a new array with spread instead. One exception:
+   `tokenize` collects tokens in a local buffer that it writes by index only and
+   returns (as a copy) once complete. No other code sees the buffer, so the
+   tokenizer is linear.
 8. A reference never outlives the block that declares its target. When a block
    closes, any enclosing variable that holds a reference to one of the block's
    own variables is an error (`ReferenceEscapesBlock`). Slots of closed blocks
@@ -252,9 +254,9 @@ maximum length, so a long name in the source cannot make an error message long.
   the sequence parser once. A sequence of very many statements grows the call
   stack with no depth bound and no `TuffError`, which can end in a thrown
   `RangeError`. Bracket depth is limited, but statement count is not.
-- **Quadratic tokenizing.** Invariant 7 forces each token to be appended with a
-  spread, which copies the whole array. Tokenizing is therefore O(n^2) in the
-  number of tokens.
+- **Quadratic scope copying.** Each `let` copies the scope tables (see
+  Performance). With the 10,000-character source limit, this stays within a few
+  seconds, but it is still O(k^2) in the number of statements.
 - **Unbounded names in messages.** Undefined-variable, duplicate-variable, and
   missing-`=` messages echo the full name. A 5,000-character name produces a
   5,000-character error message.
@@ -286,7 +288,7 @@ Controls the architecture should have:
 | ---------------------------------------------- | ---------------------------------- |
 | No dynamic code execution (`eval`, `Function`) | Present                            |
 | Malformed input is rejected, not coerced       | Present for the rules in Errors    |
-| Input length limit                             | Missing                            |
+| Input length limit                             | Present (10,000 characters)        |
 | Non-finite results are reported as errors      | Missing                            |
 | Error messages do not echo unbounded input     | Missing (names are echoed in full) |
 | Nesting depth limit for brackets               | Present                            |
@@ -316,22 +318,17 @@ performs no state changes.
   bounds the stack for long sequences of statements.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not after.
-- Make tokenizing linear. Decide how a linear builder fits invariant 7, for
-  example a local buffer owned by one function and returned as `readonly`, and
-  state that decision in Invariants.
 - Truncate names in error messages to a fixed maximum length.
 - Add tests for every error variant, with one test per rule violated.
-- Add a length limit on source input.
 
 ## Performance
 
 These are obvious concerns only. Measure with a profiler before optimizing.
 
-- Tokenizing is O(n^2) in the number of tokens because of the spread-based
-  append (see Potential Problems). This is the first thing to fix.
+- Tokenizing is linear (see invariant 7). Source is capped at 10,000 characters.
 - Each `let` or assignment copies the scope's name map, own-name set, and cell
-  table, so a sequence with k statements copies O(k^2) entries. Fine for
-  expected inputs, but it is the next cost after tokenizing.
+  table, so a sequence with k statements copies O(k^2) entries. The source cap
+  bounds this; it is the main remaining cost.
 - Variable lookup walks the scope chain, one step per enclosing block. Fine for
   expected inputs.
 - String concatenation while building digits is linear in the number of

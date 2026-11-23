@@ -245,6 +245,18 @@ test('interpretTuff("let x = true; x") => 1', () => {
   expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
 });
 
+test("interpretTuff with 10001 characters => source too long error", () => {
+  expect(interpretTuff("1".repeat(10001))).toEqual({
+    ok: false,
+    error: {
+      what: "Source too long",
+      where: 10000,
+      why: "The source is longer than 10000 characters",
+      fix: "Split the program into shorter sources",
+    },
+  });
+});
+
 test('interpretTuff("true && false") => 0', () => {
   expect(interpretTuff("true && false")).toEqual({ ok: true, value: 0 });
 });

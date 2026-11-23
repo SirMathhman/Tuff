@@ -13,6 +13,10 @@ import { parseSequence } from "./parse/sequence.ts";
 // once per level, so this bound keeps it inside the call stack.
 const MAX_NESTING = 1000;
 
+// The longest source accepted. Longer input is rejected before any parsing, which
+// bounds the cost of untrusted input.
+const MAX_SOURCE_LENGTH = 10000;
+
 // Rejects source whose parentheses and braces nest deeper than MAX_NESTING.
 function checkNesting(tokens: Token[]): Result<true, TuffError> {
   let depth = 0;
@@ -62,6 +66,14 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   // a `let mut` variable may be assigned, and "&mut" needs one. A reference may not
   // outlive the block that declares its target. Parentheses and braces nest freely,
   // but each opener must close with its own kind.
+  if (tuffSource.length > MAX_SOURCE_LENGTH) {
+    return err({
+      what: "Source too long",
+      where: MAX_SOURCE_LENGTH,
+      why: `The source is longer than ${MAX_SOURCE_LENGTH} characters`,
+      fix: "Split the program into shorter sources",
+    });
+  }
   const tokenized = tokenize(tuffSource);
   if (!tokenized.ok) {
     return tokenized;
