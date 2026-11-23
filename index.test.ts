@@ -575,3 +575,19 @@ test('interpretTuff("if (true) 2") => missing else error', () => {
     },
   });
 });
+
+test('interpretTuff("if 1 < 2 1 else 2") => condition needs parentheses error', () => {
+  expect(interpretTuff("if 1 < 2 1 else 2")).toEqual({
+    ok: false,
+    error: {
+      what: "Number used as a condition",
+      where: 3,
+      why: '"1" is a number, but an if condition must be a boolean',
+      fix: "Wrap the whole condition in parentheses, such as if (1 < 2) ...",
+    },
+  });
+});
+
+test('interpretTuff("if (1 < 2) 1 else 2") => 1', () => {
+  expect(interpretTuff("if (1 < 2) 1 else 2")).toEqual({ ok: true, value: 1 });
+});
