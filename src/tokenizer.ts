@@ -4,41 +4,43 @@
  * @returns The tokens in source order, with empty strings removed.
  */
 export function tokenize(tuffSource: string): string[] {
-  return tuffSource
-    .replaceAll("\t", " ")
-    .replaceAll("\n", " ")
-    .replaceAll("\r", " ")
-    .replaceAll("<=", "  ")
-    .replaceAll(">=", "  ")
-    .replaceAll("==", "  ")
-    .replaceAll("!=", "  ")
-    .replaceAll("(", " ( ")
-    .replaceAll(")", " ) ")
-    .replaceAll("{", " { ")
-    .replaceAll("}", " } ")
-    .replaceAll("+", " + ")
-    .replaceAll("-", " - ")
-    .replaceAll("*", " * ")
-    .replaceAll(";", " ; ")
-    .replaceAll("=", " = ")
-    .replaceAll("<", " < ")
-    .replaceAll(">", " > ")
-    .split(" ")
-    .filter((token) => token !== "")
-    .map(restoreOperator);
+  const tokens: string[] = [];
+  let current = "";
+  let index = 0;
+
+  while (index < tuffSource.length) {
+    const char = tuffSource.charAt(index);
+    const pair = tuffSource.slice(index, index + 2);
+
+    if (TWO_CHAR_OPERATORS.includes(pair)) {
+      tokens.push(...flush(current), pair);
+      current = "";
+      index += 2;
+    } else if (SPACE.includes(char)) {
+      tokens.push(...flush(current));
+      current = "";
+      index += 1;
+    } else if (SINGLE_CHAR_TOKENS.includes(char)) {
+      tokens.push(...flush(current), char);
+      current = "";
+      index += 1;
+    } else {
+      current += char;
+      index += 1;
+    }
+  }
+
+  return [...tokens, ...flush(current)];
 }
 
-const MARKED_OPERATORS: [string, string][] = [
-  ["", "<="],
-  ["", ">="],
-  ["", "=="],
-  ["", "!="],
-];
+const SPACE = [" ", "\t", "\n", "\r"];
 
-function restoreOperator(token: string): string {
-  const hit = MARKED_OPERATORS.find(([marker]) => marker === token);
+const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!="];
 
-  return hit === undefined ? token : hit[1];
+const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "+", "-", "*", ";", "=", "<", ">"];
+
+function flush(current: string): string[] {
+  return current === "" ? [] : [current];
 }
 
 function isDigit(char: string): boolean {

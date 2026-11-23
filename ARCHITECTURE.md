@@ -65,6 +65,10 @@ Source is untrusted input. It arrives from the REPL, from files, and potentially
 - No `eval`, `Function`, or dynamic import of anything derived from source.
 - No filesystem, network, process, or global access. Host capabilities are passed in explicitly and absent by default.
 
+### Input tokens
+
+- Operators come only from source characters. Internal markers used by the tokenizer are unreachable from source, so a stray marker character in source is an `InvalidTerm` error, never an operator.
+
 ### Limits and output
 
 - Limits on source size, nesting depth, and evaluation steps, so hostile input cannot hang or crash the host.
@@ -79,7 +83,8 @@ Nesting depth is counted for every nested construct; source size and step limits
 ### Near term
 
 1. Replace the token-index `where` of each `TuffError` with character spans.
-2. Split `src/` into subdirectories by stage before adding an eleventh file.
+2. Replace the tokenizer's marker substitution with a character scanner, so source characters never reach the operator table.
+3. Split `src/` into subdirectories by stage before adding an eleventh file.
 
 ### Later
 
