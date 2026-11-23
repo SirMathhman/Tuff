@@ -1,10 +1,26 @@
 import { expect, test } from "bun:test";
-import { interpretTuff } from "./index.ts";
+import { interpretTuff, ok } from "./index.ts";
 
-test("interpretTuff('1') returns 1", () => {
-  expect(interpretTuff("1")).toBe(1);
+test("interpretTuff('1') returns Ok(1)", () => {
+  expect(interpretTuff("1")).toEqual(ok(1));
 });
 
-test("interpretTuff('1 + 2') returns 3", () => {
-  expect(interpretTuff("1 + 2")).toBe(3);
+test("interpretTuff('1 + 2') returns Ok(3)", () => {
+  expect(interpretTuff("1 + 2")).toEqual(ok(3));
+});
+
+test("interpretTuff('') is an error, not 0", () => {
+  expect(interpretTuff("").ok).toBe(false);
+});
+
+test("interpretTuff('   ') is an error, not 0", () => {
+  expect(interpretTuff("   ").ok).toBe(false);
+});
+
+test("interpretTuff('abc') is an error, not NaN", () => {
+  expect(interpretTuff("abc").ok).toBe(false);
+});
+
+test("interpretTuff('0x1F') is an error", () => {
+  expect(interpretTuff("0x1F").ok).toBe(false);
 });

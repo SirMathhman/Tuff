@@ -13,7 +13,7 @@ The ideal architecture for Tuff: a small, pure, layered interpreter whose failur
 
 ## Structure
 
-Dependency direction is strictly downward. No module imports from a module above it, and no cycles exist (verified by a circular-dependency check in CI).
+Dependency direction is strictly downward. No module imports from a module above it, and no cycles exist (verified by the circular-dependency check in the `lint` script).
 
 1. Entry points: REPL and file runner. They read input and print output. They are the only layer allowed to do I/O.
 2. Public API: `interpretTuff` and its types, re-exported from `index.ts`.
@@ -25,7 +25,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 ## Potential Problems
 
-- Silent coercion: `Number(source)` accepts empty and whitespace-only strings (as 0), hex (`0x1F`), and exponents, and returns `NaN` for everything else. None of this is reported as an error.
+- Narrow grammar: `interpretTuff` accepts only non-negative integers joined by `+`. No other operators, parentheses, or negative numbers exist yet.
 - Dependency on JavaScript number syntax: the language grammar is currently JavaScript's, so changing it later is a breaking change.
 - Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
 - Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
@@ -44,10 +44,10 @@ Known gaps: none of these controls exist yet. No size, depth, or step limits are
 
 ## Future Work
 
-- Replace `Number(source)` with a real tokenizer, parser, and evaluator returning `Result`.
+- Replace the split-and-sum implementation with a real tokenizer, parser, and evaluator returning `Result`.
 - Introduce the `TuffError` enum with span information and actionable messages.
 - Add a REPL that prints `TuffError` values in full.
-- Enforce file, function, and directory size limits through lint configuration, plus the circular-dependency check.
+- Tune size limits (file, function, complexity) in `eslint.config.js`; they are currently warnings. Circular-dependency checking already runs in `lint`.
 - Add resource limits (source size, depth, steps) as explicit interpreter options with safe defaults.
 
 ## Performance
