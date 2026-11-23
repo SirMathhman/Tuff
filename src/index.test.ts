@@ -560,6 +560,18 @@ test("interpretTuff: a reference that outlives its block is a ReferenceEscapes e
   expectErrorKind("let y = { let x = 1; &x }; 0", "ReferenceEscapes");
 });
 
+test("interpretTuff: an outer reference reassigned to an inner name is a ReferenceEscapes error", () => {
+  expectErrorKind("let mut x = 1; let mut h = &x; let u = { let y = 2; h = &y; 0 }; *h", "ReferenceEscapes");
+});
+
+test("interpretTuff: an array holding an inner reference is a ReferenceEscapes error", () => {
+  expectErrorKind("let mut x = 1; let mut a = [&x]; let u = { let y = 2; a = [&y]; 0 }; *a[0]", "ReferenceEscapes");
+});
+
+test("interpretTuff: a block-local reference stored in a block-local holder stays valid: Ok(1)", () => {
+  expect(interpretTuff("let mut x = 1; let mut h = &x; let u = { let mut y = 2; let k = &mut y; h = &x; 0 }; *h")).toEqual(ok(1));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
