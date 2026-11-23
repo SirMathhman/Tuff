@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { interpretTuff, ok } from "./index.ts";
+import { interpretTuff, ok, type TuffError } from "./index.ts";
 
-function expectErrorKind(source: string, kind: string): void {
+function expectErrorKind(source: string, kind: TuffError["kind"]): void {
   const result = interpretTuff(source);
   expect(result.ok).toBe(false);
   expect(!result.ok && result.error.kind).toBe(kind);
