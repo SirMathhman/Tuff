@@ -822,6 +822,21 @@ test("interpretTuff: \"let mut x = 0; while (x < 4) x += 1; x\" => 4", () => {
   expect(interpretTuff("let mut x = 0; while (x < 4) x += 1; x")).toEqual(ok(4));
 });
 
+test("interpretTuff: nested while loops run to completion", () => {
+  expect(interpretTuff("let mut x = 0; while (x < 2) while (x < 2) x += 1; x")).toEqual(ok(2));
+  expect(interpretTuff("let mut x = 0; while (x < 3) { while (x < 2) { x += 1; } x += 1; } x")).toEqual(ok(3));
+});
+
+test("interpretTuff: a U8 loop stops at its bound, and a compound assignment past the range is IntegerOutOfRange", () => {
+  expect(interpretTuff("let mut x : U8 = 250U8; while (x < 255U8) { x += 1U8; } x")).toEqual(ok(255));
+  expectErrorKind("let mut x : U8 = 0U8; x += 300U8; x", "IntegerOutOfRange");
+});
+
+test("interpretTuff: a let inside a braced loop body is scoped to each pass, and a missing ';' before '}' is an InvalidTerm error", () => {
+  expect(interpretTuff("let mut x = 0; while (x < 3) { let y = 1; x += y; } x")).toEqual(ok(3));
+  expectErrorKind("let mut x = 0; while (x < 2) { x += 1 } x", "InvalidTerm");
+});
+
 test("interpretTuff: an unbraced while body that is a let is an InvalidTerm error", () => {
   expectErrorKind("let mut x = 0; while (x < 2) let y = 1; x", "InvalidTerm");
 });
