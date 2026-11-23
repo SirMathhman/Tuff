@@ -395,6 +395,34 @@ test("interpretTuff: !1 is a TypeMismatch error", () => {
   expectErrorKind("!1", "TypeMismatch");
 });
 
+test("interpretTuff: false && undefinedName short-circuits and returns Ok(0)", () => {
+  expect(interpretTuff("false && undefinedName")).toEqual(ok(0));
+});
+
+test("interpretTuff: 1 && true is a TypeMismatch at the && operator", () => {
+  expectWhere("1 && true", "TypeMismatch", "&&", 1);
+});
+
+test("interpretTuff: !1 is a TypeMismatch at the ! operator", () => {
+  expectWhere("!1", "TypeMismatch", "!", 0);
+});
+
+test("interpretTuff: 1 == 1 && 2 < 3 returns Ok(1)", () => {
+  expect(interpretTuff("1 == 1 && 2 < 3")).toEqual(ok(1));
+});
+
+test("interpretTuff: a block with logical operators returns Ok(1)", () => {
+  expect(interpretTuff("{ let x = true; !x || x }")).toEqual(ok(1));
+});
+
+test("interpretTuff: !!true nests and returns Ok(1)", () => {
+  expect(interpretTuff("!!true")).toEqual(ok(1));
+});
+
+test("interpretTuff: the else branch stops before && and is a TypeMismatch", () => {
+  expectErrorKind("if (true) 1 else 2 && true", "TypeMismatch");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

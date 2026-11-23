@@ -149,7 +149,7 @@ function parseIf(
     return invalidAt(tokens, then.value.next, "'else' after the then branch", "Every if needs an else branch.");
   }
 
-  const otherwise = expr(tokens, then.value.next + 1, depth + 1);
+  const otherwise = parseComparison(tokens, then.value.next + 1, depth + 1);
 
   if (!otherwise.ok) {
     return otherwise;
@@ -182,7 +182,7 @@ function parseFactor(
   }
 
   if (tokens[pos] === "!") {
-    const operand = parsePrimary(tokens, pos + 1, depth, expr);
+    const operand = parseFactor(tokens, pos + 1, depth, expr);
 
     return operand.ok
       ? ok({ value: { kind: "not", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })

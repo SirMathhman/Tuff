@@ -76,11 +76,11 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Arithmetic and unary operators
 
 - `+`, `-`, and `*` fold left to right, with `*` binding tighter.
-- `!` takes one following primary and a boolean. A single unary `-` precedes a number, a name, or a group.
+- `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a number, a name, or a group.
 
 ### Blocks and if
 
-- `if (cond) a else b` takes a boolean condition and requires both branches.
+- `if (cond) a else b` takes a boolean condition and requires both branches; the else branch is a comparison, so `&&` and `||` after it apply to the whole if.
 - A `{` at statement position opens a statement block when its contents begin with a statement and the token after its `}` ends the statement.
 
 ### Blocks as values
@@ -151,7 +151,6 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Replace the token-index `where` of each `TuffError` with character spans.
 2. Split `src/` into subdirectories by stage before adding an eleventh file.
-3. Decide whether `!` nests, and make the grammar say so.
 
 ### Later
 
