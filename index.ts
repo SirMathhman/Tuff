@@ -121,7 +121,7 @@ function resultTooLargeAt(tokens: string[], index: number): Err<TuffError> {
 function nestingTooDeepAt(tokens: string[], index: number): Err<TuffError> {
   return err({
     kind: "NestingTooDeep",
-    why: `Parentheses nest deeper than ${MAX_NESTING_DEPTH} levels.`,
+    why: `Groups nest deeper than ${MAX_NESTING_DEPTH} levels.`,
     where: whereAt(tokens, index),
     fix: `Reduce the nesting to at most ${MAX_NESTING_DEPTH} levels.`,
   });
@@ -142,20 +142,21 @@ function parsePrimary(
   expr: ExprRule,
 ): Parse {
   const token = tokens[pos];
-  if (token === "(") {
+  if (token === "(" || token === "{") {
     if (depth >= MAX_NESTING_DEPTH) {
       return nestingTooDeepAt(tokens, pos);
     }
+    const closer = token === "(" ? ")" : "}";
     const inner = expr(tokens, pos + 1, depth + 1);
     if (!inner.ok) {
       return inner;
     }
-    if (tokens[inner.value.next] !== ")") {
+    if (tokens[inner.value.next] !== closer) {
       return invalidAt(
         tokens,
         inner.value.next,
-        "')'",
-        "Close the parenthesis with ')'.",
+        `'${closer}'`,
+        `Close the group with '${closer}'.`,
       );
     }
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
@@ -247,6 +248,8 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     .replaceAll("\t", " ")
     .replaceAll("(", " ( ")
     .replaceAll(")", " ) ")
+    .replaceAll("{", " { ")
+    .replaceAll("}", " } ")
     .replaceAll("+", " + ")
     .replaceAll("-", " - ")
     .replaceAll("*", " * ")
@@ -260,7 +263,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     return invalidAt(
       tokens,
       parsed.value.next,
-      "'+', '-', '*', ')', or the end of the input",
+      "'+', '-', '*', a closing ')' or '}', or the end of the input",
       "Remove the extra token, or add an operator before it.",
     );
   }
