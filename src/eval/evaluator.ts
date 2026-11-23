@@ -54,7 +54,7 @@ function combineInteger(link: Link, left: Value, right: Value): Result<Value, Tu
     return divisionByZeroAt(link.where, `A ${left.type}`);
   }
 
-  if ((link.op === "<<" || link.op === ">>") && right.value > 31n) {
+  if ((link.op === "<<" || link.op === ">>") && (right.value < 0n || right.value > 31n)) {
     return bitwiseOutOfRangeAt(link.where, Number(right.value), "a shift from 0 to 31");
   }
 

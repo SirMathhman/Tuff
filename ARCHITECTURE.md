@@ -75,13 +75,13 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Logical and comparison operators
 
 - `||` binds loosest, then `&&`. Both short-circuit and take booleans.
-- Comparisons `<`, `<=`, `>`, `>=`, `==`, and `!=` bind tighter than `&&`, do not chain, and yield booleans. Ordering takes numbers; equality takes two values of one type.
+- Comparisons `<`, `<=`, `>`, `>=`, `==`, and `!=` bind tighter than `&&`, do not chain, and yield booleans. Ordering takes two numbers or two sized integers of one type; equality takes two values of one type.
 
 ### Arithmetic and unary operators
 
 - Bitwise `|` and `&` sit between `&&` and comparisons, and `<<` and `>>` between comparisons and `+ -`. Bitwise operands are 32-bit signed integers and a shift amount is from 0 to 31; otherwise the result is a BitwiseOutOfRange error. The `&` after an operand is bitwise-and, and at the start of an operand it is a reference.
 - `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
-- A sized integer takes `+`, `-`, `*`, `/`, `|`, `&`, `<<`, and `>>` at its own type. Its operands are not limited to 32 bits, but a shift amount is still from 0 to 31. Results must stay within the type's range (otherwise IntegerOutOfRange, or U64OutOfRange for U64). Unary `-` needs a signed type; a `-` directly before a signed literal folds into it, so `-128I8` is valid. A sized integer never mixes with a number or another type, which is a TypeMismatch.
+- A sized integer takes `+`, `-`, `*`, `/`, `|`, `&`, `<<`, and `>>` at its own type. Its operands are not limited to 32 bits, but a shift amount is still from 0 to 31, and a negative shift amount is equally invalid. Results must stay within the type's range, or the result is IntegerOutOfRange, which names the type. Unary `-` needs a signed type; a `-` directly before a signed literal folds into it, so `-128I8` is valid. A sized integer never mixes with a number or another type, which is a TypeMismatch.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if
@@ -98,7 +98,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Names bind with `let`. Undeclared names and assignments to immutable names are errors.
 - Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
-- A sized literal such as `100U64` or `-128I8` is exact and must lie within its type's range (otherwise IntegerOutOfRange, or U64OutOfRange for U64). The suffix is case-sensitive, so `1u64` is an invalid term.
+- A sized literal such as `100U64` or `-128I8` is exact and must lie within its type's range, or the literal is IntegerOutOfRange. The suffix is case-sensitive, so `1u64` is an invalid term.
 
 ### Arrays
 
@@ -174,7 +174,10 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Shrink `eval/evaluator.ts`, which is still over its 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
+3. Shrink `eval/evaluator.ts` and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
+4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
+5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
+6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
 
 ### Later
 
