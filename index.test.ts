@@ -132,6 +132,42 @@ test("interpretTuff with a 100000-term chain returns Ok(100000)", () => {
   expect(interpretTuff(Array(100000).fill("1").join(" + "))).toEqual(ok(100000));
 });
 
+function expectWhere(
+  source: string,
+  kind: TuffError["kind"],
+  text: string,
+  index: number,
+): void {
+  const result = interpretTuff(source);
+  expect(!result.ok && result.error.kind).toBe(kind);
+  expect(!result.ok && result.error.where.text).toBe(text);
+  expect(!result.ok && result.error.where.index).toBe(index);
+}
+
+test("interpretTuff('{1)') is an InvalidTerm error at the stray ')'", () => {
+  expectWhere("{1)", "InvalidTerm", ")", 2);
+});
+
+test("interpretTuff('(1 + 2}') reports the '}' at index 4", () => {
+  expectWhere("(1 + 2}", "InvalidTerm", "}", 4);
+});
+
+test("interpretTuff('{ 1 } }') is an InvalidTerm error at the stray '}'", () => {
+  expectWhere("{ 1 } }", "InvalidTerm", "}", 3);
+});
+
+test("interpretTuff with 1001 nested braces returns NestingTooDeep at index 1000", () => {
+  expectWhere("{".repeat(1001) + "1" + "}".repeat(1001), "NestingTooDeep", "{", 1000);
+});
+
+test("interpretTuff with 1000 nested braces returns Ok(1)", () => {
+  expect(interpretTuff("{".repeat(1000) + "1" + "}".repeat(1000))).toEqual(ok(1));
+});
+
+test("interpretTuff with 50000 nested braces returns NestingTooDeep", () => {
+  expectErrorKind("{".repeat(50000) + "1" + "}".repeat(50000), "NestingTooDeep");
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });

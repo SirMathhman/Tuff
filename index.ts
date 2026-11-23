@@ -43,8 +43,32 @@ export type TuffError =
   | ResultTooLarge
   | NestingTooDeep;
 
-interface Parsed {
+export interface NumberNode {
+  kind: "number";
   value: number;
+}
+
+export interface NegateNode {
+  kind: "negate";
+  operand: Expr;
+}
+
+export interface Link {
+  op: "+" | "-" | "*";
+  operand: Expr;
+  where: ErrorWhere;
+}
+
+export interface ChainNode {
+  kind: "chain";
+  first: Expr;
+  links: Link[];
+}
+
+export type Expr = NumberNode | NegateNode | ChainNode;
+
+interface Parsed {
+  value: Expr;
   next: number;
 }
 
@@ -78,6 +102,20 @@ function isDigits(text: string): boolean {
   );
 }
 
+function tokenize(tuffSource: string): string[] {
+  return tuffSource
+    .replaceAll("\t", " ")
+    .replaceAll("(", " ( ")
+    .replaceAll(")", " ) ")
+    .replaceAll("{", " { ")
+    .replaceAll("}", " } ")
+    .replaceAll("+", " + ")
+    .replaceAll("-", " - ")
+    .replaceAll("*", " * ")
+    .split(" ")
+    .filter((token) => token !== "");
+}
+
 function whereAt(tokens: string[], index: number): ErrorWhere {
   return { index, text: tokens[index] ?? "" };
 }
@@ -109,11 +147,11 @@ function termTooLargeAt(tokens: string[], index: number): Err<TuffError> {
   });
 }
 
-function resultTooLargeAt(tokens: string[], index: number): Err<TuffError> {
+function resultTooLargeAt(where: ErrorWhere): Err<TuffError> {
   return err({
     kind: "ResultTooLarge",
     why: `The running value leaves the safe integer range (±${Number.MAX_SAFE_INTEGER}), so its digits can no longer be stored exactly.`,
-    where: whereAt(tokens, index),
+    where,
     fix: `Keep every intermediate and final result within ±${Number.MAX_SAFE_INTEGER}, for example by splitting the calculation.`,
   });
 }
@@ -131,9 +169,44 @@ function nestingTooDeepAt(tokens: string[], index: number): Err<TuffError> {
 //   expr    := term (("+" | "-") term)*
 //   term    := factor ("*" factor)*
 //   factor  := "-"? primary
-//   primary := number | "(" expr ")"
-// Each rule returns the value and the index of the next unread token.
+//   primary := number | "(" expr ")" | "{" expr "}"
+// The parser builds an AST; evaluate computes the value.
 // primary receives expr as a parameter, so the rules form no static cycle.
+
+function operatorAt(
+  token: string | undefined,
+  allowed: Link["op"][],
+): Link["op"] | undefined {
+  return allowed.find((candidate) => candidate === token);
+}
+
+function parseChain(
+  tokens: string[],
+  pos: number,
+  allowed: Link["op"][],
+  operand: (next: number) => Parse,
+): Parse {
+  const first = operand(pos);
+  if (!first.ok) {
+    return first;
+  }
+  const links: Link[] = [];
+  let next = first.value.next;
+  let op = operatorAt(tokens[next], allowed);
+  while (op !== undefined) {
+    const right = operand(next + 1);
+    if (!right.ok) {
+      return right;
+    }
+    links.push({ op, operand: right.value.value, where: whereAt(tokens, next) });
+    next = right.value.next;
+    op = operatorAt(tokens[next], allowed);
+  }
+  return ok({
+    value: links.length === 0 ? first.value.value : { kind: "chain", first: first.value.value, links },
+    next,
+  });
+}
 
 function parsePrimary(
   tokens: string[],
@@ -165,7 +238,7 @@ function parsePrimary(
     if (Number(token) > Number.MAX_SAFE_INTEGER) {
       return termTooLargeAt(tokens, pos);
     }
-    return ok({ value: Number(token), next: pos + 1 });
+    return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
   }
   return invalidAt(
     tokens,
@@ -184,38 +257,10 @@ function parseFactor(
   if (tokens[pos] === "-") {
     const operand = parsePrimary(tokens, pos + 1, depth, expr);
     return operand.ok
-      ? ok({ value: -operand.value.value, next: operand.value.next })
+      ? ok({ value: { kind: "negate", operand: operand.value.value }, next: operand.value.next })
       : operand;
   }
   return parsePrimary(tokens, pos, depth, expr);
-}
-
-// Folds a left-associative chain: first, then (operator, operand) pairs.
-function foldChain(
-  tokens: string[],
-  first: Parse,
-  isOperator: (token: string | undefined) => boolean,
-  operand: (pos: number) => Parse,
-  apply: (op: string, left: number, right: number) => number,
-): Parse {
-  if (!first.ok) {
-    return first;
-  }
-  let value = first.value.value;
-  let next = first.value.next;
-  while (isOperator(tokens[next])) {
-    const op = tokens[next] ?? "";
-    const right = operand(next + 1);
-    if (!right.ok) {
-      return right;
-    }
-    value = apply(op, value, right.value.value);
-    if (!Number.isSafeInteger(value)) {
-      return resultTooLargeAt(tokens, next);
-    }
-    next = right.value.next;
-  }
-  return ok({ value, next });
 }
 
 function parseTerm(
@@ -224,37 +269,50 @@ function parseTerm(
   depth: number,
   expr: ExprRule,
 ): Parse {
-  return foldChain(
-    tokens,
-    parseFactor(tokens, pos, depth, expr),
-    (token) => token === "*",
-    (next) => parseFactor(tokens, next, depth, expr),
-    (_op, left, right) => left * right,
+  return parseChain(tokens, pos, ["*"], (next) =>
+    parseFactor(tokens, next, depth, expr),
   );
 }
 
 function parseExpr(tokens: string[], pos: number, depth: number): Parse {
-  return foldChain(
-    tokens,
-    parseTerm(tokens, pos, depth, parseExpr),
-    (token) => token === "+" || token === "-",
-    (next) => parseTerm(tokens, next, depth, parseExpr),
-    (op, left, right) => (op === "+" ? left + right : left - right),
+  return parseChain(tokens, pos, ["+", "-"], (next) =>
+    parseTerm(tokens, next, depth, parseExpr),
+  );
+}
+
+function apply(op: Link["op"], left: number, right: number): number {
+  if (op === "+") {
+    return left + right;
+  }
+  return op === "-" ? left - right : left * right;
+}
+
+function evaluate(expr: Expr): Result<number, TuffError> {
+  if (expr.kind === "number") {
+    return ok(expr.value);
+  }
+  if (expr.kind === "negate") {
+    const inner = evaluate(expr.operand);
+    return inner.ok ? ok(-inner.value) : inner;
+  }
+  return expr.links.reduce<Result<number, TuffError>>(
+    (acc, link) => {
+      if (!acc.ok) {
+        return acc;
+      }
+      const right = evaluate(link.operand);
+      if (!right.ok) {
+        return right;
+      }
+      const value = apply(link.op, acc.value, right.value);
+      return Number.isSafeInteger(value) ? ok(value) : resultTooLargeAt(link.where);
+    },
+    evaluate(expr.first),
   );
 }
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
-  const tokens = tuffSource
-    .replaceAll("\t", " ")
-    .replaceAll("(", " ( ")
-    .replaceAll(")", " ) ")
-    .replaceAll("{", " { ")
-    .replaceAll("}", " } ")
-    .replaceAll("+", " + ")
-    .replaceAll("-", " - ")
-    .replaceAll("*", " * ")
-    .split(" ")
-    .filter((token) => token !== "");
+  const tokens = tokenize(tuffSource);
   const parsed = parseExpr(tokens, 0, 0);
   if (!parsed.ok) {
     return parsed;
@@ -267,7 +325,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       "Remove the extra token, or add an operator before it.",
     );
   }
-  return ok(parsed.value.value);
+  return evaluate(parsed.value.value);
 }
 
 // TODO: simple repl with interpretTuff
