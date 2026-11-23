@@ -1,8 +1,18 @@
-export type Ok<T> = { ok: true; value: T };
-export type Err<E> = { ok: false; error: E };
+export interface Ok<T> {
+  ok: true;
+  value: T;
+}
+
+export interface Err<E> {
+  ok: false;
+  error: E;
+}
+
 export type Result<T, E> = Ok<T> | Err<E>;
 
-export type TuffError = { message: string };
+export interface TuffError {
+  message: string;
+}
 
 export function ok<T>(value: T): Ok<T> {
   return { ok: true, value };
