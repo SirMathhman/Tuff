@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { interpretTuff, ok } from "./index.ts";
 
+function expectErrorKind(source: string, kind: string): void {
+  const result = interpretTuff(source);
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.error.kind).toBe(kind);
+}
+
 test("interpretTuff('1') returns Ok(1)", () => {
   expect(interpretTuff("1")).toEqual(ok(1));
 });
@@ -26,15 +32,11 @@ test("interpretTuff('1 - -2') returns Ok(3)", () => {
 });
 
 test("interpretTuff('1+') is an InvalidTerm error", () => {
-  const result = interpretTuff("1+");
-  expect(result.ok).toBe(false);
-  expect(!result.ok && result.error.kind).toBe("InvalidTerm");
+  expectErrorKind("1+", "InvalidTerm");
 });
 
 test("interpretTuff('9007199254740993') is a TermTooLarge error", () => {
-  const result = interpretTuff("9007199254740993");
-  expect(result.ok).toBe(false);
-  expect(!result.ok && result.error.kind).toBe("TermTooLarge");
+  expectErrorKind("9007199254740993", "TermTooLarge");
 });
 
 test("every error has why, where, and fix", () => {
@@ -50,15 +52,11 @@ test("every error has why, where, and fix", () => {
 });
 
 test("interpretTuff('99999999999 * 99999999999') is a ResultTooLarge error", () => {
-  const result = interpretTuff("99999999999 * 99999999999");
-  expect(result.ok).toBe(false);
-  expect(!result.ok && result.error.kind).toBe("ResultTooLarge");
+  expectErrorKind("99999999999 * 99999999999", "ResultTooLarge");
 });
 
 test("interpretTuff('9007199254740991 + 2 - 2') is a ResultTooLarge error", () => {
-  const result = interpretTuff("9007199254740991 + 2 - 2");
-  expect(result.ok).toBe(false);
-  expect(!result.ok && result.error.kind).toBe("ResultTooLarge");
+  expectErrorKind("9007199254740991 + 2 - 2", "ResultTooLarge");
 });
 
 test("interpretTuff('9007199254740991 - 1') returns Ok(9007199254740990)", () => {

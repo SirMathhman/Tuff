@@ -13,7 +13,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "lint": "eslint . && madge --circular --extensions ts .",
+    "lint": "eslint . && madge --circular --extensions ts . && bun run cpd",
     "cpd": "pmd cpd --language typescript --minimum-tokens 30 index.ts index.test.ts"
   }
 }
