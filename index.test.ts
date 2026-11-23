@@ -37,6 +37,70 @@ test('interpretTuff("{ 2 + 3 } * 4") => 20', () => {
   expect(interpretTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test('interpretTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
+  expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test('interpretTuff("{ let x = 1; x } + x") => undefined variable outside its block', () => {
+  expect(interpretTuff("{ let x = 1; x } + x")).toEqual({
+    ok: false,
+    error: {
+      what: "Undefined variable",
+      where: 19,
+      why: '"x" has not been declared',
+      fix: "Declare it first with let x = ...;, or fix the spelling",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; let x = 2; x") => duplicate variable error', () => {
+  expect(interpretTuff("let x = 1; let x = 2; x")).toEqual({
+    ok: false,
+    error: {
+      what: "Duplicate variable",
+      where: 15,
+      why: '"x" is already declared in this block',
+      fix: "Rename this variable, or delete this declaration",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1 x") => missing semicolon error', () => {
+  expect(interpretTuff("let x = 1 x")).toEqual({
+    ok: false,
+    error: {
+      what: "Missing ;",
+      where: 10,
+      why: 'The let statement for "x" must end with ";"',
+      fix: 'Add ";" after its value',
+    },
+  });
+});
+
+test('interpretTuff("let 1 = 2; 3") => missing name error', () => {
+  expect(interpretTuff("let 1 = 2; 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Missing name",
+      where: 4,
+      why: 'Found "1" where a variable name is required',
+      fix: 'Use a name made of letters and "_" after let, such as let x = 1;',
+    },
+  });
+});
+
+test('interpretTuff("1;") => unexpected semicolon error', () => {
+  expect(interpretTuff("1;")).toEqual({
+    ok: false,
+    error: {
+      what: "Unexpected semicolon",
+      where: 1,
+      why: 'A ";" may only end a let statement',
+      fix: 'Delete this ";", or put a let statement before it',
+    },
+  });
+});
+
 test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
   expect(interpretTuff("{ 2 + 3")).toEqual({
     ok: false,

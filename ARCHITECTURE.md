@@ -9,20 +9,28 @@ as the language grows. It describes the ideal, not the current code.
 - **Tuff source**: a string written by a user or a program. It is untrusted.
 - **Number**: a decimal literal made of ASCII digits. Values use IEEE-754 double
   precision, the same as JavaScript `number`.
-- **Factor**: a number, or a grouped expression `( expression )` or
-  `{ expression }`. A sign is never written directly before a factor; a sign is
-  part of an expression.
+- **Name**: a run of ASCII letters and `_`. `let` is reserved and cannot be a
+  name.
+- **Factor**: a number, a name, or a grouped expression `( expression )` or a
+  block `{ sequence }`. A sign is never written directly before a factor; a sign
+  is part of an expression.
+- **Sequence**: zero or more `let name = expression ;` statements, then one
+  expression. The sequence evaluates to its final expression. A `let` name is
+  visible to the rest of its sequence, and a name may be declared only once per
+  sequence. Names are not visible after the block that declares them closes.
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
   of its factors.
 - **Expression**: an optional leading sign, then one or more terms joined by
   `+` or `-`. An expression evaluates to the sum of its signed terms.
-- **Grouping**: parentheses and braces change precedence. `(2 + 3) * 4` and
-  `{ 2 + 3 } * 4` are both 20. Groups nest freely, but each opener must close
-  with its own kind: `( 2 }` is an error. Empty groups `()` and `{}` are errors.
+- **Grouping**: parentheses change precedence. Braces group a sequence, so their
+  lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both
+  20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
+  is an error. Empty groups `()` and `{}` are errors.
 - **Precedence**: `*` binds tighter than `+` and `-`. Evaluation is left to
   right within each level.
-- **Token**: a classified piece of source (number, `+`, `-`, `*`, `(`, `)`, `{`,
-  `}`, or whitespace). Whitespace is dropped after tokenizing.
+- **Token**: a classified piece of source (number, name, `let`, `=`, `;`, `+`,
+  `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
+  tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
 - **Result**: `{ ok: true, value } | { ok: false, error }`. The only way a
@@ -118,8 +126,11 @@ Planned variants (initial set):
   an operator or `)` is found. Covers `2 *`, `2 * + 3`, and `()`.
 - `MissingOperator { offset }`: two numbers or groups are adjacent with no
   operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
-- `UnmatchedParenthesis { offset, kind }`: a `(` with no `)`, or a `)` with
-  no `(`. `kind` is `"open"` or `"close"`.
+- `UnmatchedBracket { offset, symbol }`: an opener with no closer, or a closer
+  with no opener. `symbol` is one of `(`, `)`, `{`, `}`.
+- `MismatchedBracket { offset, opener, openerOffset }`: a closer that does not
+  match the innermost open group, for example `( 2 }`. `opener` is the
+  innermost opening symbol and `openerOffset` is where it sits.
 - `NestingTooDeep { offset, limit }`: parentheses nest beyond the depth
   limit.
 
@@ -187,7 +198,7 @@ performs no state changes.
 - Return `Result<number, TuffError>` from `interpretTuff`. Update callers and
   tests together.
 - Make the parser non-recursive, following the Recursion section.
-- Report unmatched `(` as `UnmatchedParenthesis` before parsing the group's
+- Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not as `MissingNumber`.
 - Add a nesting depth limit that returns `NestingTooDeep`.
 - Add tests for every error variant, with one test per rule violated.
