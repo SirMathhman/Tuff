@@ -13,6 +13,8 @@ interface Scope {
   parent?: Scope;
 }
 
+type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<number, TuffError>;
+
 function apply(op: Link["op"], left: number, right: number): number {
   if (op === "+") {
     return left + right;
@@ -35,6 +37,7 @@ function evaluateBlock(
   bindings: Binding[],
   result: Expr,
   scope: Scope | undefined,
+  evaluateRule: EvalRule,
 ): Result<number, TuffError> {
   const inner = bindings.reduce<Result<Scope | undefined, TuffError>>(
     (acc, binding) => {
@@ -42,7 +45,7 @@ function evaluateBlock(
         return acc;
       }
 
-      const value = evaluate(binding.value, acc.value);
+      const value = evaluateRule(binding.value, acc.value);
 
       if (!value.ok) {
         return value;
@@ -57,7 +60,7 @@ function evaluateBlock(
     return inner;
   }
 
-  return evaluate(result, inner.value);
+  return evaluateRule(result, inner.value);
 }
 
 /**
@@ -84,7 +87,7 @@ export function evaluate(expr: Expr, scope?: Scope): Result<number, TuffError> {
   }
 
   if (expr.kind === "block") {
-    return evaluateBlock(expr.bindings, expr.result, scope);
+    return evaluateBlock(expr.bindings, expr.result, scope, evaluate);
   }
 
   return expr.links.reduce<Result<number, TuffError>>(

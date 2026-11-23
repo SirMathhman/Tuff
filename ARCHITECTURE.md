@@ -9,6 +9,9 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function of the interpreter.
 - **Value**: the result of evaluating a program. Numbers only for now.
+- **Binding**: a name paired with a value, introduced by `let`.
+- **Scope**: the bindings visible at a point, innermost first. Inner blocks shadow outer names; the last declaration wins.
+- **Block**: a body of bindings followed by a result expression.
 
 ### Errors and purity
 
@@ -29,19 +32,22 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 ### Stages and tests
 
 1. Pipeline: `tokenizer.ts`, then `parser.ts` (AST), then `evaluator.ts`. Each stage is a pure function.
-2. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
+2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
+3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 
 ### Recursion
 
-Recursion is limited to the parser and evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. The evaluator never runs during parsing.
+Recursion is limited to the parser and evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. Helpers that need the evaluator, such as block evaluation, receive it the same way. The evaluator never runs during parsing.
 
 ## Potential Problems
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket. Spaces and tabs separate tokens. Names bind with `let name = expr;` at top level or inside braces, ending in a final expression: the last declaration wins, inner blocks shadow outer names, and undeclared names are errors.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
+- Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
+- Names bind with `let`, and undeclared names are errors. A block ends in a final expression.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
-- Grammar follows JavaScript number syntax; changing it later is breaking.
+- Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 
 ### Resources and failure modes
 
@@ -86,6 +92,7 @@ Nesting depth is limited to 1000 levels; source size and step limits are not enf
 
 - Tokenizing and parsing should be linear in source length. Avoid regular expressions with nested quantifiers, which backtrack badly on adversarial input.
 - Step limits will guard against unbounded loops, which the language will eventually need.
+- Scope lookup walks the bindings in order, so a long run of `let` statements can make evaluation quadratic. A map keyed by name avoids this.
 
 ### Measurement
 
