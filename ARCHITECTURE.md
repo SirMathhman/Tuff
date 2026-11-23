@@ -15,6 +15,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
+- **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
 - **Block**: bindings followed by one result expression.
 
 ### Errors and purity
@@ -38,7 +39,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 1. `tokenizer.ts`: a character scanner that emits typed tokens, each with its kind and text.
 2. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
-3. `evaluator.ts`: a pure fold over the AST.
+3. `evaluator.ts`: a fold over the AST. It changes cells in place for assignment and moves until Future Work item 3 lands.
 
 ### Shared rules
 
@@ -103,7 +104,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - Indexing a name does not move it. Reading a whole array by name moves it, so a later use is a UseAfterMove error until the name is assigned again.
 - A nested array read is a copy, so the copy can be changed without touching its source.
 - Arrays cannot be compared or returned as a program result.
-- `&x` borrows a declared name read-only and `&mut x` borrows it writably (only if `x` is mut). `*r` reads through a reference and `*r = v;` writes through a mutable one. A reference stays inside the block of the name it points to, and cannot be a program result or compared.
+- `&x` borrows a declared name read-only and `&mut x` borrows it writably (only if `x` is mut). `*r` reads through a reference and `*r = v;` writes through a mutable one. Reading through a reference copies the value, so it never moves the target. A reference cannot be stored where its target would outlive it (ReferenceEscapes), and cannot be a program result or compared.
 
 ### Tokens
 
@@ -121,6 +122,11 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Very large sources and deeply nested expressions can exhaust time or the call stack.
 - Nesting counts every nested construct against one limit of 1000 levels. Exceeding it is `NestingTooDeep`.
+
+### References
+
+- A read-only borrow observes later writes to its target, and no borrow excludes another, so aliasing is unrestricted.
+- Storage checks compare the target with the holder's scope, not the scope of the store, so a block cannot leave a reference behind in an outer binding.
 
 ### Stack safety
 
@@ -162,9 +168,10 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 ### Near term
 
-1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
-2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Split `src/` into subdirectories by stage before adding an eleventh file.
+1. Check reference storage against the holder's scope, so a reference cannot be stored into an outer binding or array slot.
+2. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
+3. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
+4. Split `src/` into subdirectories by stage before adding an eleventh file, and split `evaluator.ts`, which is over its 500-line limit.
 
 ### Later
 

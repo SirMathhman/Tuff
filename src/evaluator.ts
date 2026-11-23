@@ -26,6 +26,19 @@ function isReference(value: Value): value is Reference {
 }
 
 // A reference stays valid only while its target binding is in the scope chain.
+// True when a value holds a reference whose target is not visible from holder, at any depth.
+function escapes(value: Value, holder: Scope | undefined): boolean {
+  if (isReference(value)) {
+    return !isVisible(value.target, holder);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((element) => escapes(element, holder));
+  }
+
+  return false;
+}
+
 function isVisible(target: Scope, scope: Scope | undefined): boolean {
   let current = scope;
 
@@ -187,7 +200,7 @@ function assign(
     return typeMismatchAt(statement.where, typeName(target.cell.value), typeName(value.value));
   }
 
-  if (isReference(value.value) && !isVisible(value.value.target, scope)) {
+  if (escapes(value.value, target)) {
     return referenceEscapesAt(statement.where);
   }
 
@@ -264,7 +277,7 @@ function assignElement(
     return typeMismatchAt(where, typeName(current), typeName(replacement.value));
   }
 
-  if (isReference(replacement.value) && !isVisible(replacement.value.target, scope)) {
+  if (escapes(replacement.value, target)) {
     return referenceEscapesAt(where);
   }
 
@@ -324,7 +337,7 @@ function runStatements(
         return value;
       }
 
-      if (isReference(value.value) && !isVisible(value.value.target, acc.value)) {
+      if (escapes(value.value, acc.value)) {
         return referenceEscapesAt(statement.where);
       }
 
@@ -567,7 +580,7 @@ function evaluateArray(elements: Expr[], where: ErrorWhere, scope: Scope | undef
         return value;
       }
 
-      if (isReference(value.value) && !isVisible(value.value.target, scope)) {
+      if (escapes(value.value, scope)) {
         return referenceEscapesAt(where);
       }
 
@@ -643,11 +656,9 @@ function evaluateDeref(operand: Expr, where: ErrorWhere, scope: Scope | undefine
     return useAfterMoveAt({ index: where.index, text: target.name });
   }
 
-  if (Array.isArray(target.cell.value)) {
-    target.cell.moved = true;
-  }
+  const value = target.cell.value;
 
-  return ok(target.cell.value);
+  return ok(Array.isArray(value) ? [...value] : value);
 }
 
 // *name = value; writes through a mutable reference held by name.
@@ -686,7 +697,7 @@ function assignThroughReference(
     return typeMismatchAt(where, typeName(target.cell.value), typeName(replacement.value));
   }
 
-  if (isReference(replacement.value) && !isVisible(replacement.value.target, scope)) {
+  if (escapes(replacement.value, target)) {
     return referenceEscapesAt(where);
   }
 
