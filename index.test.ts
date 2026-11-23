@@ -33,6 +33,18 @@ test("interpretTuff('9007199254740993') is a TermTooLarge error", () => {
   expect(!result.ok && result.error.kind).toBe("TermTooLarge");
 });
 
+test("every error has why, where, and fix", () => {
+  ["1+", "9007199254740993", "abc"].forEach((source) => {
+    const result = interpretTuff(source);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.why).not.toBe("");
+      expect(result.error.where.index).toBeGreaterThanOrEqual(0);
+      expect(result.error.fix).not.toBe("");
+    }
+  });
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });

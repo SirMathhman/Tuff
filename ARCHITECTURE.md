@@ -71,7 +71,7 @@ None of these controls exist yet: no size, depth, or step limits are enforced. M
 ### Near term
 
 1. Replace the split-and-sum implementation with a tokenizer, parser, and evaluator returning `Result`.
-2. Add spans to `TuffError` and extend it beyond the `InvalidTerm` variant.
+2. Replace the token-index `where` of each `TuffError` with character spans.
 
 ### Later
 
