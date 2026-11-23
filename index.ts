@@ -10,8 +10,16 @@ export interface Err<E> {
 
 export type Result<T, E> = Ok<T> | Err<E>;
 
-export interface TuffError {
-  message: string;
+export interface InvalidTerm {
+  kind: "InvalidTerm";
+  term: string;
+  index: number;
+}
+
+export type TuffError = InvalidTerm;
+
+export function describeError(error: TuffError): string {
+  return `Invalid term ${JSON.stringify(error.term)} at index ${error.index}`;
 }
 
 export function ok<T>(value: T): Ok<T> {
@@ -42,8 +50,13 @@ function parseTerm(chunk: string): Term {
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const terms = tuffSource.replaceAll("-", "+-").split("+").map(parseTerm);
-  if (!terms.every((term) => isDigits(term.text))) {
-    return err({ message: `Invalid number in: ${JSON.stringify(tuffSource)}` });
+  const invalidIndex = terms.findIndex((term) => !isDigits(term.text));
+  if (invalidIndex !== -1) {
+    return err({
+      kind: "InvalidTerm",
+      term: terms[invalidIndex]?.text ?? "",
+      index: invalidIndex,
+    });
   }
   return ok(
     terms.reduce((sum, term) => sum + term.sign * Number(term.text), 0),
