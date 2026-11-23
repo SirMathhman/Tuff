@@ -26,12 +26,12 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 ### Layers
 
 1. Entry points: REPL and file runner. The only layer allowed to do I/O.
-2. Public API: `interpretTuff` and its types, re-exported from `index.ts`.
+2. Public API: `interpretTuff` and the types it returns, exported from `index.ts`. Constructor helpers such as `ok` and `undefinedNameAt` stay internal.
 3. Shared core (`errors.ts`): `Result`, `TuffError`, `Span`, `Value`. Depends on nothing else.
 
 ### Stages and tests
 
-1. Pipeline: `tokenizer.ts`, then `parser.ts` (AST), then `evaluator.ts`. Each stage is a pure function.
+1. Pipeline: `tokenizer.ts`, then `parser.ts` (AST), then `evaluator.ts`. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
 2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
 3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 
