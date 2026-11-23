@@ -478,3 +478,19 @@ test('interpretTuff("2 == 2") => 1', () => {
 test('interpretTuff("2 != 2") => 0', () => {
   expect(interpretTuff("2 != 2")).toEqual({ ok: true, value: 0 });
 });
+
+test('interpretTuff("2 < true") => boolean used as a number error', () => {
+  expect(interpretTuff("2 < true")).toEqual({
+    ok: false,
+    error: {
+      what: "Boolean used as a number",
+      where: 4,
+      why: '"true" is a boolean, not a number',
+      fix: "Use a number instead of the boolean, or drop the operator",
+    },
+  });
+});
+
+test('interpretTuff("1 < 2 && 2 < 3") => 1', () => {
+  expect(interpretTuff("1 < 2 && 2 < 3")).toEqual({ ok: true, value: 1 });
+});
