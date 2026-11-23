@@ -68,6 +68,27 @@ interface LetStatement {
   name: string;
   mutable: boolean;
   value: Expr;
+  where: ErrorWhere;
+}
+
+interface RefNode {
+  kind: "ref";
+  name: string;
+  mutable: boolean;
+  where: ErrorWhere;
+}
+
+interface DerefNode {
+  kind: "deref";
+  operand: Expr;
+  where: ErrorWhere;
+}
+
+interface DerefAssignStatement {
+  kind: "derefAssign";
+  name: string;
+  value: Expr;
+  where: ErrorWhere;
 }
 
 /**
@@ -108,7 +129,13 @@ interface ElementStatement {
   where: ErrorWhere;
 }
 
-export type Statement = LetStatement | AssignStatement | ScopeStatement | BranchStatement | ElementStatement;
+export type Statement =
+  | LetStatement
+  | AssignStatement
+  | ScopeStatement
+  | BranchStatement
+  | ElementStatement
+  | DerefAssignStatement;
 
 interface BlockNode {
   kind: "block";
@@ -151,6 +178,8 @@ interface IndexNode {
 export type Expr =
   | ArrayNode
   | IndexNode
+  | RefNode
+  | DerefNode
   | NumberNode
   | BooleanNode
   | StringNode

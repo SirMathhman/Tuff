@@ -294,6 +294,19 @@ function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseR
   return ok({ value: target, next });
 }
 
+// A borrow of a declared name: &name, or &mut name for a writable reference.
+function parseRef(tokens: Token[], pos: number): Parse {
+  const mutable = textAt(tokens, pos + 1) === "mut";
+  const nameIndex = mutable ? pos + 2 : pos + 1;
+  const name = textAt(tokens, nameIndex);
+
+  if (!isIdentifier(name)) {
+    return invalidAt(tokens, nameIndex, "a name after '&'", "Write the name of the value to borrow after '&'.");
+  }
+
+  return ok({ value: { kind: "ref", name, mutable, where: whereAt(tokens, pos) }, next: nameIndex + 1 });
+}
+
 function parseFactor(
   tokens: Token[],
   pos: number,
@@ -317,6 +330,22 @@ function parseFactor(
 
     return operand.ok
       ? ok({ value: { kind: "not", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
+      : operand;
+  }
+
+  if (textAt(tokens, pos) === "&") {
+    return parseRef(tokens, pos);
+  }
+
+  if (textAt(tokens, pos) === "*") {
+    if (depth >= MAX_NESTING_DEPTH) {
+      return nestingTooDeepAt(tokens, pos);
+    }
+
+    const operand = parseFactor(tokens, pos + 1, depth + 1, rules);
+
+    return operand.ok
+      ? ok({ value: { kind: "deref", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
       : operand;
   }
 

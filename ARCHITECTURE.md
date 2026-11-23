@@ -103,6 +103,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - Indexing a name does not move it. Reading a whole array by name moves it, so a later use is a UseAfterMove error until the name is assigned again.
 - A nested array read is a copy, so the copy can be changed without touching its source.
 - Arrays cannot be compared or returned as a program result.
+- `&x` borrows a declared name read-only and `&mut x` borrows it writably (only if `x` is mut). `*r` reads through a reference and `*r = v;` writes through a mutable one. A reference stays inside the block of the name it points to, and cannot be a program result or compared.
 
 ### Tokens
 

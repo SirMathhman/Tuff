@@ -2,6 +2,7 @@ import {
   ok,
   immutableAssignmentAt,
   indexOutOfRangeAt,
+  referenceEscapesAt,
   resultTooLargeAt,
   typeMismatchAt,
   undefinedNameAt,
@@ -12,7 +13,32 @@ import {
 } from "./errors.ts";
 import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "./ast.ts";
 
-type Value = number | boolean | string | Value[];
+// A borrow of a binding: reads see the binding's current value, and writes go to it.
+interface Reference {
+  target: Scope;
+  mutable: boolean;
+}
+
+type Value = number | boolean | string | Value[] | Reference;
+
+function isReference(value: Value): value is Reference {
+  return typeof value === "object" && !Array.isArray(value);
+}
+
+// A reference stays valid only while its target binding is in the scope chain.
+function isVisible(target: Scope, scope: Scope | undefined): boolean {
+  let current = scope;
+
+  while (current !== undefined) {
+    if (current === target) {
+      return true;
+    }
+
+    current = current.parent;
+  }
+
+  return false;
+}
 
 interface Cell {
   value: Value;
@@ -41,6 +67,10 @@ function typeName(value: Value): string {
     return "a string";
   }
 
+  if (isReference(value)) {
+    return "a reference";
+  }
+
   const first = value[0];
 
   return first === undefined ? "an array" : `an array whose elements are ${typeName(first)}`;
@@ -50,6 +80,10 @@ function typeName(value: Value): string {
 // arrays whose elements have the same type. An empty array has no element to
 // compare, so it matches any array.
 function sameType(left: Value, right: Value): boolean {
+  if (isReference(left) || isReference(right)) {
+    return isReference(left) && isReference(right);
+  }
+
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!Array.isArray(left) || !Array.isArray(right)) {
       return false;
@@ -153,6 +187,10 @@ function assign(
     return typeMismatchAt(statement.where, typeName(target.cell.value), typeName(value.value));
   }
 
+  if (isReference(value.value) && !isVisible(value.value.target, scope)) {
+    return referenceEscapesAt(statement.where);
+  }
+
   target.cell.value = value.value;
   target.cell.moved = false;
 
@@ -226,6 +264,10 @@ function assignElement(
     return typeMismatchAt(where, typeName(current), typeName(replacement.value));
   }
 
+  if (isReference(replacement.value) && !isVisible(replacement.value.target, scope)) {
+    return referenceEscapesAt(where);
+  }
+
   array[slot.value] = replacement.value;
 
   return ok(scope);
@@ -244,6 +286,10 @@ function runStatements(
 
       if (statement.kind === "assign") {
         return assign(statement, acc.value, evaluateRule);
+      }
+
+      if (statement.kind === "derefAssign") {
+        return assignThroughReference(statement.name, statement.value, statement.where, acc.value, evaluateRule);
       }
 
       if (statement.kind === "element") {
@@ -276,6 +322,10 @@ function runStatements(
 
       if (!value.ok) {
         return value;
+      }
+
+      if (isReference(value.value) && !isVisible(value.value.target, acc.value)) {
+        return referenceEscapesAt(statement.where);
       }
 
       return ok({
@@ -408,8 +458,8 @@ function numericCompare(op: CompareOp, left: number, right: number): boolean {
 }
 
 function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return typeMismatchAt(where, "a number, boolean, or string", "an array");
+  if (typeof left === "object" || typeof right === "object") {
+    return typeMismatchAt(where, "a number, boolean, or string", "an array or a reference");
   }
 
   if (op === "==" || op === "!=") {
@@ -517,6 +567,10 @@ function evaluateArray(elements: Expr[], where: ErrorWhere, scope: Scope | undef
         return value;
       }
 
+      if (isReference(value.value) && !isVisible(value.value.target, scope)) {
+        return referenceEscapesAt(where);
+      }
+
       const first = acc.value[0];
 
       if (first !== undefined && !sameType(first, value.value)) {
@@ -558,6 +612,90 @@ function readWithoutMoving(name: string, where: ErrorWhere, scope: Scope | undef
   return cell.ok ? ok(cell.value.value) : cell;
 }
 
+function evaluateRef(name: string, mutable: boolean, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+  const found = lookup(name, scope);
+
+  if (found === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  if (mutable && !found.mutable) {
+    return immutableAssignmentAt({ index: where.index, text: name });
+  }
+
+  return ok({ target: found, mutable });
+}
+
+function evaluateDeref(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const inner = evaluateRule(operand, scope);
+
+  if (!inner.ok) {
+    return inner;
+  }
+
+  if (!isReference(inner.value)) {
+    return typeMismatchAt(where, "a reference", typeName(inner.value));
+  }
+
+  const target = inner.value.target;
+
+  if (target.cell.moved) {
+    return useAfterMoveAt({ index: where.index, text: target.name });
+  }
+
+  if (Array.isArray(target.cell.value)) {
+    target.cell.moved = true;
+  }
+
+  return ok(target.cell.value);
+}
+
+// *name = value; writes through a mutable reference held by name.
+function assignThroughReference(
+  name: string,
+  value: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Scope | undefined, TuffError> {
+  const holder = lookup(name, scope);
+
+  if (holder === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  if (!isReference(holder.cell.value)) {
+    return typeMismatchAt(where, "a reference", typeName(holder.cell.value));
+  }
+
+  const reference = holder.cell.value;
+
+  if (!reference.mutable) {
+    return immutableAssignmentAt({ index: where.index, text: name });
+  }
+
+  const replacement = evaluateRule(value, scope);
+
+  if (!replacement.ok) {
+    return replacement;
+  }
+
+  const target = reference.target;
+
+  if (!sameType(target.cell.value, replacement.value)) {
+    return typeMismatchAt(where, typeName(target.cell.value), typeName(replacement.value));
+  }
+
+  if (isReference(replacement.value) && !isVisible(replacement.value.target, scope)) {
+    return referenceEscapesAt(where);
+  }
+
+  target.cell.value = replacement.value;
+  target.cell.moved = false;
+
+  return ok(scope);
+}
+
 /**
  * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, bad indexes, moved arrays, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
@@ -575,6 +713,14 @@ export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
 
   if (expr.kind === "reference") {
     return readWhole(expr.name, expr.where, scope);
+  }
+
+  if (expr.kind === "ref") {
+    return evaluateRef(expr.name, expr.mutable, expr.where, scope);
+  }
+
+  if (expr.kind === "deref") {
+    return evaluateDeref(expr.operand, expr.where, scope, evaluate);
   }
 
   if (expr.kind === "array") {

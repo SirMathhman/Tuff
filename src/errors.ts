@@ -128,6 +128,14 @@ export interface EmptyArrayLiteral extends TuffErrorDetails {
   kind: "EmptyArrayLiteral";
 }
 
+/**
+ * A reference would outlive the name it points to.
+ */
+export interface ReferenceEscapes extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "ReferenceEscapes";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -138,7 +146,8 @@ export type TuffError =
   | TypeMismatch
   | IndexOutOfRange
   | UseAfterMove
-  | EmptyArrayLiteral;
+  | EmptyArrayLiteral
+  | ReferenceEscapes;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -191,6 +200,20 @@ export function indexOutOfRangeAt(where: ErrorWhere, index: number, length: numb
     fix: `Use an index from 0 to ${length - 1}.`,
     why: `Index ${index} is outside an array of length ${length}.`,
     kind: "IndexOutOfRange",
+  });
+}
+
+/**
+ * Builds a ReferenceEscapes error for a reference stored where its target is out of scope.
+ * @param where - The token that would store the reference.
+ * @returns An Err result holding the ReferenceEscapes error.
+ */
+export function referenceEscapesAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    where,
+    fix: "Keep the reference inside the block of the value it points to, or copy the value instead.",
+    why: "The referenced name is declared in a block that has already ended.",
+    kind: "ReferenceEscapes",
   });
 }
 

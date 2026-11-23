@@ -540,6 +540,26 @@ test("interpretTuff: indexing an array does not move it: Ok(1)", () => {
   expect(interpretTuff("let a = [1]; let b = a[0]; a[0]")).toEqual(ok(1));
 });
 
+test("interpretTuff: let x = 1; let y = &x; *y returns Ok(1)", () => {
+  expect(interpretTuff("let x = 1; let y = &x; *y")).toEqual(ok(1));
+});
+
+test("interpretTuff: writing through &mut changes the borrowed name: Ok(2)", () => {
+  expect(interpretTuff("let mut x = 1; let y = &mut x; *y = 2; x")).toEqual(ok(2));
+});
+
+test("interpretTuff: writing through a read-only reference is an ImmutableAssignment error", () => {
+  expectErrorKind("let x = 1; let y = &x; *y = 2; x", "ImmutableAssignment");
+});
+
+test("interpretTuff: a program that is a reference is a TypeMismatch error", () => {
+  expectErrorKind("let x = 1; &x", "TypeMismatch");
+});
+
+test("interpretTuff: a reference that outlives its block is a ReferenceEscapes error", () => {
+  expectErrorKind("let y = { let x = 1; &x }; 0", "ReferenceEscapes");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

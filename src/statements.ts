@@ -62,7 +62,7 @@ function parseLet(
   }
 
   return ok({
-    statement: { kind: "let", name, mutable, value: value.value.value },
+    statement: { kind: "let", name, mutable, value: value.value.value, where: whereAt(tokens, nameIndex) },
     next: value.value.next,
   });
 }
@@ -95,6 +95,24 @@ function isElementAssign(tokens: Token[], pos: number): boolean {
   const closing = closingOf(tokens, pos + 1, "[", "]");
 
   return closing !== undefined && textAt(tokens, closing + 1) === "=";
+}
+
+// A write through a reference: *name = expr;
+function isDerefAssign(tokens: Token[], pos: number): boolean {
+  return textAt(tokens, pos) === "*" && isIdentifier(textAt(tokens, pos + 1)) && textAt(tokens, pos + 2) === "=";
+}
+
+function parseDerefAssign(tokens: Token[], pos: number, depth: number, expr: ExprRule): Result<StatementParsed, TuffError> {
+  const value = parseStatementValue(tokens, pos + 3, depth, expr, "assignment");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  return ok({
+    statement: { kind: "derefAssign", name: textAt(tokens, pos + 1), value: value.value.value, where: whereAt(tokens, pos) },
+    next: value.value.next,
+  });
 }
 
 function parseElementAssign(tokens: Token[], pos: number, depth: number, expr: ExprRule): Result<StatementParsed, TuffError> {
@@ -291,7 +309,7 @@ function parseStatementList(
   const statements: Statement[] = [];
   let next = pos;
 
-  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
+  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
     if (textAt(tokens, next) === "if") {
       const branch = parseBranchStatement(tokens, next, depth, expr, parseStatementList);
 
@@ -324,7 +342,9 @@ function parseStatementList(
           ? parseLet(tokens, next, depth, expr)
           : isElementAssign(tokens, next)
             ? parseElementAssign(tokens, next, depth, expr)
-            : parseAssign(tokens, next, depth, expr);
+            : isDerefAssign(tokens, next)
+              ? parseDerefAssign(tokens, next, depth, expr)
+              : parseAssign(tokens, next, depth, expr);
 
       if (!parsed.ok) {
         return parsed;
