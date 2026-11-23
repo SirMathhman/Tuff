@@ -24,10 +24,17 @@ export function parseConditional(
   }
   const conditionValue = condition.value.value;
   if (typeof conditionValue !== "boolean") {
+    const after = tokens[condition.value.next];
+    const followed =
+      after?.kind === "comparison" ||
+      after?.kind === "operator" ||
+      after?.kind === "and" ||
+      after?.kind === "or";
     return err(
       numberAsCondition(
         tokens[index + 1]?.pos ?? end,
         textAt(tokens, index + 1),
+        followed,
       ),
     );
   }

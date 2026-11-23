@@ -147,12 +147,20 @@ export function booleanAsNumber(where: number, text: string): TuffError {
 }
 
 // Reported when an if condition is a number. `text` is the condition's spelling.
-export function numberAsCondition(where: number, text: string): TuffError {
+// `followed` is true when a comparison or operator comes right after the
+// condition, so the condition likely needs parentheses.
+export function numberAsCondition(
+  where: number,
+  text: string,
+  followed: boolean,
+): TuffError {
   return {
     what: "Number used as a condition",
     where,
     why: `${operandSubject(text)} is a number, but an if condition must be a boolean`,
-    fix: "Use a boolean condition, such as true, false, or a comparison",
+    fix: followed
+      ? "Wrap the whole condition in parentheses, such as if (1 < 2) ..."
+      : "Use a boolean condition, such as true, false, or a comparison",
   };
 }
 

@@ -76,9 +76,8 @@ as the language grows. It describes the ideal, not the current code.
   nearby values as equal.
 - **Token**: a classified piece of source (number, name, `let`, `mut`, `if`,
   `else`, `true`, `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `>`, `<=`, `>=`, `==`,
-  `!=`, `+`,
-  `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
-  tokenizing.
+  `!=`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped
+  after tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
 - **Result**: `{ ok: true, value } | { ok: false, error }`. The only way a
@@ -239,7 +238,9 @@ If:
 - `MissingElse { offset }`: an if branch is not followed by `else`. `offset` is
   the token found there, or the source length at the end.
 - `NumberAsCondition { offset, text }`: an if condition is a number, not a
-  boolean. `text` is the condition's spelling.
+  boolean. `text` is the condition's spelling. When the condition is followed
+  by a comparison or another operator, the fix names the parentheses that the
+  condition needs, for example `if (1 < 2) ...`.
 
 Names, assignments, and scope:
 
@@ -295,6 +296,12 @@ maximum length, so a long name in the source cannot make an error message long.
 - **Boolean comparison.** A comparison requires numbers, so `true == true` is
   a `BooleanAsNumber` error, not `true`. Users may expect equality on booleans.
   Extending `==` and `!=` to booleans is a grammar decision, not a parser fix.
+- **Unparenthesized if conditions.** The condition of an if is one factor, so
+  `if 1 < 2 1 else 2` is rejected as a number used as a condition, which
+  misreports the cause. Until the error names the parentheses (see If in
+  Errors), users must write `if (1 < 2) ...`. The one-factor rule exists so
+  that a condition ending in `-1` is not read as subtraction, so the fix is in
+  the message, not the grammar.
 - **Parse and evaluate are fused.** The parser computes values as it reads, so
   there is no syntax tree. This keeps the code small, but it means every rule
   about evaluation is tied to the grammar code, and a later feature that needs
