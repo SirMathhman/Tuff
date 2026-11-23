@@ -51,7 +51,11 @@ function tokenize(source: string): Result<Token[]> {
       while (end < source.length && isDigit(source.charAt(end))) {
         end++;
       }
-      tokens.push({ kind: "number", value: Number(source.slice(index, end)), pos: index });
+      tokens.push({
+        kind: "number",
+        value: Number(source.slice(index, end)),
+        pos: index,
+      });
       index = end;
     } else if (char === "+" || char === "-" || char === "*") {
       tokens.push({ kind: "operator", symbol: char, pos: index });
@@ -78,7 +82,11 @@ function signOf(token: Token | undefined): 1 | -1 | undefined {
   return undefined;
 }
 
-function expectedError<T>(what: string, tokens: Token[], index: number): Result<T> {
+function expectedError<T>(
+  what: string,
+  tokens: Token[],
+  index: number,
+): Result<T> {
   const token = tokens[index];
   const where = token === undefined ? "end of input" : `position ${token.pos}`;
   return err(`Expected ${what} at ${where}`);
@@ -92,7 +100,11 @@ function parseNumber(tokens: Token[], index: number): Result<Parsed> {
   return ok({ value: token.value, next: index + 1 });
 }
 
-function parseTerm(tokens: Token[], index: number, sign: 1 | -1): Result<Parsed> {
+function parseTerm(
+  tokens: Token[],
+  index: number,
+  sign: 1 | -1,
+): Result<Parsed> {
   const first = parseNumber(tokens, index);
   if (!first.ok) {
     return first;
@@ -126,7 +138,11 @@ export function interpretTuff(tuffSource: string): Result<number> {
   }
 
   const leadingSign = signOf(tokens[0]);
-  const first = parseTerm(tokens, leadingSign === undefined ? 0 : 1, leadingSign ?? 1);
+  const first = parseTerm(
+    tokens,
+    leadingSign === undefined ? 0 : 1,
+    leadingSign ?? 1,
+  );
   if (!first.ok) {
     return first;
   }
