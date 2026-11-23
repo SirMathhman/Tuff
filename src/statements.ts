@@ -151,13 +151,13 @@ function isStatementBlock(tokens: string[], open: number): boolean {
   return canFollowStatementBlock(follower);
 }
 
-// A "{" starts a statement block when its contents begin with a statement and
-// the token after its closing "}" can start a statement, an expression, or end
-// an enclosing block. A block followed by an operator is a value, as in
-// "{ let x = 2; x } * 4".
-// An "if" is a statement when both branches are statement blocks (each ends
-// with ";") and the token after the else block cannot continue an expression.
-// A following operator makes the whole if an expression, as with statement blocks.
+// An "if" is a statement when its branches are statement blocks (each ends
+// with ";") and the token after the whole if cannot continue an expression.
+// A following operator makes the whole if an expression. The else is optional.
+function continuesExpression(token: string | undefined): boolean {
+  return token === "+" || token === "-" || token === "*";
+}
+
 function isBranchStatement(tokens: string[], pos: number): boolean {
   if (tokens[pos] !== "if" || tokens[pos + 1] !== "(") {
     return false;
@@ -171,28 +171,26 @@ function isBranchStatement(tokens: string[], pos: number): boolean {
 
   const thenClose = closingOf(tokens, conditionClose + 1, "{", "}");
 
-  if (thenClose === undefined || tokens[thenClose + 1] !== "else" || tokens[thenClose + 2] !== "{") {
+  if (thenClose === undefined || tokens[thenClose - 1] !== ";") {
+    return false;
+  }
+
+  if (tokens[thenClose + 1] !== "else") {
+    return !continuesExpression(tokens[thenClose + 1]);
+  }
+
+  if (tokens[thenClose + 2] !== "{") {
     return false;
   }
 
   const elseClose = closingOf(tokens, thenClose + 2, "{", "}");
 
-  if (elseClose === undefined || tokens[thenClose - 1] !== ";" || tokens[elseClose - 1] !== ";") {
+  if (elseClose === undefined || tokens[elseClose - 1] !== ";") {
     return false;
   }
 
-  const follower = tokens[elseClose + 1];
-
-  return follower !== "+" && follower !== "-" && follower !== "*";
+  return !continuesExpression(tokens[elseClose + 1]);
 }
-
-// A "{" starts a statement block when its contents begin with a statement and
-// the token after its closing "}" can start a statement, an expression, or end
-// an enclosing block. A block followed by an operator is a value, as in
-// "{ let x = 2; x } * 4".
-// An "if" is a statement when both branches are statement blocks (each ends
-// with ";") and the token after the else block cannot continue an expression.
-// A following operator makes the whole if an expression, as with statement blocks.
 
 function parseBranchStatement(
   tokens: string[],
@@ -217,6 +215,19 @@ function parseBranchStatement(
     return then;
   }
 
+  if (tokens[then.value.next + 1] !== "else") {
+    return ok({
+      statement: {
+        kind: "branch",
+        condition: condition.value.value,
+        then: then.value.statements,
+        otherwise: [],
+        where: whereAt(tokens, pos),
+      },
+      next: then.value.next + 1,
+    });
+  }
+
   const otherwise = statementsRule(tokens, then.value.next + 3, depth + 1, expr);
 
   if (!otherwise.ok) {
@@ -234,14 +245,6 @@ function parseBranchStatement(
     next: otherwise.value.next + 1,
   });
 }
-
-// A "{" starts a statement block when its contents begin with a statement and
-// the token after its closing "}" can start a statement, an expression, or end
-// an enclosing block. A block followed by an operator is a value, as in
-// "{ let x = 2; x } * 4".
-// An "if" is a statement when both branches are statement blocks (each ends
-// with ";") and the token after the else block cannot continue an expression.
-// A following operator makes the whole if an expression, as with statement blocks.
 
 function parseStatementList(
   tokens: string[],
@@ -296,14 +299,6 @@ function parseStatementList(
 
   return ok({ statements, next });
 }
-
-// A "{" starts a statement block when its contents begin with a statement and
-// the token after its closing "}" can start a statement, an expression, or end
-// an enclosing block. A block followed by an operator is a value, as in
-// "{ let x = 2; x } * 4".
-// An "if" is a statement when both branches are statement blocks (each ends
-// with ";") and the token after the else block cannot continue an expression.
-// A following operator makes the whole if an expression, as with statement blocks.
 
 /**
  * Parses a block body: any statements followed by the final expression.

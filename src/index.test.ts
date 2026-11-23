@@ -295,6 +295,10 @@ test("interpretTuff a statement block followed by an if statement returns Ok(2)"
   expect(interpretTuff("let mut x = 0; { x = 1; } if (true) { x = 2; } else { x = 3; } x")).toEqual(ok(2));
 });
 
+test("interpretTuff('let mut x = 0; if (false) { x = 1; } x') returns Ok(0)", () => {
+  expect(interpretTuff("let mut x = 0; if (false) { x = 1; } x")).toEqual(ok(0));
+});
+
 test("interpretTuff('true') returns Ok(1)", () => {
   expect(interpretTuff("true")).toEqual(ok(1));
 });
