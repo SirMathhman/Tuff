@@ -49,15 +49,19 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   //              | name "=" value ";"
   //              | "*" name "=" expression ";"
   //   value      = expression | "&" name | "&" "mut" name
-  //   expression = [sign] term { ("+" | "-") term }
+  //   expression = and { "||" and }
+  //   and        = sum { "&&" sum }
+  //   sum        = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
   //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}"
-  // A boolean is a value on its own, but arithmetic needs numbers; a final boolean
-  // is returned as 1 or 0. "*" binds tighter than "+" and "-". Parentheses group an expression. Braces
-  // group a block, whose lets are visible only inside it. Only a `let mut`
-  // variable may be assigned, and "&mut" needs one. A reference may not outlive
-  // the block that declares its target. Parentheses and braces nest freely, but
-  // each opener must close with its own kind.
+  // Precedence, tightest first: "*", then "+" and "-", then "&&", then "||".
+  // Operands of "&&" and "||" must be booleans; the right side is skipped when the
+  // left side decides the result. A boolean is a value on its own, but arithmetic
+  // needs numbers; a final boolean is returned as 1 or 0. Parentheses group an
+  // expression. Braces group a block, whose lets are visible only inside it. Only
+  // a `let mut` variable may be assigned, and "&mut" needs one. A reference may not
+  // outlive the block that declares its target. Parentheses and braces nest freely,
+  // but each opener must close with its own kind.
   const tokenized = tokenize(tuffSource);
   if (!tokenized.ok) {
     return tokenized;

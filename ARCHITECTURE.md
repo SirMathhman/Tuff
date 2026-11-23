@@ -13,33 +13,30 @@ as the language grows. It describes the ideal, not the current code.
   precision, the same as JavaScript `number`.
 - **Name**: a run of ASCII letters and `_`. `let` is reserved and cannot be a
   name.
-- **Factor**: a number, a name, a dereference `*name`, or a grouped expression
-  `( expression )` or a block `{ sequence }`. A sign is never written directly
-  before a factor; a sign is part of an expression.
+- **Boolean and operand**: a boolean is the keyword `true` or `false`. It is a
+  plain value like a number, but not a number: it cannot take part in
+  arithmetic. An operand is a number or a boolean, the plain values a variable
+  or a factor can hold.
+- **Factor**: a number, a boolean, a name, a dereference `*name`, or a grouped
+  expression `( expression )` or a block `{ sequence }`. A sign is never
+  written directly before a factor; a sign is part of an expression.
 - **Sequence**: zero or more statements, then one expression. A statement is
   `let [mut] name = value ;`, `name = value ;`, or `*name = expression ;`. The
   sequence evaluates to its final expression. A `let` name is visible to the
   rest of its sequence, and a name may be declared only once per sequence. Names
   are not visible after the block that declares them closes.
 - **Value**: what a `let` or an assignment stores. It is either an expression
-  (a number) or a reference: `&name` (read-only) or `&mut name` (mutable).
+  (an operand: a number or a boolean) or a reference: `&name` (read-only) or
+  `&mut name` (mutable). A `let` may store a boolean, and a variable holding a
+  boolean may be read as a whole value.
 - **Reference**: a pointer to a variable's slot, not to its name. Reading `*name`
   yields the number the reference points at. Writing `*name = expression ;` is
-  allowed only through a `&mut` reference.
-- **Mutability**: a name declared with `let` is fixed. Only a name declared with
-  `let mut` may be reassigned. Assigning to a fixed name, or to an undeclared
-  name, is an error. An assignment inside a block to an enclosing `let mut` name
-  persists after the block closes. A `let` in the block that shadows the name
-  is not affected. `&mut name` requires `let mut`.
-- **Variable and cell**: each declared variable gets a numeric id. Its value
-  (a `Value`: number or Reference) lives in a cell table keyed by that id, not
-  in the name map. A name maps to its id and mutability.
-- **Scope**: the variables visible at one point of the source. A scope holds
-  the name map, the set of names the current block declared itself, the cell
-  table, and the next free id. Declaring or assigning returns a new scope; it
-  never mutates one. Closing a block keeps the enclosing scope's names and the
-  cell table with the block's assignments applied, except names the block
-  declared.
+  allowed only through a `&mut` reference. A reference to a boolean slot may be
+  dereferenced only where the result is used as a whole value, not in arithmetic.
+- **Variable, cell, and scope**: how declared variables are stored at runtime.
+  See [docs/scope.md](docs/scope.md).
+- **Mutability**: a name declared with `let` is fixed, and only a name declared
+  with `let mut` may be reassigned. See [docs/scope.md](docs/scope.md).
 
 ### Evaluation
 
@@ -47,14 +44,29 @@ as the language grows. It describes the ideal, not the current code.
   of its factors.
 - **Expression**: an optional leading sign, then one or more terms joined by
   `+` or `-`. An expression evaluates to the sum of its signed terms.
+- **Boolean rules**: a single factor with no sign, no `*`, and no `+` or `-`
+  keeps its value, so `true`, `false`, or a boolean variable can be a whole
+  `let` value, an assignment value, or the final result. Any arithmetic (a
+  sign, `*`, `+`, or `-`) requires numbers; a boolean operand there is a
+  `BooleanAsNumber` error.
+- **Boundary coercion**: `interpretTuff` returns a number. A final boolean
+  value is returned as `1` for `true` and `0` for `false`. This is the only
+  place a boolean becomes a number; no inner stage coerces.
+- **Logical operators**: `||` joins `&&` groups, and `&&` joins sums. Both
+  operators take booleans only: a number on either side is a
+  `NumberAsBoolean` error. The result is a boolean. `&&` binds tighter than
+  `||`, and both bind looser than `+` and `-`, so `true || false && false` is
+  `true`. The right side is skipped when the left side decides the result
+  (`false &&`, `true ||`). A skipped side's assignments are discarded, but its
+  errors are still reported.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
   lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both 20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
   is an error. Empty groups `()` and `{}` are errors.
-- **Precedence**: `*` binds tighter than `+` and `-`. Evaluation is left to
-  right within each level.
-- **Token**: a classified piece of source (number, name, `let`, `=`, `;`, `+`,
-  `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
-  tokenizing.
+- **Precedence**, tightest first: `*`, then `+` and `-`, then `&&`, then `||`.
+  Evaluation is left to right within each level.
+- **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
+  `false`, `=`, `;`, `&`, `&&`, `||`, `+`, `-`, `*`, `(`, `)`, `{`, `}`, or
+  whitespace). Whitespace is dropped after tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
 - **Result**: `{ ok: true, value } | { ok: false, error }`. The only way a
@@ -65,7 +77,8 @@ Invariants:
 1. `interpretTuff` is a pure function. Same source, same result. No I/O, no
    global state.
 2. Malformed source is always reported as a `TuffError`. It is never silently
-   accepted or coerced to a number.
+   accepted or coerced to a number. The only coercion is the boundary coercion
+   in Evaluation: a final boolean is returned as `1` or `0`.
 3. No `eval`, `Function`, or dynamic code execution, ever.
 4. No regex literals (enforced by ESLint `no-restricted-syntax`). Use string
    methods and character comparisons.
@@ -186,6 +199,10 @@ Variants (initial set, with the variants added for names and let):
   example `2 - * 3`.
 - `NumberOutOfRange { offset }`: a literal or intermediate result that is not
   finite.
+- `BooleanAsNumber { offset, text }`: a `true` or `false` operand used in
+  arithmetic (a sign, `*`, `+`, or `-`). `text` is the boolean's spelling.
+- `NumberAsBoolean { offset, symbol }`: a number used as an operand of `||` or
+  `&&`. `symbol` is the operator.
 - `MissingNumber { offset }`: a number is required but the source ends, or
   an operator or `)` is found. Covers `2 *`, `2 * + 3`, and `()`.
 - `MissingOperator { offset }`: two numbers or groups are adjacent with no
