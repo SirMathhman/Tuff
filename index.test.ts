@@ -163,6 +163,84 @@ test("interpretTuff with 1001 nested parentheses => nesting too deep error", () 
   });
 });
 
+test('interpretTuff("let x = 1; let y = &x; *y") => 1', () => {
+  expect(interpretTuff("let x = 1; let y = &x; *y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let mut x = 1; let y = &mut x; *y = 2; x") => 2', () => {
+  expect(interpretTuff("let mut x = 1; let y = &mut x; *y = 2; x")).toEqual({
+    ok: true,
+    value: 2,
+  });
+});
+
+test('interpretTuff("let x = 1; let y = &x; *y = 2; x") => read-only reference error', () => {
+  expect(interpretTuff("let x = 1; let y = &x; *y = 2; x")).toEqual({
+    ok: false,
+    error: {
+      what: "Read-only reference",
+      where: 24,
+      why: '"y" holds a read-only reference, so it cannot be written through',
+      fix: "Borrow the variable with &mut to allow writing through *y",
+    },
+  });
+});
+
+test('interpretTuff("let a = 1; let mut r = &a; let z = { let b = 2; r = &b; 0 }; *r") => escape error', () => {
+  expect(
+    interpretTuff(
+      "let a = 1; let mut r = &a; let z = { let b = 2; r = &b; 0 }; *r",
+    ),
+  ).toEqual({
+    ok: false,
+    error: {
+      what: "Reference escapes block",
+      where: 58,
+      why: '"r" would refer to a variable that ends with this block',
+      fix: "Point the outer variable at a variable that lives as long as it does",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; let y = &x; y") => reference used as a number error', () => {
+  expect(interpretTuff("let x = 1; let y = &x; y")).toEqual({
+    ok: false,
+    error: {
+      what: "Reference used as a number",
+      where: 23,
+      why: '"y" holds a reference, not a number',
+      fix: "Write *y to use the value it points at",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; *x") => not a reference error', () => {
+  expect(interpretTuff("let x = 1; *x")).toEqual({
+    ok: false,
+    error: {
+      what: "Not a reference",
+      where: 12,
+      why: '"x" does not hold a reference',
+      fix: "Only a variable that holds &x or &mut x can be dereferenced",
+    },
+  });
+});
+
+test('interpretTuff("let x = 1; let y = &mut x; y") => cannot borrow mutably error', () => {
+  expect(interpretTuff("let x = 1; let y = &mut x; y")).toEqual({
+    ok: false,
+    error: {
+      what: "Cannot borrow mutably",
+      where: 24,
+      why: '"x" was declared with let, so it cannot be borrowed with &mut',
+      fix: "Declare it with let mut x = ...; to allow &mut",
+    },
+  });
+});
+
 test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
   expect(interpretTuff("{ 2 + 3")).toEqual({
     ok: false,

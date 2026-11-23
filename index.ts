@@ -64,6 +64,11 @@ interface MutToken {
   pos: number;
 }
 
+interface AmpersandToken {
+  kind: "ampersand";
+  pos: number;
+}
+
 interface EqualsToken {
   kind: "equals";
   pos: number;
@@ -82,25 +87,46 @@ type Token =
   | NameToken
   | LetToken
   | MutToken
+  | AmpersandToken
   | EqualsToken
   | SemicolonToken;
 
-// A variable's current value. `mutable` is true only for `let mut`.
-interface Binding {
-  value: number;
+// A declared variable. `id` names its slot in the value table. `mutable` is
+// true only for `let mut`.
+interface Variable {
+  id: number;
   mutable: boolean;
 }
 
-// The variables visible at one point of the source. `names` holds every
-// visible variable, including those of enclosing blocks. `own` holds the names
-// declared by this block itself.
+// A value that points at another variable's slot. `mutable` is true for `&mut`.
+interface Reference {
+  target: number;
+  mutable: boolean;
+}
+
+// What a variable slot holds: a number, or a reference to another slot.
+type Value = number | Reference;
+
+// The state at one point of the source. `names` maps visible names to their
+// variables, including those of enclosing blocks. `own` holds the names declared
+// by the current block. `cells` is the value table, keyed by variable id. `nextId`
+// is the id for the next declared variable.
 interface Scope {
-  names: ReadonlyMap<string, Binding>;
+  names: ReadonlyMap<string, Variable>;
   own: ReadonlySet<string>;
+  cells: ReadonlyMap<number, Value>;
+  nextId: number;
 }
 
 interface Parsed {
   value: number;
+  next: number;
+  scope: Scope;
+}
+
+// The result of a let or assignment value: a number, or a reference.
+interface Evaluated {
+  value: Value;
   next: number;
   scope: Scope;
 }
@@ -172,6 +198,9 @@ function tokenize(source: string): Result<Token[]> {
     } else if (char === ")" || char === "}") {
       tokens = [...tokens, { kind: "close", symbol: char, pos: index }];
       index++;
+    } else if (char === "&") {
+      tokens = [...tokens, { kind: "ampersand", pos: index }];
+      index++;
     } else if (char === "=") {
       tokens = [...tokens, { kind: "equals", pos: index }];
       index++;
@@ -224,6 +253,9 @@ function tokenText(token: Token): string {
   if (token.kind === "mut") {
     return "mut";
   }
+  if (token.kind === "ampersand") {
+    return "&";
+  }
   if (token.kind === "equals") {
     return "=";
   }
@@ -242,6 +274,12 @@ function signAt(tokens: Token[], index: number): 1 | -1 | undefined {
     return -1;
   }
   return undefined;
+}
+
+// True when the token at `index` is the "*" operator.
+function isStarAt(tokens: Token[], index: number): boolean {
+  const token = tokens[index];
+  return token?.kind === "operator" && token.symbol === "*";
 }
 
 // Reported when a number is required but the source ends. `end` is the source
@@ -355,49 +393,105 @@ function missingSemicolon<T>(where: number, subject: string): Result<T> {
   });
 }
 
+// Reported when a name is used but no variable with that name is visible.
+function undefinedVariable<T>(name: string, where: number): Result<T> {
+  return err({
+    what: "Undefined variable",
+    where,
+    why: `"${name}" has not been declared`,
+    fix: `Declare it first with let ${name} = ...;, or fix the spelling`,
+  });
+}
+
+// Reported when a variable that holds a reference is used where a number is
+// required.
+function referenceAsNumber<T>(name: string, where: number): Result<T> {
+  return err({
+    what: "Reference used as a number",
+    where,
+    why: `"${name}" holds a reference, not a number`,
+    fix: `Write *${name} to use the value it points at`,
+  });
+}
+
 // A block's scope starts with every variable of the enclosing scope and no
 // declarations of its own.
 function childScope(outer: Scope): Scope {
-  return { names: outer.names, own: new Set<string>() };
-}
-
-function rootScope(): Scope {
-  return { names: new Map<string, Binding>(), own: new Set<string>() };
-}
-
-// Returns the scope of the enclosing block after the block `inner` has closed.
-// Assignments made inside the block to outer variables are kept. Variables the
-// block declared itself shadow outer ones only inside the block, so the outer
-// binding stays.
-function closeBlock(outer: Scope, inner: Scope): Scope {
-  const names = new Map<string, Binding>(
-    [...outer.names].map(
-      ([name, binding]) =>
-        [
-          name,
-          inner.own.has(name) ? binding : (inner.names.get(name) ?? binding),
-        ] as const,
-    ),
-  );
-  return { names, own: outer.own };
-}
-
-// Returns a new scope with `name` declared in this block.
-function declare(scope: Scope, name: string, binding: Binding): Scope {
   return {
-    names: new Map<string, Binding>([...scope.names, [name, binding] as const]),
-    own: new Set<string>([...scope.own, name]),
+    names: outer.names,
+    own: new Set<string>(),
+    cells: outer.cells,
+    nextId: outer.nextId,
   };
 }
 
-// Returns a new scope where `name` holds `value`, keeping its mutability.
-function assign(scope: Scope, name: string, value: number): Scope {
+function rootScope(): Scope {
   return {
-    names: new Map<string, Binding>([
+    names: new Map<string, Variable>(),
+    own: new Set<string>(),
+    cells: new Map<number, Value>(),
+    nextId: 0,
+  };
+}
+
+// Returns the scope of the enclosing block after the block `inner` has closed.
+// Assignments made inside the block are kept. The block's own variables go out
+// of scope, but their slots stay in the table, so an outer reference to one of
+// them would dangle. That is an error, reported at the closing brace `pos`.
+function closeBlock(outer: Scope, inner: Scope, pos: number): Result<Scope> {
+  const ownIds = new Set<number>(
+    [...inner.own].flatMap((name) => {
+      const variable = inner.names.get(name);
+      return variable === undefined ? [] : [variable.id];
+    }),
+  );
+  for (const [name, variable] of outer.names) {
+    const cell = inner.cells.get(variable.id);
+    if (
+      cell !== undefined &&
+      typeof cell !== "number" &&
+      ownIds.has(cell.target)
+    ) {
+      return err({
+        what: "Reference escapes block",
+        where: pos,
+        why: `"${name}" would refer to a variable that ends with this block`,
+        fix: "Point the outer variable at a variable that lives as long as it does",
+      });
+    }
+  }
+  return ok({
+    names: outer.names,
+    own: outer.own,
+    cells: inner.cells,
+    nextId: inner.nextId,
+  });
+}
+
+// Returns a new scope with `name` declared in this block, holding `value`.
+function declare(
+  scope: Scope,
+  name: string,
+  mutable: boolean,
+  value: Value,
+): Scope {
+  const id = scope.nextId;
+  return {
+    names: new Map<string, Variable>([
       ...scope.names,
-      [name, { value, mutable: true }] as const,
+      [name, { id, mutable }] as const,
     ]),
-    own: scope.own,
+    own: new Set<string>([...scope.own, name]),
+    cells: new Map<number, Value>([...scope.cells, [id, value] as const]),
+    nextId: id + 1,
+  };
+}
+
+// Returns a new scope where the slot `id` holds `value`.
+function setCell(scope: Scope, id: number, value: Value): Scope {
+  return {
+    ...scope,
+    cells: new Map<number, Value>([...scope.cells, [id, value] as const]),
   };
 }
 
@@ -417,9 +511,59 @@ function parseNumber(
   return ok({ value: token.value, next: index + 1, scope });
 }
 
-// A factor is a number, a variable, or a grouped expression. Signs are not
-// allowed directly before a factor; a sign inside a group belongs to that
-// expression.
+// A variable used as a number. Every declared variable has a slot, so the slot
+// is always present.
+function parseVariable(
+  token: NameToken,
+  index: number,
+  scope: Scope,
+): Result<Parsed> {
+  const variable = scope.names.get(token.name);
+  if (variable === undefined) {
+    return undefinedVariable(token.name, token.pos);
+  }
+  const cell = scope.cells.get(variable.id);
+  if (typeof cell !== "number") {
+    return referenceAsNumber(token.name, token.pos);
+  }
+  return ok({ value: cell, next: index + 1, scope });
+}
+
+// "*name": the number the reference in `name` points at. `index` points at the
+// "*"; `nameToken` is the token after it.
+function parseDeref(
+  nameToken: NameToken,
+  index: number,
+  scope: Scope,
+): Result<Parsed> {
+  const variable = scope.names.get(nameToken.name);
+  if (variable === undefined) {
+    return undefinedVariable(nameToken.name, nameToken.pos);
+  }
+  const cell = scope.cells.get(variable.id);
+  if (cell === undefined || typeof cell === "number") {
+    return err({
+      what: "Not a reference",
+      where: nameToken.pos,
+      why: `"${nameToken.name}" does not hold a reference`,
+      fix: `Only a variable that holds &x or &mut x can be dereferenced`,
+    });
+  }
+  const target = scope.cells.get(cell.target);
+  if (typeof target !== "number") {
+    return err({
+      what: "Reference used as a number",
+      where: nameToken.pos,
+      why: `"*${nameToken.name}" points at a reference, not a number`,
+      fix: "Point the reference at a variable that holds a number",
+    });
+  }
+  return ok({ value: target, next: index + 2, scope });
+}
+
+// A factor is a number, a variable, a dereference, or a grouped expression.
+// Signs are not allowed directly before a factor; a sign inside a group belongs
+// to that expression.
 function parseFactor(
   tokens: Token[],
   index: number,
@@ -431,16 +575,11 @@ function parseFactor(
     return parseGroup(tokens, index, scope, end, parseFactor);
   }
   if (token?.kind === "name") {
-    const binding = scope.names.get(token.name);
-    if (binding === undefined) {
-      return err({
-        what: "Undefined variable",
-        where: token.pos,
-        why: `"${token.name}" has not been declared`,
-        fix: `Declare it first with let ${token.name} = ...;, or fix the spelling`,
-      });
-    }
-    return ok({ value: binding.value, next: index + 1, scope });
+    return parseVariable(token, index, scope);
+  }
+  const nameToken = tokens[index + 1];
+  if (isStarAt(tokens, index) && nameToken?.kind === "name") {
+    return parseDeref(nameToken, index, scope);
   }
   return parseNumber(tokens, index, scope, end);
 }
@@ -486,11 +625,14 @@ function parseGroup(
       fix: `Change this to "${closerFor(openSymbol)}", or change the "${openSymbol}" to "${openerFor(token.symbol)}"`,
     });
   }
-  const closedScope =
+  const closed =
     openSymbol === "{"
-      ? closeBlock(scope, inner.value.scope)
-      : inner.value.scope;
-  return ok({ value: inner.value.value, next: next + 1, scope: closedScope });
+      ? closeBlock(scope, inner.value.scope, token.pos)
+      : ok(inner.value.scope);
+  if (!closed.ok) {
+    return closed;
+  }
+  return ok({ value: inner.value.value, next: next + 1, scope: closed.value });
 }
 
 function parseTerm(
@@ -563,9 +705,67 @@ function parseExpression(
   return ok({ value: sum, next, scope: current });
 }
 
-// Parses zero or more statements, then one expression. A statement is either
-// "let [mut] name = expression ;" or "name = expression ;". Each let adds its
-// name to the current block. The value of the sequence is its final expression.
+// The value of a let or assignment: "&name" or "&mut name" makes a reference;
+// anything else is a number expression.
+function parseValue(
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+): Result<Evaluated> {
+  if (tokens[index]?.kind !== "ampersand") {
+    const expression = parseExpression(tokens, index, scope, end, factor);
+    if (!expression.ok) {
+      return expression;
+    }
+    return ok({
+      value: expression.value.value,
+      next: expression.value.next,
+      scope: expression.value.scope,
+    });
+  }
+  const mutable = tokens[index + 1]?.kind === "mut";
+  const nameIndex = mutable ? index + 2 : index + 1;
+  const nameToken = tokens[nameIndex];
+  if (nameToken === undefined) {
+    return err({
+      what: "Missing name",
+      where: end,
+      why: "& must be followed by a variable name",
+      fix: "Add a variable name after &, such as &x",
+    });
+  }
+  if (nameToken.kind !== "name") {
+    return err({
+      what: "Missing name",
+      where: nameToken.pos,
+      why: `Found "${tokenText(nameToken)}" where a variable name is required`,
+      fix: "Put a variable name after & or &mut, such as &x",
+    });
+  }
+  const variable = scope.names.get(nameToken.name);
+  if (variable === undefined) {
+    return undefinedVariable(nameToken.name, nameToken.pos);
+  }
+  if (mutable && !variable.mutable) {
+    return err({
+      what: "Cannot borrow mutably",
+      where: nameToken.pos,
+      why: `"${nameToken.name}" was declared with let, so it cannot be borrowed with &mut`,
+      fix: `Declare it with let mut ${nameToken.name} = ...; to allow &mut`,
+    });
+  }
+  return ok({
+    value: { target: variable.id, mutable },
+    next: nameIndex + 1,
+    scope,
+  });
+}
+
+// Parses zero or more statements, then one expression. A statement is
+// "let [mut] name = value ;", "name = value ;", or "*name = expression ;".
+// The value of the sequence is its final expression.
 function parseSequence(
   tokens: Token[],
   index: number,
@@ -580,11 +780,19 @@ function parseSequence(
   if (token?.kind === "name" && tokens[index + 1]?.kind === "equals") {
     return parseAssign(tokens, index, token, scope, end, factor);
   }
+  const nameToken = tokens[index + 1];
+  if (
+    isStarAt(tokens, index) &&
+    nameToken?.kind === "name" &&
+    tokens[index + 2]?.kind === "equals"
+  ) {
+    return parseDerefAssign(tokens, index, nameToken, scope, end, factor);
+  }
   return parseExpression(tokens, index, scope, end, factor);
 }
 
-// Parses "let [mut] name = expression ;" and then the rest of the sequence.
-// `index` points at "let".
+// Parses "let [mut] name = value ;" and then the rest of the sequence. `index`
+// points at "let".
 function parseLet(
   tokens: Token[],
   index: number,
@@ -620,7 +828,7 @@ function parseLet(
       fix: `Put "=" after "${name}"`,
     });
   }
-  const value = parseExpression(tokens, equalsIndex + 1, scope, end, factor);
+  const value = parseValue(tokens, equalsIndex + 1, scope, end, factor);
   if (!value.ok) {
     return value;
   }
@@ -644,14 +852,14 @@ function parseLet(
   return parseSequence(
     tokens,
     semicolonIndex + 1,
-    declare(current, name, { value: value.value.value, mutable }),
+    declare(current, name, mutable, value.value.value),
     end,
     factor,
   );
 }
 
-// Parses "name = expression ;" and then the rest of the sequence. Only a
-// `let mut` variable may be assigned. `index` points at the name.
+// Parses "name = value ;" and then the rest of the sequence. Only a `let mut`
+// variable may be assigned. `index` points at the name.
 function parseAssign(
   tokens: Token[],
   index: number,
@@ -661,8 +869,8 @@ function parseAssign(
   factor: Parser,
 ): Result<Parsed> {
   const name = nameToken.name;
-  const binding = scope.names.get(name);
-  if (binding === undefined) {
+  const variable = scope.names.get(name);
+  if (variable === undefined) {
     return err({
       what: "Undefined variable",
       where: nameToken.pos,
@@ -670,7 +878,7 @@ function parseAssign(
       fix: `Declare it first with let mut ${name} = ...;, or fix the spelling`,
     });
   }
-  if (!binding.mutable) {
+  if (!variable.mutable) {
     return err({
       what: "Immutable variable",
       where: nameToken.pos,
@@ -678,7 +886,7 @@ function parseAssign(
       fix: `Declare it with let mut ${name} = ...; to allow reassignment`,
     });
   }
-  const value = parseExpression(tokens, index + 2, scope, end, factor);
+  const value = parseValue(tokens, index + 2, scope, end, factor);
   if (!value.ok) {
     return value;
   }
@@ -693,7 +901,60 @@ function parseAssign(
   return parseSequence(
     tokens,
     semicolonIndex + 1,
-    assign(value.value.scope, name, value.value.value),
+    setCell(value.value.scope, variable.id, value.value.value),
+    end,
+    factor,
+  );
+}
+
+// Parses "*name = expression ;" and then the rest of the sequence. The reference
+// must be a `&mut`. `index` points at the "*"; `nameToken` is the name after it.
+function parseDerefAssign(
+  tokens: Token[],
+  index: number,
+  nameToken: NameToken,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+): Result<Parsed> {
+  const name = nameToken.name;
+  const variable = scope.names.get(name);
+  if (variable === undefined) {
+    return undefinedVariable(name, nameToken.pos);
+  }
+  const cell = scope.cells.get(variable.id);
+  if (cell === undefined || typeof cell === "number") {
+    return err({
+      what: "Not a reference",
+      where: nameToken.pos,
+      why: `"${name}" does not hold a reference`,
+      fix: "Only a variable that holds &mut x can be written through with *name = ...;",
+    });
+  }
+  if (!cell.mutable) {
+    return err({
+      what: "Read-only reference",
+      where: nameToken.pos,
+      why: `"${name}" holds a read-only reference, so it cannot be written through`,
+      fix: `Borrow the variable with &mut to allow writing through *${name}`,
+    });
+  }
+  const value = parseExpression(tokens, index + 3, scope, end, factor);
+  if (!value.ok) {
+    return value;
+  }
+  const semicolonIndex = value.value.next;
+  const semicolon = tokens[semicolonIndex];
+  if (semicolon?.kind !== "semicolon") {
+    return missingSemicolon(
+      semicolon?.pos ?? end,
+      `The assignment through "*${name}"`,
+    );
+  }
+  return parseSequence(
+    tokens,
+    semicolonIndex + 1,
+    setCell(value.value.scope, cell.target, value.value.value),
     end,
     factor,
   );
@@ -723,15 +984,18 @@ function checkNesting(tokens: Token[]): Result<true> {
 export function interpretTuff(tuffSource: string): Result<number> {
   // Grammar:
   //   sequence   = { statement } expression
-  //   statement  = "let" [ "mut" ] name "=" expression ";"
-  //              | name "=" expression ";"
+  //   statement  = "let" [ "mut" ] name "=" value ";"
+  //              | name "=" value ";"
+  //              | "*" name "=" expression ";"
+  //   value      = expression | "&" name | "&" "mut" name
   //   expression = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
-  //   factor     = number | name | "(" expression ")" | "{" sequence "}"
+  //   factor     = number | name | "*" name | "(" expression ")" | "{" sequence "}"
   // "*" binds tighter than "+" and "-". Parentheses group an expression. Braces
   // group a block, whose lets are visible only inside it. Only a `let mut`
-  // variable may be assigned. Parentheses and braces nest freely, but each opener
-  // must close with its own kind.
+  // variable may be assigned, and "&mut" needs one. A reference may not outlive
+  // the block that declares its target. Parentheses and braces nest freely, but
+  // each opener must close with its own kind.
   const tokenized = tokenize(tuffSource);
   if (!tokenized.ok) {
     return tokenized;
