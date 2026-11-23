@@ -55,7 +55,7 @@ as the language grows. It describes the ideal, not the current code.
 - **Logical operators**: `||` joins `&&` groups, and `&&` joins comparisons.
   Both operators take booleans only: a number on either side is a
   `NumberAsBoolean` error. The result is a boolean. `&&` binds tighter than
-  `||`, and both bind looser than `<` (see Precedence), so
+  `||`, and both bind looser than the comparisons (see Precedence), so
   `true || false && false` is `true`. The right side is skipped when the left side decides the result
   (`false &&`, `true ||`). A skipped side's assignments are discarded, but its
   errors are still reported.
@@ -66,7 +66,9 @@ as the language grows. It describes the ideal, not the current code.
   `<`, `>`, `<=`, `>=`, `==`, and `!=`, then `&&`, then `||`. Evaluation is left
   to right within each level. A comparison takes two numbers (`BooleanAsNumber`
   otherwise) and gives a boolean. A second comparison operator in one comparison
-  is a `ChainedComparison` error, so `1 < 2 < 3` is rejected.
+  is a `ChainedComparison` error, so `1 < 2 < 3` is rejected. Comparisons
+  are exact: `==` and `!=` compare the double values, so they do not treat
+  nearby values as equal.
 - **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
   `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `>`, `<=`, `>=`, `==`, `!=`, `+`,
   `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
@@ -219,9 +221,9 @@ Variants (initial set, with the variants added for names and let):
 
 Comparison:
 
-- `ChainedComparison { offset }`: a second comparison operator follows a
-  comparison, for example `1 < 2 < 3` or `1 == 1 == 1`. `offset` is the second
-  operator.
+- `ChainedComparison { offset, first, second }`: a second comparison operator
+  follows a comparison, for example `1 < 2 < 3` or `1 == 1 == 1`. `offset` is
+  the second operator; `first` and `second` are the two operators as spelled.
 
 Names, assignments, and scope:
 
@@ -272,7 +274,11 @@ maximum length, so a long name in the source cannot make an error message long.
   missing-`=` messages echo the full name. A 5,000-character name produces a
   5,000-character error message.
 - **Precision.** Large integer literals lose precision as doubles. Results
-  that overflow become `Infinity` without an error.
+  that overflow become `Infinity` without an error. Comparisons inherit this:
+  two distinct integers above 2^53 can compare equal under `==`.
+- **Boolean comparison.** A comparison requires numbers, so `true == true` is
+  a `BooleanAsNumber` error, not `true`. Users may expect equality on booleans.
+  Extending `==` and `!=` to booleans is a grammar decision, not a parser fix.
 - **Parse and evaluate are fused.** The parser computes values as it reads, so
   there is no syntax tree. This keeps the code small, but it means every rule
   about evaluation is tied to the grammar code, and a later feature that needs
