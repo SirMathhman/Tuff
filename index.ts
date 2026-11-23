@@ -1,5 +1,5 @@
-function interpretTuff(tuffSource: string): number {
-  return 0;
+export function interpretTuff(tuffSource: string): number {
+  return Number(tuffSource);
 }
 
 // TODO: simple repl with interpretTuff
