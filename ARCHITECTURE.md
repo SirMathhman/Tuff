@@ -13,24 +13,33 @@ as the language grows. It describes the ideal, not the current code.
   precision, the same as JavaScript `number`.
 - **Name**: a run of ASCII letters and `_`. `let` is reserved and cannot be a
   name.
-- **Factor**: a number, a name, or a grouped expression `( expression )` or a
-  block `{ sequence }`. A sign is never written directly before a factor; a sign
-  is part of an expression.
+- **Factor**: a number, a name, a dereference `*name`, or a grouped expression
+  `( expression )` or a block `{ sequence }`. A sign is never written directly
+  before a factor; a sign is part of an expression.
 - **Sequence**: zero or more statements, then one expression. A statement is
-  `let [mut] name = expression ;` or `name = expression ;`. The sequence
-  evaluates to its final expression. A `let` name is visible to the rest of its
-  sequence, and a name may be declared only once per sequence. Names are not
-  visible after the block that declares them closes.
+  `let [mut] name = value ;`, `name = value ;`, or `*name = expression ;`. The
+  sequence evaluates to its final expression. A `let` name is visible to the
+  rest of its sequence, and a name may be declared only once per sequence. Names
+  are not visible after the block that declares them closes.
+- **Value**: what a `let` or an assignment stores. It is either an expression
+  (a number) or a reference: `&name` (read-only) or `&mut name` (mutable).
+- **Reference**: a pointer to a variable's slot, not to its name. Reading `*name`
+  yields the number the reference points at. Writing `*name = expression ;` is
+  allowed only through a `&mut` reference.
 - **Mutability**: a name declared with `let` is fixed. Only a name declared with
   `let mut` may be reassigned. Assigning to a fixed name, or to an undeclared
   name, is an error. An assignment inside a block to an enclosing `let mut` name
   persists after the block closes. A `let` in the block that shadows the name
-  is not affected.
+  is not affected. `&mut name` requires `let mut`.
+- **Variable and cell**: each declared variable gets a numeric id. Its value
+  (a `Value`: number or Reference) lives in a cell table keyed by that id, not
+  in the name map. A name maps to its id and mutability.
 - **Scope**: the variables visible at one point of the source. A scope holds
-  every visible name with its value and mutability, and the set of names the
-  current block declared itself. Declaring or assigning a name returns a new
-  scope; it never mutates one. Closing a block keeps the enclosing scope's names,
-  with assignments from the block applied, except names the block declared.
+  the name map, the set of names the current block declared itself, the cell
+  table, and the next free id. Declaring or assigning returns a new scope; it
+  never mutates one. Closing a block keeps the enclosing scope's names and the
+  cell table with the block's assignments applied, except names the block
+  declared.
 
 ### Evaluation
 
@@ -68,6 +77,13 @@ Invariants:
 7. Arrays are immutable. `Array.prototype.push` is banned (ESLint
    `no-restricted-syntax`). Build a new array with spread instead. The cost of
    this rule is noted in Performance; see Future Work for how it is resolved.
+8. A reference never outlives the block that declares its target. When a block
+   closes, any enclosing variable that holds a reference to one of the block's
+   own variables is an error (`ReferenceEscapesBlock`). Slots of closed blocks
+   are never read through a live name.
+9. A reference points at a variable slot. Dereferencing reads or writes that
+   slot and never copies the reference itself. A reference to a reference cannot
+   be read as a number.
 
 ## Structure
 
@@ -75,14 +91,20 @@ Target layout:
 
 ```
 index.ts                 public entry point; re-exports interpretTuff
-src/errors.ts            TuffError type and its variants
+src/errors.ts            TuffError type and the builders for each error message
 src/result.ts            Result type and helpers (ok, err)
-src/scope.ts             Scope: rootScope, emptyScopeIn, declare, lookup
-src/tokenize.ts          string -> Result<Token[], TuffError>
-src/evaluate.ts          Token[] -> Result<number, TuffError>; starts the parser
-src/parse/factor.ts      number, name, and group; the only file that calls group
+src/scope.ts             Scope, Variable, Reference, Value; rootScope, childScope,
+                         declare, setCell, closeScope, findEscape
+src/tokenize.ts          string -> Result<Token[], TuffError>; token types and helpers
+src/evaluate.ts          string -> Result<number, TuffError>; checks nesting, then parses
+src/parse/types.ts       Parsed, Evaluated, Parser, ParseResult
+src/parse/factor.ts      number, boolean, name, and group; the only file that calls group
+src/parse/deref.ts       "*name" read through a reference (a factor)
 src/parse/group.ts       "( expression )" and "{ sequence }"
-src/parse/sequence.ts    let statements, then an expression
+src/parse/sequence.ts    let, assignment, and "*name =" statements, then an
+                         expression
+src/parse/value.ts       a let or assignment value: "&name", "&mut name", or an
+                         expression
 src/parse/expression.ts  signs, "+" and "-"
 src/parse/term.ts        "*"
 ```
@@ -90,17 +112,24 @@ src/parse/term.ts        "*"
 Dependency direction (arrows mean "imports from"):
 
 ```
-index.ts -> evaluate.ts -> tokenize.ts -> errors.ts
-                       \-> parse/factor.ts -> parse/group.ts
-                                           -> parse/sequence.ts -> parse/expression.ts -> parse/term.ts
-                       \-> scope.ts
-result.ts and errors.ts are imported by all of the above.
+index.ts            -> evaluate.ts
+evaluate.ts         -> tokenize.ts, scope.ts, parse/factor.ts, parse/sequence.ts
+parse/factor.ts     -> parse/group.ts, parse/deref.ts
+parse/group.ts      -> parse/sequence.ts, parse/expression.ts, scope.ts
+parse/sequence.ts   -> parse/value.ts, parse/expression.ts, scope.ts
+parse/value.ts      -> parse/expression.ts
+parse/expression.ts -> parse/term.ts
+parse/deref.ts, parse/term.ts -> no parser files
+parse/types.ts is imported by every parse file. result.ts and errors.ts are
+imported by all of the above.
 ```
 
 Rules:
 
+- No file exceeds 1000 lines, not counting blank and comment lines. ESLint
+  `max-lines` enforces this. Each file in the layout above stays well under it.
 - No cycles between files. `result.ts`, `errors.ts`, and `scope.ts` import
-  nothing from the project.
+  nothing from the project. `deref.ts` reads the scope and imports no parser.
 - The tokenizer knows nothing about precedence. The evaluator knows nothing
   about characters.
 - Each stage takes plain data in and returns a `Result`. No stage holds state
@@ -125,8 +154,11 @@ recursion that spans files:
   calling functions, one is passed as a parameter instead of being imported.
 - Self-recursion inside one function (for example a `let` sequence that calls
   itself for its tail) is allowed, because it does not cross a file boundary.
+  `sequence.ts` may also recurse among its own statement parsers.
 - Recursion depth is bounded. Input that nests too deeply is reported as a
-  `TuffError`, never as a thrown `RangeError`.
+  `TuffError`, never as a thrown `RangeError`. Bracket nesting is bounded by
+  `NestingTooDeep`; the number of statements is not yet bounded (see Future
+  Work).
 
 ## Errors
 
@@ -178,8 +210,20 @@ Names, assignments, and scope:
 - `MismatchedBracket { offset, opener, openerOffset }`: a closer that does not
   match the innermost open group, for example `( 2 }`. `opener` is the
   innermost opening symbol and `openerOffset` is where it sits.
-- `NestingTooDeep { offset, limit }`: parentheses nest beyond the depth
-  limit.
+- `NestingTooDeep { offset, limit }`: parentheses and braces nest beyond the
+  depth limit.
+
+References:
+
+- `ReferenceAsNumber { offset, name }`: a variable that holds a reference is
+  used where a number is required.
+- `NotAReference { offset, name }`: `*name` or `*name = ...` where `name` does
+  not hold a reference.
+- `ReadOnlyReference { offset, name }`: `*name = ...` through a `&` reference.
+- `CannotBorrowMutably { offset, name }`: `&mut name` where `name` is not
+  `let mut`.
+- `ReferenceEscapesBlock { offset, name }`: an enclosing variable would refer
+  to a variable that ends with the block. `offset` is the closing brace.
 
 Error messages are built from the variant. They never echo unbounded source
 text. A name carried in a variant is shown only after truncation to a fixed
@@ -187,13 +231,13 @@ maximum length, so a long name in the source cannot make an error message long.
 
 ## Potential Problems
 
-- **Stack exhaustion.** Nested parentheses recurse once per level, and the
-  parser's call stack is the only limit. Around 10,000 nested `(` the current
-  parser throws a `RangeError` from `interpretTuff`, which breaks the
-  no-exceptions rule. Depth must be limited and reported as `NestingTooDeep`.
+- **Stack exhaustion from statements.** Each `let` or assignment recurses into
+  the sequence parser once. A sequence of very many statements grows the call
+  stack with no depth bound and no `TuffError`, which can end in a thrown
+  `RangeError`. Bracket depth is limited, but statement count is not.
 - **Quadratic tokenizing.** Invariant 7 forces each token to be appended with a
   spread, which copies the whole array. Tokenizing is therefore O(n^2) in the
-  number of tokens. A 20,000-term source takes over a second.
+  number of tokens.
 - **Unbounded names in messages.** Undefined-variable, duplicate-variable, and
   missing-`=` messages echo the full name. A 5,000-character name produces a
   5,000-character error message.
@@ -228,7 +272,9 @@ Controls the architecture should have:
 | Input length limit                             | Missing                            |
 | Non-finite results are reported as errors      | Missing                            |
 | Error messages do not echo unbounded input     | Missing (names are echoed in full) |
-| Nesting depth limit (no stack exhaustion)      | Missing (see Potential Problems)   |
+| Nesting depth limit for brackets               | Present                            |
+| Bounded statement count (no stack exhaustion)  | Missing (see Potential Problems)   |
+| A reference cannot outlive its target          | Present                            |
 
 Prompt injection: if Tuff source is ever produced by a language model, treat
 the model output as untrusted text. The interpreter stays a pure evaluator.
@@ -249,10 +295,10 @@ performs no state changes.
   then an evaluator that walks it. The tree is the seam that lets later
   features (type checks, more error kinds) be added without touching the
   grammar code.
-- Make the parser non-recursive, following the Recursion section.
+- Make the parser non-recursive, following the Recursion section. This also
+  bounds the stack for long sequences of statements.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not after.
-- Add a nesting depth limit that returns `NestingTooDeep`.
 - Make tokenizing linear. Decide how a linear builder fits invariant 7, for
   example a local buffer owned by one function and returned as `readonly`, and
   state that decision in Invariants.
@@ -266,11 +312,12 @@ These are obvious concerns only. Measure with a profiler before optimizing.
 
 - Tokenizing is O(n^2) in the number of tokens because of the spread-based
   append (see Potential Problems). This is the first thing to fix.
-- Each `let` copies its scope's name map, so a sequence with k lets copies
-  O(k^2) entries. Fine for expected inputs.
+- Each `let` or assignment copies the scope's name map, own-name set, and cell
+  table, so a sequence with k statements copies O(k^2) entries. Fine for
+  expected inputs, but it is the next cost after tokenizing.
 - Variable lookup walks the scope chain, one step per enclosing block. Fine for
   expected inputs.
 - String concatenation while building digits is linear in the number of
   digits. This is fine for expected inputs.
-- Deeply nested parentheses use one stack frame per level. Enforce the
-  nesting depth limit (see Recursion) so input cannot exhaust the stack.
+- Deeply nested brackets use several stack frames per level. The depth limit
+  (see Recursion) keeps this bounded; statement count is not yet bounded.
