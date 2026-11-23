@@ -4,7 +4,8 @@ import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./eval/evaluator.ts";
-import { isInteger, isRecord } from "./eval/values.ts";
+import { isInteger, isRecord, type Scope } from "./eval/values.ts";
+import { parseStructs } from "./structs.ts";
 
 export { describeError } from "./errors.ts";
 export type {
@@ -30,7 +31,13 @@ export type {
  */
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tokenize(tuffSource);
-  const parsed = blockBody(tokens, 0, 0, parseExpr);
+  const declared = parseStructs(tokens);
+
+  if (!declared.ok) {
+    return declared;
+  }
+
+  const parsed = blockBody(tokens, declared.value.next, 0, parseExpr);
 
   if (!parsed.ok) {
     return parsed;
@@ -45,7 +52,13 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     );
   }
 
-  const result = evaluate(parsed.value.value);
+  const root: Scope = {
+    name: "",
+    cell: { value: 0, moved: false },
+    mutable: false,
+    structs: new Map(declared.value.structs.map((decl) => [decl.name, decl] as const)),
+  };
+  const result = evaluate(parsed.value.value, root);
 
   if (!result.ok) {
     return result;

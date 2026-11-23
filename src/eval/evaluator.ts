@@ -1,6 +1,9 @@
 import {
   ok,
   bitwiseOutOfRangeAt,
+  missingFieldAt,
+  undeclaredTypeAt,
+  undefinedStructAt,
   type Err,
   divisionByZeroAt,
   immutableAssignmentAt,
@@ -16,7 +19,7 @@ import {
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { INT_RANGES, type Annotation, type ScalarAnnotation, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
+import { INT_RANGES, type Annotation, type ScalarAnnotation, type StructDecl, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
 import { type Cell, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isInteger, isRecord, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
@@ -251,11 +254,70 @@ function matchesAnnotation(value: Value, annotation: Annotation): boolean {
     return matchesScalar(value, annotation);
   }
 
+  if (annotation.kind === "struct") {
+    return isRecord(value) && value.struct === annotation.name;
+  }
+
   return Array.isArray(value) && value.length === annotation.length && value.every((element) => matchesScalar(element, annotation.element));
 }
 
 function annotationName(annotation: Annotation): string {
-  return typeof annotation === "string" ? `a ${annotation}` : `[${annotation.element}; ${annotation.length}]`;
+  if (typeof annotation === "string") {
+    return `a ${annotation}`;
+  }
+
+  return annotation.kind === "struct" ? `a ${annotation.name}` : `[${annotation.element}; ${annotation.length}]`;
+}
+
+// The struct declarations are kept on the outermost scope of the program.
+function structTableOf(scope: Scope | undefined): Map<string, StructDecl> {
+  let current = scope;
+
+  while (current !== undefined && current.parent !== undefined) {
+    current = current.parent;
+  }
+
+  return current?.structs ?? new Map<string, StructDecl>();
+}
+
+// A constructor builds a record of a declared struct: every field once, each with its declared type.
+function evaluateConstruct(name: string, fields: RecordField[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const decl = structTableOf(scope).get(name);
+
+  if (decl === undefined) {
+    return undefinedStructAt(where, name);
+  }
+
+  const record = evaluateRecord(fields, where, scope, evaluateRule);
+
+  if (!record.ok) {
+    return record;
+  }
+
+  const given = record.value.fields;
+  const missing = decl.fields.filter((field) => !given.has(field.name)).map((field) => field.name);
+
+  if (missing.length > 0) {
+    return missingFieldAt(where, name, missing);
+  }
+
+  const extra = [...given.keys()].find((field) => !decl.fields.some((declared) => declared.name === field));
+
+  if (extra !== undefined) {
+    return fieldNotFoundAt(where, extra, decl.fields.map((field) => field.name));
+  }
+
+  const wrong = decl.fields.flatMap((field) => {
+    const value = given.get(field.name);
+
+    return value !== undefined && !matchesAnnotation(value, field.annotation) ? [{ annotation: field.annotation, value }] : [];
+  })[0];
+
+  if (wrong !== undefined) {
+    return typeMismatchAt(where, annotationName(wrong.annotation), typeName(wrong.value));
+  }
+
+  return ok({ fields: given, struct: name });
 }
 
 // A binding with an annotation keeps it, so an assignment must match the annotation, not just the old element type.
@@ -357,6 +419,10 @@ function runStatements(
 
       if (!value.ok) {
         return value;
+      }
+
+      if (statement.annotation !== undefined && typeof statement.annotation !== "string" && statement.annotation.kind === "struct" && !structTableOf(acc.value).has(statement.annotation.name)) {
+        return undeclaredTypeAt(statement.where, statement.annotation.name);
       }
 
       if (statement.annotation !== undefined && !matchesAnnotation(value.value, statement.annotation)) {
@@ -861,6 +927,7 @@ type KindRule<K extends Expr["kind"]> = (expr: Extract<Expr, HasKind<K>>, scope:
 
 // One rule per expression kind. The interface makes the table cover every kind.
 interface KindRules {
+  construct: KindRule<"construct">;
   number: KindRule<"number">;
   boolean: KindRule<"boolean">;
   string: KindRule<"string">;
@@ -887,6 +954,7 @@ const RULES: KindRules = {
   string: (expr) => ok(expr.value),
   int: (expr) => ok({ type: expr.type, value: expr.value }),
   record: (expr, scope) => evaluateRecord(expr.fields, expr.where, scope, evaluate),
+  construct: (expr, scope) => evaluateConstruct(expr.name, expr.fields, expr.where, scope, evaluate),
   field: (expr, scope) => evaluateField(expr.target, expr.name, expr.where, scope, evaluate),
   negate: (expr, scope) => evaluateNegate(expr.operand, expr.where, scope, evaluate),
   reference: (expr, scope) => readWhole(expr.name, expr.where, scope),

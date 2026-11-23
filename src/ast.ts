@@ -137,14 +137,46 @@ export type ScalarAnnotation = IntType | "Bool";
  * An array annotation such as [Bool; 3]: every element has the element type, and there are exactly length elements.
  */
 export interface ArrayAnnotation {
+  /** The discriminant: always "array". */
+  kind: "array";
   /** The type every element must have. */
   element: ScalarAnnotation;
   /** The number of elements the array must have. */
   length: number;
 }
 
+/**
+ * A struct name used as a type, such as the Point in let p : Point = Point { x : 1, y : 2 };.
+ */
+export interface StructAnnotation {
+  /** The discriminant: always "struct". */
+  kind: "struct";
+  /** The struct name. */
+  name: string;
+}
+
 /** The type a let annotation names. */
-export type Annotation = ScalarAnnotation | ArrayAnnotation;
+export type Annotation = ScalarAnnotation | ArrayAnnotation | StructAnnotation;
+
+/**
+ * One field of a struct declaration, with a scalar or array type.
+ */
+export interface StructField {
+  /** The field name. */
+  name: string;
+  /** The type every value of this field must have. */
+  annotation: ScalarAnnotation | ArrayAnnotation;
+}
+
+/**
+ * A struct declaration: a name and its fields.
+ */
+export interface StructDecl {
+  /** The struct name. */
+  name: string;
+  /** The fields in declaration order. */
+  fields: StructField[];
+}
 
 // A loop that runs its body while its boolean condition holds.
 interface WhileStatement {
@@ -173,6 +205,14 @@ interface RecordNode {
   /** The fields in source order. */
   fields: RecordField[];
   /** Where the record literal opens. */
+  where: ErrorWhere;
+}
+
+// A struct constructor, such as Point { x : 3, y : 4 }: a struct name and one value for each field.
+interface ConstructNode {
+  kind: "construct";
+  name: string;
+  fields: RecordField[];
   where: ErrorWhere;
 }
 
@@ -295,6 +335,7 @@ export type Expr =
   | ArrayNode
   | IndexNode
   | RecordNode
+  | ConstructNode
   | FieldNode
   | RefNode
   | DerefNode

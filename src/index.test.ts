@@ -854,6 +854,18 @@ test("interpretTuff: assigning a field the record does not have is an UndefinedF
   expectErrorKind("let mut p = { x : 1 }; p.z = 2; p.x", "UndefinedField");
 });
 
+test("interpretTuff: a struct with I32 fields, built with I32 values, returns the sum of its fields", () => {
+  expect(interpretTuff("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3I32, y : 4I32 }; pt.x + pt.y")).toEqual(ok(7));
+});
+
+test("interpretTuff: a struct constructor with plain number fields is a TypeMismatch error", () => {
+  expectErrorKind("struct Point { x : I32, y : I32 } let pt : Point = Point { x : 3, y : 4 }; pt.x + pt.y", "TypeMismatch");
+});
+
+test("interpretTuff: a struct constructor that leaves out a field is a MissingField error", () => {
+  expectErrorKind("struct Point { x : I32, y : I32 } let pt = Point { x : 3I32 }; pt.x", "MissingField");
+});
+
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
   expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
 });

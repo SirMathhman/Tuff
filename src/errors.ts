@@ -161,6 +161,22 @@ export interface U64OutOfRange extends TuffErrorDetails {
 }
 
 /**
+ * A struct constructor names a struct that was not declared.
+ */
+export interface UndefinedStruct extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "UndefinedStruct";
+}
+
+/**
+ * A struct constructor leaves out a field the struct declares.
+ */
+export interface MissingField extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "MissingField";
+}
+
+/**
  * A record has no field with the name that was read or assigned.
  */
 export interface UndefinedField extends TuffErrorDetails {
@@ -192,7 +208,9 @@ export type TuffError =
   | ReferenceEscapes
   | U64OutOfRange
   | IntegerOutOfRange
-  | UndefinedField;
+  | UndefinedField
+  | UndefinedStruct
+  | MissingField;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -293,6 +311,52 @@ export function integerOutOfRangeAt(where: ErrorWhere, value: bigint, type: stri
     fix: `Use a ${type} value from ${min} to ${max}.`,
     why: `${value} is outside the ${type} range, which runs from ${min} to ${max}.`,
     kind: type === "U64" ? "U64OutOfRange" : "IntegerOutOfRange",
+  });
+}
+
+/**
+ * Builds an InvalidTerm error for a let annotation that names a struct which was not declared.
+ * @param where - The token of the annotation.
+ * @param name - The struct name that was used.
+ * @returns An Err result holding the InvalidTerm error.
+ */
+export function undeclaredTypeAt(where: ErrorWhere, name: string): Err<TuffError> {
+  return err({
+    where,
+    fix: `Declare struct ${name} { ... } at the start of the program, or use a sized integer type, Bool, or an array type.`,
+    why: `${JSON.stringify(name)} is not a declared struct, so it is not a type.`,
+    kind: "InvalidTerm",
+  });
+}
+
+/**
+ * Builds an UndefinedStruct error for a constructor whose struct name was not declared.
+ * @param where - The token of the struct name.
+ * @param name - The struct name that was used.
+ * @returns An Err result holding the UndefinedStruct error.
+ */
+export function undefinedStructAt(where: ErrorWhere, name: string): Err<TuffError> {
+  return err({
+    where,
+    fix: `Declare the struct first with struct ${name} { ... } before the statements.`,
+    why: `${JSON.stringify(name)} is not a declared struct.`,
+    kind: "UndefinedStruct",
+  });
+}
+
+/**
+ * Builds a MissingField error for a struct constructor that leaves out fields.
+ * @param where - The token of the struct name.
+ * @param name - The struct name.
+ * @param missing - The names of the fields that were left out.
+ * @returns An Err result holding the MissingField error.
+ */
+export function missingFieldAt(where: ErrorWhere, name: string, missing: string[]): Err<TuffError> {
+  return err({
+    where,
+    fix: `Give a value for each of these fields: ${missing.join(", ")}.`,
+    why: `The constructor of ${name} leaves out ${missing.join(", ")}.`,
+    kind: "MissingField",
   });
 }
 

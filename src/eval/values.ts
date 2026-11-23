@@ -1,4 +1,4 @@
-import { type Annotation, type IntType } from "../ast.ts";
+import { type Annotation, type IntType, type StructDecl } from "../ast.ts";
 import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
 
 /**
@@ -30,6 +30,8 @@ export interface Integer {
 export interface RecordValue {
   /** The fields, keyed by name, in declaration order. */
   fields: Map<string, Value>;
+  /** The struct this record was built from by a constructor. An anonymous record has none. */
+  struct ?: string;
 }
 
 export type Value = number | Integer | boolean | string | Value[] | Reference | RecordValue;
@@ -137,6 +139,8 @@ export interface Scope {
   mutable: boolean;
   /** The enclosing binding, or undefined for the outermost one. */
   parent?: Scope;
+  /** The struct declarations of the program. Only the outermost scope carries them. */
+  structs?: Map<string, StructDecl>;
 }
 
 /**
@@ -150,7 +154,7 @@ export function typeName(value: Value): string {
   }
 
   if (isRecord(value)) {
-    return `a record with fields ${[...value.fields.keys()].join(", ")}`;
+    return value.struct === undefined ? `a record with fields ${[...value.fields.keys()].join(", ")}` : `a ${value.struct}`;
   }
 
   if (isInteger(value)) {
@@ -187,7 +191,7 @@ export function sameType(left: Value, right: Value): boolean {
   }
 
   if (isRecord(left) || isRecord(right)) {
-    return isRecord(left) && isRecord(right) && left.fields.size === right.fields.size && [...left.fields].every(([name, field]) => {
+    return isRecord(left) && isRecord(right) && left.struct === right.struct && left.fields.size === right.fields.size && [...left.fields].every(([name, field]) => {
       const other = right.fields.get(name);
 
       return other !== undefined && sameType(field, other);

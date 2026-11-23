@@ -131,6 +131,7 @@ export function isIdentifier(text: string): boolean {
     text !== "if" &&
     text !== "else" &&
     text !== "while" &&
+    text !== "struct" &&
     text !== "true" &&
     text !== "false" &&
     chars.length > 0 &&

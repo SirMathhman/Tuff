@@ -1,5 +1,5 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { emptyArrayAt, integerOutOfRangeAt, ok, type Result } from "./errors.ts";
+import { emptyArrayAt, integerOutOfRangeAt, ok, type Result, type TuffError } from "./errors.ts";
 import { INT_RANGES, type CompareOp, type Expr, type Link, type LogicalOp, type RecordField } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
@@ -73,7 +73,17 @@ function parsePrimary(
   rules: ParseRules,
 ): Parse {
   if (isRecordLiteral(tokens, pos)) {
-    return parseRecord(tokens, pos, depth, rules);
+    const record = parseFields(tokens, pos, depth, rules);
+
+    return record.ok ? ok({ value: { kind: "record", fields: record.value.fields, where: whereAt(tokens, pos) }, next: record.value.next }) : record;
+  }
+
+  if (isIdentifier(textAt(tokens, pos)) && isRecordLiteral(tokens, pos + 1)) {
+    const record = parseFields(tokens, pos + 1, depth, rules);
+
+    return record.ok
+      ? ok({ value: { kind: "construct", name: textAt(tokens, pos), fields: record.value.fields, where: whereAt(tokens, pos) }, next: record.value.next })
+      : record;
   }
 
   const token = textAt(tokens, pos);
@@ -320,8 +330,13 @@ function isRecordLiteral(tokens: Token[], pos: number): boolean {
   return textAt(tokens, pos) === "{" && isIdentifier(textAt(tokens, pos + 1)) && textAt(tokens, pos + 2) === ":";
 }
 
-// { name : value, name : value }: each field name is used once.
-function parseRecord(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+// { name : value, name : value }: each field name is used once. Returns the fields and the index after "}".
+interface FieldsParsed {
+  fields: RecordField[];
+  next: number;
+}
+
+function parseFields(tokens: Token[], pos: number, depth: number, rules: ParseRules): Result<FieldsParsed, TuffError> {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
@@ -354,7 +369,7 @@ function parseRecord(tokens: Token[], pos: number, depth: number, rules: ParseRu
     next = value.value.next;
 
     if (textAt(tokens, next) === "}") {
-      return ok({ value: { kind: "record", fields, where: whereAt(tokens, pos) }, next: next + 1 });
+      return ok({ fields, next: next + 1 });
     }
 
     if (textAt(tokens, next) !== ",") {

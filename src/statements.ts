@@ -44,22 +44,46 @@ function scalarAnnotationAt(text: string | undefined): ScalarAnnotation | undefi
   return text === "Bool" ? "Bool" : INT_TYPES.find((candidate) => candidate === text);
 }
 
-interface AnnotationParsed {
+/**
+ * Reports whether a token can name a struct: an identifier that starts with a capital letter.
+ * @param text - The token to test.
+ * @returns True when the token starts with A to Z and is a valid name.
+ */
+export function isStructName(text: string): boolean {
+  return isIdentifier(text) && text.charAt(0) >= "A" && text.charAt(0) <= "Z";
+}
+
+/**
+ * A parsed let annotation.
+ */
+export interface AnnotationParsed {
+  /** The type the annotation names. */
   annotation: Annotation;
-  // The index just after the annotation.
+  /** The index just after the annotation. */
   next: number;
 }
 
-// A let annotation at start: a scalar type such as U8 or Bool, or an array type [Type; length].
-function parseAnnotation(tokens: Token[], start: number): Result<AnnotationParsed, TuffError> {
+/**
+ * Parses a type annotation: a scalar type, an array type [Type; length], or a struct name.
+ * @param tokens - The token list being parsed.
+ * @param start - The index of the first token of the annotation.
+ * @returns The annotation and the index after it, or a structured error.
+ */
+export function parseAnnotation(tokens: Token[], start: number): Result<AnnotationParsed, TuffError> {
   if (textAt(tokens, start) !== "[") {
     const scalar = scalarAnnotationAt(textAt(tokens, start));
 
-    if (scalar === undefined) {
-      return invalidAt(tokens, start, "a type such as U8, Bool, or [Bool; 3]", "Write a sized integer type, Bool, or [Type; length] after ':'.");
+    if (scalar !== undefined) {
+      return ok({ annotation: scalar, next: start + 1 });
     }
 
-    return ok({ annotation: scalar, next: start + 1 });
+    const name = textAt(tokens, start);
+
+    if (isStructName(name)) {
+      return ok({ annotation: { kind: "struct", name }, next: start + 1 });
+    }
+
+    return invalidAt(tokens, start, "a type such as U8, Bool, [Bool; 3], or a struct name", "Write a sized integer type, Bool, [Type; length], or a struct name that starts with a capital letter after ':'.");
   }
 
   const element = scalarAnnotationAt(textAt(tokens, start + 1));
@@ -82,7 +106,7 @@ function parseAnnotation(tokens: Token[], start: number): Result<AnnotationParse
     return invalidAt(tokens, start + 4, "']' after the length", "Close the array type with ']'.");
   }
 
-  return ok({ annotation: { element, length: Number(length) }, next: start + 5 });
+  return ok({ annotation: { kind: "array", element, length: Number(length) }, next: start + 5 });
 }
 
 function parseLet(
