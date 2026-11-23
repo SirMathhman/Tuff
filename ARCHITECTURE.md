@@ -7,58 +7,120 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 ### Program terms
 
 - **Source**: the text of a Tuff program. Always untrusted.
-- **Entry point**: `interpretTuff(source)`, the only public function of the interpreter.
-- **Value**: a number or a boolean. A program evaluates to a number; a boolean result is returned as 1 or 0.
-- **Binding**: a name paired with a value, introduced by `let`. A `let mut` binding can be reassigned with `name = expr;`.
-- **Scope**: the bindings visible at a point, innermost first. Inner blocks shadow outer names; the last declaration wins.
-- **Block**: a body of bindings followed by a result expression.
+- **Entry point**: `interpretTuff(source)`, the only public function.
+- **Value**: a number or a boolean. A program evaluates to a number; a boolean result is 1 or 0.
+
+### Bindings and scope
+
+- **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment.
+- **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
+- **Block**: bindings followed by one result expression.
 
 ### Errors and purity
 
-- **Result**: a tagged union, `ok` or `err`. Used instead of throwing.
-- **TuffError**: a structured enum. Each variant states what failed, where (span), why, and how to fix it.
+- **Result**: a tagged union, `ok` or `err`, used instead of throwing.
+- **TuffError**: a structured enum stating what failed, where, why, and how to fix it.
 - **Pure core**: no I/O, no dynamic code evaluation, no reads of ambient state.
 
 ## Structure
 
-Dependency direction is strictly downward. Source lives in `src/`, and no directory holds more than 10 files (checked by `scripts/check-file-count.ts` in `lint`). No cycles exist; `madge --circular` in `lint` enforces this. `for` loops are banned; prefer `map` and `reduce`, using `while` only where a parse must read ahead.
+Dependency direction is strictly downward. No cycles exist; `madge --circular` in `lint` enforces this.
 
 ### Layers
 
 1. Entry points: REPL and file runner. The only layer allowed to do I/O.
-2. Public API: `interpretTuff` and the types it returns, exported from `index.ts`. Constructor helpers such as `ok` and `undefinedNameAt` stay internal.
-3. Shared core (`errors.ts`): `Result`, `TuffError`, `Span`, `Value`. Depends on nothing else.
+2. Public API: `interpretTuff` and its exported types, from `index.ts`.
+3. Shared core (`errors.ts`): `Result`, `TuffError`, `ErrorWhere`, `Value`. Depends on nothing else.
 
-### Stages and tests
+### Pipeline
 
-1. Pipeline: `tokenizer.ts`, then `parser.ts` (expressions), then `statements.ts` (statement lists, blocks, and if statements), then `evaluator.ts`. `conditions.ts` holds the shared `( expr )` condition rule. Parse-error constructors and position helpers live in `parse-errors.ts`. `statements.ts` and `conditions.ts` import only the shared core (`errors.ts`), `tokenizer.ts`, `parse-errors.ts`, `ast.ts`, and each other; they receive the expression rule as a parameter. `parser.ts` imports them, so no parser module imports the expression parser, and no cycle forms. Each stage is a pure function of its input. The evaluator's assignment cells are created and discarded within one evaluation and never escape it.
-2. AST types live in `ast.ts`, so the evaluator depends on the AST rather than on the parser.
-3. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
+1. `tokenizer.ts`: a character scanner that emits numbers, names, brackets, and operators.
+2. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
+3. `evaluator.ts`: a pure fold over the AST.
 
-### Recursion
+### Shared rules
 
-Recursion is limited to the parser, the statement rules, and the evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. Helpers that need the evaluator, such as block evaluation, receive it the same way. The evaluator never runs during parsing.
+- `conditions.ts` holds the `( expr )` condition rule. `parse-errors.ts` holds error constructors and position helpers.
+- `ast.ts` holds AST types, so the evaluator depends on the AST rather than on the parser.
+
+### Dependency rules
+
+- Stage modules import only the core, `tokenizer.ts`, `parse-errors.ts`, `ast.ts`, and each other.
+- A rule that would close a cycle receives the other rule as a parameter. No parser module imports the expression parser.
+
+### Size limits
+
+- No directory holds more than 10 files; `scripts/check-file-count.ts` enforces this in `lint`.
+- Functions, files, and directories stay under the limits in `eslint.config.js`; exceeding one is a split signal.
+
+### Tests
+
+- Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
+
+## Recursion
+
+Recursion is limited to the parser, the statement rules, and the evaluator over the AST. Mutual recursion is forbidden, within a file and across files.
+
+### Passing rules as parameters
+
+- A rule that would close a cycle receives the other rule as a parameter, as `blockBody` receives `parseExpr`.
+- Each expression kind is evaluated by its own rule, and each rule receives `evaluate` as a parameter. The evaluator never runs during parsing.
+
+## Grammar
+
+### Logical and comparison operators
+
+- `||` binds loosest, then `&&`. Both short-circuit and take booleans.
+- Comparisons `<`, `<=`, `>`, `>=`, `==`, and `!=` bind tighter than `&&`, do not chain, and yield booleans. Ordering takes numbers; equality takes two values of one type.
+
+### Arithmetic and unary operators
+
+- `+`, `-`, and `*` fold left to right, with `*` binding tighter.
+- `!` takes one following primary and a boolean. A single unary `-` precedes a number, a name, or a group.
+
+### Blocks and if
+
+- `if (cond) a else b` takes a boolean condition and requires both branches.
+- A `{` at statement position opens a statement block when its contents begin with a statement and the token after its `}` ends the statement.
+
+### Blocks as values
+
+- A block used as a value ends in a final expression.
+- A program made only of statements evaluates to 0.
+
+### Names and numbers
+
+- Names bind with `let`. Undeclared names and assignments to immutable names are errors.
+- Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
+
+### Tokens
+
+- Brackets, operators, `=`, and `;` are self-delimiting, so spacing never changes meaning.
+- Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans.
+
+### Compatibility
+
+- Number literals follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 
 ## Potential Problems
 
-### Grammar and numbers
+### Resource limits
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. Comparisons `<`, `<=`, `>`, `>=`, `==`, and `!=` bind looser than arithmetic, do not chain, and yield booleans; the ordering operators take numbers, and `==` and `!=` take two values of the same type. `if (cond) a else b` takes a boolean condition and requires both branches; when both branches are statement blocks, the if is a statement with no value. An if whose then block ends with `;` and is followed by no operator is a statement, and its else may be omitted. `true` and `false` are booleans. `&&` binds looser than comparisons and `||` looser than `&&`; both short-circuit and take booleans. `!` binds tightest, to the following primary, and takes a boolean. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
-- Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement or an if statement and the token after its `}` is a name, number, `(`, `{`, `let`, `if`, or `}`, or the `}` ends the input and directly follows a `;`.
-- Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
-- Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
+- Very large sources and deeply nested expressions can exhaust time or the call stack.
+- Nesting counts every nested construct against one limit of 1000 levels. Exceeding it is `NestingTooDeep`.
 
-### Resources and failure modes
+### Stack safety
 
-- Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
-- Every nested construct counts toward one nesting limit of 1000 levels: groups, statement blocks, and if branches alike. Exceeding it returns a `NestingTooDeep` error, so no `RangeError` escapes.
-- Operator chains are folded with `reduce`, so their length never depends on the call stack.
-- Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
+- Operator chains fold with `reduce`, so their length never depends on the call stack.
+- Exception-based failure paths creep in unless the Result pattern is enforced from the start.
+
+### Growth
+
+- Dispatch functions grow with every new expression kind. Each kind should get its own rule instead.
 
 ## Security Concerns
 
-Source is untrusted input. It arrives from the REPL, from files, and potentially from a model that writes Tuff code.
+Source is untrusted input. It arrives from the REPL, from files, and from a model that writes Tuff code.
 
 ### Code execution and host access
 
@@ -67,24 +129,29 @@ Source is untrusted input. It arrives from the REPL, from files, and potentially
 
 ### Input tokens
 
-- Operators come only from source characters. Internal markers used by the tokenizer are unreachable from source, so a stray marker character in source is an `InvalidTerm` error, never an operator.
+- Operators are recognized only by the tokenizer's character scanner, so no source character can form a token outside the grammar.
 
-### Limits and output
+### Output and limits
 
-- Limits on source size, nesting depth, and evaluation steps, so hostile input cannot hang or crash the host.
 - Output is data only. Values are never rendered as markup or executed by the caller.
+- Limits on source size, nesting depth, and evaluation steps keep hostile input from hanging or crashing the host.
 
 ### Known gaps
 
-Nesting depth is counted for every nested construct; source size and step limits are not enforced yet. Model-driven prompt injection can reach the evaluator through source text, so the host-capability whitelist must be designed before any host function is added.
+- Nesting depth is enforced. Source size and evaluation-step limits are not enforced yet.
+- Model-driven prompt injection reaches the evaluator through source text. The host-capability whitelist must be designed before any host function exists.
+
+### State changes
+
+- The interpreter changes no state outside its own evaluation. Any future host function is an unauthenticated state change and needs an explicit capability grant.
 
 ## Future Work
 
 ### Near term
 
 1. Replace the token-index `where` of each `TuffError` with character spans.
-2. Replace the tokenizer's marker substitution with a character scanner, so source characters never reach the operator table.
-3. Split `src/` into subdirectories by stage before adding an eleventh file.
+2. Split `src/` into subdirectories by stage before adding an eleventh file.
+3. Decide whether `!` nests, and make the grammar say so.
 
 ### Later
 
@@ -96,11 +163,14 @@ Nesting depth is counted for every nested construct; source size and step limits
 
 ### Parsing and evaluation
 
-- Tokenizing and parsing should be linear in source length. Avoid regular expressions with nested quantifiers, which backtrack badly on adversarial input.
-- Statement-block detection scans forward to the matching `}`, so nested statement blocks can cost roughly source length times depth. Matching brackets should be found in one pass before parsing.
-- Step limits will guard against unbounded loops, which the language will eventually need.
-- Scope lookup walks the bindings in order, so a long run of `let` statements can make evaluation quadratic. A map keyed by name avoids this.
+- Tokenizing and parsing should be linear in source length. Avoid regular expressions with nested quantifiers.
+- Statement-block detection scans forward to the matching `}`, so nested blocks can cost source length times depth.
+
+### Scope and loops
+
+- Scope lookup walks bindings in order, so many `let` statements can make evaluation quadratic. A map by name avoids this.
+- Step limits will guard unbounded loops, which the language will eventually need.
 
 ### Measurement
 
-Real measurements should come from a profiler once the pipeline exists. No optimization is planned before then.
+- Real measurements should come from a profiler once the pipeline exists. No optimization is planned before then.
