@@ -816,6 +816,16 @@ test("interpretTuff: an array whose length differs from its annotation is a Type
   expectErrorKind("let x : [Bool; 2] = [true, true, true]; x", "TypeMismatch");
 });
 
+test("interpretTuff: an annotated array keeps its length on reassignment", () => {
+  expectErrorKind("let mut x : [Bool; 3] = [true, true, true]; x = [false]; x[0]", "TypeMismatch");
+  expect(interpretTuff("let mut x : [Bool; 3] = [true, true, true]; x = [false, true, false]; x[2]")).toEqual(ok(0));
+});
+
+test("interpretTuff: an element write must keep the element type of an annotated array", () => {
+  expect(interpretTuff("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 9U8; x[0]")).toEqual(ok(9));
+  expectErrorKind("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 1; x[0]", "TypeMismatch");
+});
+
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
   expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
 });
