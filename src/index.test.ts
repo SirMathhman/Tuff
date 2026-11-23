@@ -826,6 +826,27 @@ test("interpretTuff: \"let mut x = 0; if (x < 4) x += 1; x\" => 1", () => {
   expect(interpretTuff("let mut x = 0; if (x < 4) x += 1; x")).toEqual(ok(1));
 });
 
+test("interpretTuff: an if may mix a braced then branch with an unbraced else branch", () => {
+  expect(interpretTuff("let mut x = 0; if (true) { x += 1; } else x += 2; x")).toEqual(ok(1));
+  expect(interpretTuff("let mut x = 0; if (false) { x += 1; } else x += 2; x")).toEqual(ok(2));
+});
+
+test("interpretTuff: an if may be the unbraced branch of another if, and the else binds to the inner if", () => {
+  expect(interpretTuff("let mut x = 0; if (true) if (true) x += 1; x")).toEqual(ok(1));
+  expect(interpretTuff("let mut x = 0; if (true) if (false) x += 1; else x += 2; x")).toEqual(ok(2));
+});
+
+test("interpretTuff: a let as an unbraced if body is an InvalidTerm error that names the rule", () => {
+  const result = interpretTuff("let mut x = 0; if (x < 4) let y = 1; x");
+
+  expect(result.ok).toBe(false);
+
+  if (!result.ok) {
+    expect(result.error.kind).toBe("InvalidTerm");
+    expect(result.error.why).toContain("a statement other than let");
+  }
+});
+
 test("interpretTuff: unbraced if branches choose one statement each", () => {
   expect(interpretTuff("let mut x = 5; if (x < 4) x += 1; else x += 2; x")).toEqual(ok(7));
 });

@@ -297,7 +297,7 @@ function canFollowStatementBlock(token: string | undefined): boolean {
 // an enclosing block. A block followed by an operator is a value, as in
 // "{ let x = 2; x } * 4".
 function isStatementBlock(tokens: Token[], open: number): boolean {
-  if (textAt(tokens, open) !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1) && !isUnbracedIf(tokens, open + 1))) {
+  if (textAt(tokens, open) !== "{" || (!startsStatement(tokens, open + 1) && !isIfStatement(tokens, open + 1))) {
     return false;
   }
 
@@ -323,56 +323,109 @@ function continuesExpression(token: string | undefined): boolean {
   return token === "+" || token === "-" || token === "*";
 }
 
-function isBranchStatement(tokens: Token[], pos: number): boolean {
-  if (textAt(tokens, pos) !== "if" || textAt(tokens, pos + 1) !== "(") {
-    return false;
-  }
+type IfEndRule = (tokens: Token[], pos: number) => number | undefined;
 
-  const conditionClose = closingOf(tokens, pos + 1, "(", ")");
-
-  if (conditionClose === undefined || textAt(tokens, conditionClose + 1) !== "{") {
-    return false;
-  }
-
-  const thenClose = closingOf(tokens, conditionClose + 1, "{", "}");
-
-  if (thenClose === undefined || textAt(tokens, thenClose - 1) !== ";") {
-    return false;
-  }
-
-  if (textAt(tokens, thenClose + 1) !== "else") {
-    return !continuesExpression(textAt(tokens, thenClose + 1));
-  }
-
-  if (textAt(tokens, thenClose + 2) !== "{") {
-    return false;
-  }
-
-  const elseClose = closingOf(tokens, thenClose + 2, "{", "}");
-
-  if (elseClose === undefined || textAt(tokens, elseClose - 1) !== ";") {
-    return false;
-  }
-
-  return !continuesExpression(textAt(tokens, elseClose + 1));
+interface BodyEnd {
+  // The index just after the body.
+  next: number;
+  // True for a { } block, whose last statement must end with ";" to count as a statement.
+  braced: boolean;
 }
 
-// An if whose then branch is one unbraced statement, as in if (c) x += 1;. The branch must begin like a
-// statement, so an if expression such as if (c) 1 else 2 is not taken as a statement.
-function isUnbracedIf(tokens: Token[], pos: number): boolean {
+// The index just after a statement that ends at its first ";" outside any brackets, or undefined.
+function simpleStatementEnd(tokens: Token[], start: number): number | undefined {
+  let depth = 0;
+  let index = start;
+
+  while (index < tokens.length) {
+    const token = textAt(tokens, index);
+
+    if (token === "(" || token === "[" || token === "{") {
+      depth += 1;
+    } else if (token === ")" || token === "]" || token === "}") {
+      depth -= 1;
+
+      if (depth < 0) {
+        return undefined;
+      }
+    } else if (token === ";" && depth === 0) {
+      return index + 1;
+    }
+
+    index += 1;
+  }
+
+  return undefined;
+}
+
+// Where the body that starts at start ends. An if inside the body is measured by ifRule, which is passed in
+// rather than named, so the recursion does not close a cycle of functions.
+function bodyEnd(tokens: Token[], start: number, ifRule: IfEndRule): BodyEnd | undefined {
+  const token = textAt(tokens, start);
+
+  if (token === "{") {
+    const close = closingOf(tokens, start, "{", "}");
+
+    return close === undefined ? undefined : { next: close + 1, braced: true };
+  }
+
+  if (token === "if") {
+    const end = ifRule(tokens, start);
+
+    return end === undefined ? undefined : { next: end, braced: false };
+  }
+
+  if (token === "while") {
+    const closing = closingOf(tokens, start + 1, "(", ")");
+    const body = closing === undefined ? undefined : bodyEnd(tokens, closing + 1, ifRule);
+
+    return body === undefined ? undefined : { next: body.next, braced: false };
+  }
+
+  if (token === "let" || startsStatement(tokens, start) || isElementAssign(tokens, start) || isDerefAssign(tokens, start)) {
+    const end = simpleStatementEnd(tokens, start);
+
+    return end === undefined ? undefined : { next: end, braced: false };
+  }
+
+  return undefined;
+}
+
+// The index just after the if statement at pos, or undefined when the tokens there are not an if
+// statement. An if whose branches begin like an expression, such as if (c) 1 else 2, is not a statement.
+// The then and else branches may each be a block or one statement, including let, which parseBody rejects.
+function ifStatementEnd(tokens: Token[], pos: number): number | undefined {
   if (textAt(tokens, pos) !== "if" || textAt(tokens, pos + 1) !== "(") {
-    return false;
+    return undefined;
   }
 
   const closing = closingOf(tokens, pos + 1, "(", ")");
 
   if (closing === undefined) {
-    return false;
+    return undefined;
   }
 
-  const first = closing + 1;
+  const then = bodyEnd(tokens, closing + 1, ifStatementEnd);
 
-  return textAt(tokens, first) !== "let" && (startsStatement(tokens, first) || isElementAssign(tokens, first) || isDerefAssign(tokens, first));
+  if (then === undefined || (then.braced && textAt(tokens, then.next - 2) !== ";")) {
+    return undefined;
+  }
+
+  if (textAt(tokens, then.next) !== "else") {
+    return continuesExpression(textAt(tokens, then.next)) ? undefined : then.next;
+  }
+
+  const otherwise = bodyEnd(tokens, then.next + 1, ifStatementEnd);
+
+  if (otherwise === undefined || (otherwise.braced && textAt(tokens, otherwise.next - 2) !== ";")) {
+    return undefined;
+  }
+
+  return continuesExpression(textAt(tokens, otherwise.next)) ? undefined : otherwise.next;
+}
+
+function isIfStatement(tokens: Token[], pos: number): boolean {
+  return ifStatementEnd(tokens, pos) !== undefined;
 }
 
 // A branch or loop body: a block's statements, or one unbraced statement other than let.
@@ -519,7 +572,7 @@ function parseStatementList(
   const statements: Statement[] = [];
   let next = pos;
 
-  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next) || isUnbracedIf(tokens, next)) {
+  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isIfStatement(tokens, next)) {
     const parsed = parseOneStatement(tokens, next, depth, expr, parseStatementList);
 
     if (!parsed.ok) {
