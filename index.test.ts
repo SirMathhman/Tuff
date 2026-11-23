@@ -38,7 +38,10 @@ test('interpretTuff("{ 2 + 3 } * 4") => 20', () => {
 });
 
 test('interpretTuff("{ let x = 2 + 3; x } * 4") => 20', () => {
-  expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual({ ok: true, value: 20 });
+  expect(interpretTuff("{ let x = 2 + 3; x } * 4")).toEqual({
+    ok: true,
+    value: 20,
+  });
 });
 
 test('interpretTuff("{ let x = 1; x } + x") => undefined variable outside its block', () => {
@@ -102,15 +105,23 @@ test('interpretTuff("1;") => unexpected semicolon error', () => {
 });
 
 test('interpretTuff("let mut x = 0; x = 1; x") => 1', () => {
-  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("let mut x = 0; x = 1; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
 });
 
 test('interpretTuff("let mut x = 0; let y = { x = 1; x }; x") => 1', () => {
-  expect(interpretTuff("let mut x = 0; let y = { x = 1; x }; x")).toEqual({ ok: true, value: 1 });
+  expect(interpretTuff("let mut x = 0; let y = { x = 1; x }; x")).toEqual({
+    ok: true,
+    value: 1,
+  });
 });
 
 test('interpretTuff("let mut x = 0; let y = { let mut x = 5; x = 6; x }; x") => 0', () => {
-  expect(interpretTuff("let mut x = 0; let y = { let mut x = 5; x = 6; x }; x")).toEqual({
+  expect(
+    interpretTuff("let mut x = 0; let y = { let mut x = 5; x = 6; x }; x"),
+  ).toEqual({
     ok: true,
     value: 0,
   });

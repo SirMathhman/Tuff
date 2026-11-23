@@ -107,7 +107,12 @@ interface Parsed {
 
 // A parser for one factor. The grammar functions receive it as a parameter
 // instead of calling parseFactor directly, which breaks the recursion cycle.
-type Parser = (tokens: Token[], index: number, scope: Scope, end: number) => Result<Parsed>;
+type Parser = (
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+) => Result<Parsed>;
 
 // The deepest allowed nesting of parentheses and braces. The parser recurses
 // once per level, so this bound keeps it inside the call stack.
@@ -126,7 +131,9 @@ function isDigit(char: string): boolean {
 }
 
 function isLetter(char: string): boolean {
-  return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_";
+  return (
+    (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_"
+  );
 }
 
 function tokenize(source: string): Result<Token[]> {
@@ -201,7 +208,11 @@ function tokenText(token: Token): string {
   if (token.kind === "number") {
     return String(token.value);
   }
-  if (token.kind === "operator" || token.kind === "open" || token.kind === "close") {
+  if (
+    token.kind === "operator" ||
+    token.kind === "open" ||
+    token.kind === "close"
+  ) {
     return token.symbol;
   }
   if (token.kind === "name") {
@@ -362,7 +373,10 @@ function closeBlock(outer: Scope, inner: Scope): Scope {
   const names = new Map<string, Binding>(
     [...outer.names].map(
       ([name, binding]) =>
-        [name, inner.own.has(name) ? binding : (inner.names.get(name) ?? binding)] as const,
+        [
+          name,
+          inner.own.has(name) ? binding : (inner.names.get(name) ?? binding),
+        ] as const,
     ),
   );
   return { names, own: outer.own };
@@ -379,7 +393,10 @@ function declare(scope: Scope, name: string, binding: Binding): Scope {
 // Returns a new scope where `name` holds `value`, keeping its mutability.
 function assign(scope: Scope, name: string, value: number): Scope {
   return {
-    names: new Map<string, Binding>([...scope.names, [name, { value, mutable: true }] as const]),
+    names: new Map<string, Binding>([
+      ...scope.names,
+      [name, { value, mutable: true }] as const,
+    ]),
     own: scope.own,
   };
 }
@@ -470,7 +487,9 @@ function parseGroup(
     });
   }
   const closedScope =
-    openSymbol === "{" ? closeBlock(scope, inner.value.scope) : inner.value.scope;
+    openSymbol === "{"
+      ? closeBlock(scope, inner.value.scope)
+      : inner.value.scope;
   return ok({ value: inner.value.value, next: next + 1, scope: closedScope });
 }
 
@@ -608,7 +627,10 @@ function parseLet(
   const semicolonIndex = value.value.next;
   const semicolon = tokens[semicolonIndex];
   if (semicolon?.kind !== "semicolon") {
-    return missingSemicolon(semicolon?.pos ?? end, `The let statement for "${name}"`);
+    return missingSemicolon(
+      semicolon?.pos ?? end,
+      `The let statement for "${name}"`,
+    );
   }
   const current = value.value.scope;
   if (current.own.has(name)) {
@@ -663,7 +685,10 @@ function parseAssign(
   const semicolonIndex = value.value.next;
   const semicolon = tokens[semicolonIndex];
   if (semicolon?.kind !== "semicolon") {
-    return missingSemicolon(semicolon?.pos ?? end, `The assignment to "${name}"`);
+    return missingSemicolon(
+      semicolon?.pos ?? end,
+      `The assignment to "${name}"`,
+    );
   }
   return parseSequence(
     tokens,

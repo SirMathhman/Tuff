@@ -5,12 +5,15 @@
   "private": true,
   "scripts": {
     "lint": "eslint . && bun scripts/check-md-lists.ts",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
     "eslint": "^10.14.0",
+    "prettier": "^3.10.1",
     "typescript-eslint": "^8.72.0"
   },
   "peerDependencies": {

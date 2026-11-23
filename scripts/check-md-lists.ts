@@ -20,21 +20,29 @@ function itemIndent(line: string): number | undefined {
   const trimmed = line.trimStart();
   const indent = line.length - trimmed.length;
   const first = trimmed.charAt(0);
-  const isBullet = (first === "-" || first === "*" || first === "+") && trimmed.charAt(1) === " ";
+  const isBullet =
+    (first === "-" || first === "*" || first === "+") &&
+    trimmed.charAt(1) === " ";
   return isBullet || isNumbered(trimmed) ? indent : undefined;
 }
 
 // True when the line starts with digits, then "." or ")", then a space.
 function isNumbered(trimmed: string): boolean {
   let digits = 0;
-  while (digits < trimmed.length && trimmed.charAt(digits) >= "0" && trimmed.charAt(digits) <= "9") {
+  while (
+    digits < trimmed.length &&
+    trimmed.charAt(digits) >= "0" &&
+    trimmed.charAt(digits) <= "9"
+  ) {
     digits++;
   }
   if (digits === 0) {
     return false;
   }
   const marker = trimmed.charAt(digits);
-  return (marker === "." || marker === ")") && trimmed.charAt(digits + 1) === " ";
+  return (
+    (marker === "." || marker === ")") && trimmed.charAt(digits + 1) === " "
+  );
 }
 
 // Lists in one file that exceed the limit. A list starts at an item line and
@@ -101,14 +109,19 @@ function markdownFiles(): string[] {
 function main(): void {
   let violations: Violation[] = [];
   for (const file of markdownFiles()) {
-    violations = [...violations, ...checkText(file, readFileSync(file, "utf8"))];
+    violations = [
+      ...violations,
+      ...checkText(file, readFileSync(file, "utf8")),
+    ];
   }
   if (violations.length === 0) {
     console.log(`Markdown lists: every list has ${MAX_ITEMS} items or fewer.`);
     return;
   }
   for (const v of violations) {
-    console.error(`${v.file}:${v.line}: list has ${v.count} items; the limit is ${MAX_ITEMS}`);
+    console.error(
+      `${v.file}:${v.line}: list has ${v.count} items; the limit is ${MAX_ITEMS}`,
+    );
   }
   process.exitCode = 1;
 }

@@ -25,11 +25,14 @@ export default tseslint.config(
         "error",
         {
           selector: "Literal[regex]",
-          message: "Regex literals are not allowed. Use string methods instead.",
+          message:
+            "Regex literals are not allowed. Use string methods instead.",
         },
         {
-          selector: "CallExpression > MemberExpression.callee > Identifier.property[name='push']",
-          message: "Array.push is not allowed. Treat arrays as immutable, e.g. build a new array with spread.",
+          selector:
+            "CallExpression > MemberExpression.callee > Identifier.property[name='push']",
+          message:
+            "Array.push is not allowed. Treat arrays as immutable, e.g. build a new array with spread.",
         },
         {
           selector: "ThrowStatement",
@@ -38,11 +41,13 @@ export default tseslint.config(
         {
           selector:
             ":matches(FunctionDeclaration, FunctionExpression, ArrowFunctionExpression) > Identifier.params:has(TSUnionType > TSUndefinedKeyword)",
-          message: "Parameters must not accept undefined in a union. Pass the container and an index, or split the function.",
+          message:
+            "Parameters must not accept undefined in a union. Pass the container and an index, or split the function.",
         },
         {
           selector: "TSTypeLiteral",
-          message: "Object type literals are not allowed. Declare a named interface instead.",
+          message:
+            "Object type literals are not allowed. Declare a named interface instead.",
         },
       ],
     },

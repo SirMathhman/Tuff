@@ -31,6 +31,7 @@ as the language grows. It describes the ideal, not the current code.
   current block declared itself. Declaring or assigning a name returns a new
   scope; it never mutates one. Closing a block keeps the enclosing scope's names,
   with assignments from the block applied, except names the block declared.
+
 ### Evaluation
 
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
@@ -38,8 +39,7 @@ as the language grows. It describes the ideal, not the current code.
 - **Expression**: an optional leading sign, then one or more terms joined by
   `+` or `-`. An expression evaluates to the sum of its signed terms.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
-  lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both
-  20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
+  lets stay inside them. `(2 + 3) * 4` and `{ let x = 2 + 3; x } * 4` are both 20. Groups nest freely, but each opener must close with its own kind: `( 2 }`
   is an error. Empty groups `()` and `{}` are errors.
 - **Precedence**: `*` binds tighter than `+` and `-`. Evaluation is left to
   right within each level.
@@ -160,6 +160,7 @@ Variants (initial set, with the variants added for names and let):
   operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
 - `UnexpectedSemicolon { offset }`: a `;` that does not end a let statement.
 - `MissingSemicolon { offset, name }`: a let value is not followed by `;`.
+
 Names, assignments, and scope:
 
 - `MissingName { offset }`: `let` is not followed by a name.
@@ -220,14 +221,14 @@ What untrusted input can reach:
 
 Controls the architecture should have:
 
-| Control | Status |
-| --- | --- |
-| No dynamic code execution (`eval`, `Function`) | Present |
-| Malformed input is rejected, not coerced | Present for the rules in Errors |
-| Input length limit | Missing |
-| Non-finite results are reported as errors | Missing |
-| Error messages do not echo unbounded input | Missing (names are echoed in full) |
-| Nesting depth limit (no stack exhaustion) | Missing (see Potential Problems) |
+| Control                                        | Status                             |
+| ---------------------------------------------- | ---------------------------------- |
+| No dynamic code execution (`eval`, `Function`) | Present                            |
+| Malformed input is rejected, not coerced       | Present for the rules in Errors    |
+| Input length limit                             | Missing                            |
+| Non-finite results are reported as errors      | Missing                            |
+| Error messages do not echo unbounded input     | Missing (names are echoed in full) |
+| Nesting depth limit (no stack exhaustion)      | Missing (see Potential Problems)   |
 
 Prompt injection: if Tuff source is ever produced by a language model, treat
 the model output as untrusted text. The interpreter stays a pure evaluator.
