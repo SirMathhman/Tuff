@@ -32,6 +32,14 @@ export default tseslint.config(
           message: "throw is not allowed. Return a Result instead.",
         },
         {
+          selector: `TSUnionType > TSLiteralType > Literal[raw=/^["']/]`,
+          message: "String literals in union types are not allowed. Use an enum instead.",
+        },
+        {
+          selector: "TSUnionType > TSTemplateLiteralType",
+          message: "Template literal types in union types are not allowed. Use an enum instead.",
+        },
+        {
           selector: "TSTypeLiteral",
           message: "Object type literals are not allowed. Declare a named interface instead.",
         },
