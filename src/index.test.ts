@@ -303,6 +303,34 @@ test("interpretTuff a block whose first statement is an if returns Ok(1)", () =>
   expect(interpretTuff("let mut x = 0; { if (true) { x = 1; } } x")).toEqual(ok(1));
 });
 
+test("interpretTuff: 1 < 2 returns Ok(1)", () => {
+  expect(interpretTuff("1 < 2")).toEqual(ok(1));
+});
+
+test("interpretTuff: 2 <= 1 returns Ok(0)", () => {
+  expect(interpretTuff("2 <= 1")).toEqual(ok(0));
+});
+
+test("interpretTuff: 1 + 2 < 4 returns Ok(1)", () => {
+  expect(interpretTuff("1 + 2 < 4")).toEqual(ok(1));
+});
+
+test("interpretTuff: 1 != 1 returns Ok(0)", () => {
+  expect(interpretTuff("1 != 1")).toEqual(ok(0));
+});
+
+test("interpretTuff: a comparison as an if condition returns Ok(5)", () => {
+  expect(interpretTuff("let b = 3 >= 3; if (b) 5 else 6")).toEqual(ok(5));
+});
+
+test("interpretTuff: 1 == true is a TypeMismatch error", () => {
+  expectErrorKind("1 == true", "TypeMismatch");
+});
+
+test("interpretTuff: 1 < 2 < 3 is an InvalidTerm error", () => {
+  expectErrorKind("1 < 2 < 3", "InvalidTerm");
+});
+
 test("interpretTuff('true') returns Ok(1)", () => {
   expect(interpretTuff("true")).toEqual(ok(1));
 });

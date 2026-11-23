@@ -8,7 +8,7 @@ import {
   type Result,
   type TuffError,
 } from "./errors.ts";
-import { type AssignStatement, type Expr, type Link, type Statement } from "./ast.ts";
+import { type AssignStatement, type CompareOp, type Expr, type Link, type Statement } from "./ast.ts";
 
 type Value = number | boolean;
 
@@ -154,6 +154,48 @@ function evaluateBlock(
   return evaluateRule(result, inner.value);
 }
 
+function numericCompare(op: CompareOp, left: number, right: number): boolean {
+  if (op === "<") {
+    return left < right;
+  }
+
+  if (op === "<=") {
+    return left <= right;
+  }
+
+  if (op === ">") {
+    return left > right;
+  }
+
+  return left >= right;
+}
+
+function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+  if (op === "==" || op === "!=") {
+    if (typeof left !== typeof right) {
+      return typeMismatchAt(where, typeName(left), typeName(right));
+    }
+
+    const equal = left === right;
+
+    return ok(op === "==" ? equal : !equal);
+  }
+
+  const a = asNumber(left, where);
+
+  if (!a.ok) {
+    return a;
+  }
+
+  const b = asNumber(right, where);
+
+  if (!b.ok) {
+    return b;
+  }
+
+  return ok(numericCompare(op, a.value, b.value));
+}
+
 /**
  * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
@@ -195,6 +237,22 @@ export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
     }
 
     return evaluate(condition.value ? expr.then : expr.otherwise, scope);
+  }
+
+  if (expr.kind === "compare") {
+    const left = evaluate(expr.left, scope);
+
+    if (!left.ok) {
+      return left;
+    }
+
+    const right = evaluate(expr.right, scope);
+
+    if (!right.ok) {
+      return right;
+    }
+
+    return compare(expr.op, left.value, right.value, expr.where);
   }
 
   if (expr.kind === "block") {

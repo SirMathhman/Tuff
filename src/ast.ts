@@ -22,6 +22,16 @@ interface ReferenceNode {
   where: ErrorWhere;
 }
 
+export type CompareOp = "<" | "<=" | ">" | ">=" | "==" | "!=";
+
+interface CompareNode {
+  kind: "compare";
+  op: CompareOp;
+  left: Expr;
+  right: Expr;
+  where: ErrorWhere;
+}
+
 interface IfNode {
   kind: "if";
   condition: Expr;
@@ -103,4 +113,5 @@ export type Expr =
   | ReferenceNode
   | ChainNode
   | IfNode
+  | CompareNode
   | BlockNode;

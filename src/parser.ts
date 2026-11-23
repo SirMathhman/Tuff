@@ -1,5 +1,5 @@
 import { ok, type Result } from "./errors.ts";
-import { type Expr, type Link } from "./ast.ts";
+import { type CompareOp, type Expr, type Link } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -195,17 +195,54 @@ function parseTerm(
   );
 }
 
+function parseSum(tokens: string[], pos: number, depth: number): Parse {
+  return parseChain(tokens, pos, ["+", "-"], (next) =>
+    parseTerm(tokens, next, depth, parseExpr),
+  );
+}
+
+const COMPARISONS: CompareOp[] = ["<", "<=", ">", ">=", "==", "!="];
+
+function comparisonAt(token: string | undefined): CompareOp | undefined {
+  return COMPARISONS.find((candidate) => candidate === token);
+}
+
 /**
- * Parses a complete expression starting at a token position.
+ * Parses a comparison: a sum, optionally followed by one comparison operator and a sum.
  * @param tokens - The token list to parse.
  * @param pos - The index of the first token of the expression.
  * @param depth - The number of groups enclosing this position.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
 export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
-  return parseChain(tokens, pos, ["+", "-"], (next) =>
-    parseTerm(tokens, next, depth, parseExpr),
-  );
+  const left = parseSum(tokens, pos, depth);
+
+  if (!left.ok) {
+    return left;
+  }
+
+  const op = comparisonAt(tokens[left.value.next]);
+
+  if (op === undefined) {
+    return left;
+  }
+
+  const right = parseSum(tokens, left.value.next + 1, depth);
+
+  if (!right.ok) {
+    return right;
+  }
+
+  return ok({
+    value: {
+      kind: "compare",
+      op,
+      left: left.value.value,
+      right: right.value.value,
+      where: whereAt(tokens, left.value.next),
+    },
+    next: right.value.next,
+  });
 }
 
 // A "{" starts a statement block when its contents begin with a statement and

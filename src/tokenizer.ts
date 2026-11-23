@@ -8,6 +8,10 @@ export function tokenize(tuffSource: string): string[] {
     .replaceAll("\t", " ")
     .replaceAll("\n", " ")
     .replaceAll("\r", " ")
+    .replaceAll("<=", "  ")
+    .replaceAll(">=", "  ")
+    .replaceAll("==", "  ")
+    .replaceAll("!=", "  ")
     .replaceAll("(", " ( ")
     .replaceAll(")", " ) ")
     .replaceAll("{", " { ")
@@ -17,20 +21,33 @@ export function tokenize(tuffSource: string): string[] {
     .replaceAll("*", " * ")
     .replaceAll(";", " ; ")
     .replaceAll("=", " = ")
+    .replaceAll("<", " < ")
+    .replaceAll(">", " > ")
     .split(" ")
-    .filter((token) => token !== "");
+    .filter((token) => token !== "")
+    .map(restoreOperator);
 }
 
+const MARKED_OPERATORS: [string, string][] = [
+  ["", "<="],
+  ["", ">="],
+  ["", "=="],
+  ["", "!="],
+];
+
+function restoreOperator(token: string): string {
+  const hit = MARKED_OPERATORS.find(([marker]) => marker === token);
+
+  return hit === undefined ? token : hit[1];
+}
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
 }
 
-
 function isLetterOrUnderscore(char: string): boolean {
   return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z") || char === "_";
 }
-
 
 /**
  * Reports whether a token is made only of decimal digits.
@@ -40,7 +57,6 @@ function isLetterOrUnderscore(char: string): boolean {
 export function isDigits(text: string): boolean {
   return text.length > 0 && [...text].every(isDigit);
 }
-
 
 /**
  * Reports whether a token is a valid name: not reserved, starting with a letter or underscore.
