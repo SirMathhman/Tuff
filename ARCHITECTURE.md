@@ -37,15 +37,15 @@ Dependency direction is strictly downward. Source lives in `src/`, and no direct
 
 ### Recursion
 
-Recursion is limited to the parser and evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. Helpers that need the evaluator, such as block evaluation, receive it the same way. The evaluator never runs during parsing.
+Recursion is limited to the parser, the statement rules, and the evaluator over the AST. Mutual recursion is forbidden, within a file and across files: a rule that would close a cycle receives the other rule as a parameter. Helpers that need the evaluator, such as block evaluation, receive it the same way. The evaluator never runs during parsing.
 
 ## Potential Problems
 
 ### Grammar and numbers
 
-- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; when both branches are statement blocks, the if is a statement with no value and its else may be omitted; `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
+- Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. `if (cond) a else b` takes a boolean condition and requires both branches; when both branches are statement blocks, the if is a statement with no value. An if whose then block ends with `;` and is followed by no operator is a statement, and its else may be omitted. `true` and `false` are booleans. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, `if`, or `}`, or the `}` ends the input and directly follows a `;`.
+- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement or an if statement and the token after its `}` is a name, number, `(`, `{`, `let`, `if`, or `}`, or the `}` ends the input and directly follows a `;`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 
@@ -79,6 +79,7 @@ Nesting depth is counted for every nested construct; source size and step limits
 ### Near term
 
 1. Replace the token-index `where` of each `TuffError` with character spans.
+2. Split `src/` into subdirectories by stage before adding an eleventh file.
 
 ### Later
 

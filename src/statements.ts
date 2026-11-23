@@ -132,7 +132,7 @@ function canFollowStatementBlock(token: string | undefined): boolean {
 // an enclosing block. A block followed by an operator is a value, as in
 // "{ let x = 2; x } * 4".
 function isStatementBlock(tokens: string[], open: number): boolean {
-  if (tokens[open] !== "{" || !startsStatement(tokens, open + 1)) {
+  if (tokens[open] !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1))) {
     return false;
   }
 
