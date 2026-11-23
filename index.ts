@@ -33,17 +33,22 @@ interface OperatorToken {
   pos: number;
 }
 
-interface OpenParenToken {
+type OpenSymbol = "(" | "{";
+type CloseSymbol = ")" | "}";
+
+interface OpenToken {
   kind: "open";
+  symbol: OpenSymbol;
   pos: number;
 }
 
-interface CloseParenToken {
+interface CloseToken {
   kind: "close";
+  symbol: CloseSymbol;
   pos: number;
 }
 
-type Token = NumberToken | OperatorToken | OpenParenToken | CloseParenToken;
+type Token = NumberToken | OperatorToken | OpenToken | CloseToken;
 
 interface Parsed {
   value: number;
@@ -84,11 +89,11 @@ function tokenize(source: string): Result<Token[]> {
     } else if (char === "+" || char === "-" || char === "*") {
       tokens = [...tokens, { kind: "operator", symbol: char, pos: index }];
       index++;
-    } else if (char === "(") {
-      tokens = [...tokens, { kind: "open", pos: index }];
+    } else if (char === "(" || char === "{") {
+      tokens = [...tokens, { kind: "open", symbol: char, pos: index }];
       index++;
-    } else if (char === ")") {
-      tokens = [...tokens, { kind: "close", pos: index }];
+    } else if (char === ")" || char === "}") {
+      tokens = [...tokens, { kind: "close", symbol: char, pos: index }];
       index++;
     } else if (char.trim() === "") {
       index++;
@@ -133,22 +138,41 @@ function missingNumberAtEnd<T>(end: number): Result<T> {
 // operator or a parenthesis.
 function missingNumber<T>(token: Token): Result<T> {
   if (token.kind === "close") {
+    const noun = groupNoun(token.symbol);
     return err({
       what: "Missing number",
       where: token.pos,
-      why: 'Found ")" where a number is required',
-      fix: "Put a number inside the parentheses, or delete the parentheses",
+      why: `Found "${token.symbol}" where a number is required`,
+      fix: `Put a number inside the ${noun}, or delete the ${noun}`,
     });
   }
+  const found = token.kind === "number" ? String(token.value) : token.symbol;
   return err({
     what: "Missing number",
     where: token.pos,
-    why:
-      token.kind === "operator"
-        ? `Found "${token.symbol}" where a number is required`
-        : 'Found "(" where a number is required',
+    why: `Found "${found}" where a number is required`,
     fix: "Put a number before this operator, or remove the operator before it",
   });
+}
+
+// Plural name of the bracket pair that `symbol` belongs to, for messages.
+function groupNoun(symbol: OpenSymbol | CloseSymbol): string {
+  return symbol === "(" || symbol === ")" ? "parentheses" : "braces";
+}
+
+// Singular name of the bracket pair that `symbol` belongs to, for messages.
+function groupName(symbol: OpenSymbol | CloseSymbol): string {
+  return symbol === "(" || symbol === ")" ? "parenthesis" : "brace";
+}
+
+// The closing symbol that matches an opening symbol.
+function closerFor(symbol: OpenSymbol): CloseSymbol {
+  return symbol === "(" ? ")" : "}";
+}
+
+// The opening symbol that matches a closing symbol.
+function openerFor(symbol: CloseSymbol): OpenSymbol {
+  return symbol === ")" ? "(" : "{";
 }
 
 // Reported when two numbers (or a number and a group) appear with no operator
@@ -188,7 +212,7 @@ function parseFactor(tokens: Token[], index: number, end: number): Result<Parsed
   return parseNumber(tokens, index, end);
 }
 
-// Parses "(" expression ")". `index` points at the "(".
+// Parses "(" expression ")" or "{" expression "}". `index` points at the opener.
 function parseGroup(tokens: Token[], index: number, end: number): Result<Parsed> {
   const open = tokens[index];
   const inner = parseExpression(tokens, index + 1, end);
@@ -198,15 +222,26 @@ function parseGroup(tokens: Token[], index: number, end: number): Result<Parsed>
   const next = inner.value.next;
   const token = tokens[next];
   if (token === undefined) {
+    const openSymbol = open?.kind === "open" ? open.symbol : "(";
+    const closer = closerFor(openSymbol);
     return err({
-      what: "Unmatched parenthesis",
+      what: `Unmatched ${groupName(openSymbol)}`,
       where: open?.pos ?? end,
-      why: 'The "(" at this position has no matching ")"',
-      fix: 'Add a ")" after its expression, or delete this "("',
+      why: `The "${openSymbol}" at this position has no matching "${closer}"`,
+      fix: `Add a "${closer}" after its expression, or delete this "${openSymbol}"`,
     });
   }
   if (token.kind !== "close") {
     return missingOperator(token);
+  }
+  const openSymbol = open?.kind === "open" ? open.symbol : "(";
+  if (token.symbol !== closerFor(openSymbol)) {
+    return err({
+      what: "Mismatched bracket",
+      where: token.pos,
+      why: `This "${token.symbol}" does not match the "${openSymbol}" at position ${open?.pos ?? end}`,
+      fix: `Change this to "${closerFor(openSymbol)}", or change the "${openSymbol}" to "${openerFor(token.symbol)}"`,
+    });
   }
   return ok({ value: inner.value.value, next: next + 1 });
 }
@@ -271,8 +306,9 @@ export function interpretTuff(tuffSource: string): Result<number> {
   // Grammar:
   //   expression = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
-  //   factor     = number | "(" expression ")"
-  // "*" binds tighter than "+" and "-". Parentheses group an expression.
+  //   factor     = number | "(" expression ")" | "{" expression "}"
+  // "*" binds tighter than "+" and "-". Parentheses and braces group an
+  // expression; they nest freely, but each opener must close with its own kind.
   const tokenized = tokenize(tuffSource);
   if (!tokenized.ok) {
     return tokenized;
@@ -292,11 +328,12 @@ export function interpretTuff(tuffSource: string): Result<number> {
     return ok(expression.value.value);
   }
   if (stop.kind === "close") {
+    const opener = openerFor(stop.symbol);
     return err({
-      what: "Unmatched parenthesis",
+      what: `Unmatched ${groupName(stop.symbol)}`,
       where: stop.pos,
-      why: 'This ")" has no matching "("',
-      fix: 'Add a "(" before its expression, or delete this ")"',
+      why: `This "${stop.symbol}" has no matching "${opener}"`,
+      fix: `Add a "${opener}" before its expression, or delete this "${stop.symbol}"`,
     });
   }
   return missingOperator(stop);

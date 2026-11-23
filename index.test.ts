@@ -33,6 +33,46 @@ test('interpretTuff("(2 + 3) * 4") => 20', () => {
   expect(interpretTuff("(2 + 3) * 4")).toEqual({ ok: true, value: 20 });
 });
 
+test('interpretTuff("{ 2 + 3 } * 4") => 20', () => {
+  expect(interpretTuff("{ 2 + 3 } * 4")).toEqual({ ok: true, value: 20 });
+});
+
+test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
+  expect(interpretTuff("{ 2 + 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Unmatched brace",
+      where: 0,
+      why: 'The "{" at this position has no matching "}"',
+      fix: 'Add a "}" after its expression, or delete this "{"',
+    },
+  });
+});
+
+test('interpretTuff("( 2 }") => error at the mismatched closer', () => {
+  expect(interpretTuff("( 2 }")).toEqual({
+    ok: false,
+    error: {
+      what: "Mismatched bracket",
+      where: 4,
+      why: 'This "}" does not match the "(" at position 0',
+      fix: 'Change this to ")", or change the "(" to "{"',
+    },
+  });
+});
+
+test('interpretTuff("2 }") => error at the stray brace', () => {
+  expect(interpretTuff("2 }")).toEqual({
+    ok: false,
+    error: {
+      what: "Unmatched brace",
+      where: 2,
+      why: 'This "}" has no matching "{"',
+      fix: 'Add a "{" before its expression, or delete this "}"',
+    },
+  });
+});
+
 const errorShape = {
   what: expect.any(String),
   where: expect.any(Number),

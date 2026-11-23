@@ -9,18 +9,20 @@ as the language grows. It describes the ideal, not the current code.
 - **Tuff source**: a string written by a user or a program. It is untrusted.
 - **Number**: a decimal literal made of ASCII digits. Values use IEEE-754 double
   precision, the same as JavaScript `number`.
-- **Factor**: a number, or a parenthesized expression `( expression )`. A sign
-  is never written directly before a factor; a sign is part of an expression.
+- **Factor**: a number, or a grouped expression `( expression )` or
+  `{ expression }`. A sign is never written directly before a factor; a sign is
+  part of an expression.
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
   of its factors.
 - **Expression**: an optional leading sign, then one or more terms joined by
   `+` or `-`. An expression evaluates to the sum of its signed terms.
-- **Grouping**: parentheses change precedence. `(2 + 3) * 4` is 20. Empty
-  groups `()` are errors.
+- **Grouping**: parentheses and braces change precedence. `(2 + 3) * 4` and
+  `{ 2 + 3 } * 4` are both 20. Groups nest freely, but each opener must close
+  with its own kind: `( 2 }` is an error. Empty groups `()` and `{}` are errors.
 - **Precedence**: `*` binds tighter than `+` and `-`. Evaluation is left to
   right within each level.
-- **Token**: a classified piece of source (number, `+`, `-`, `*`, or
-  whitespace). Whitespace is dropped after tokenizing.
+- **Token**: a classified piece of source (number, `+`, `-`, `*`, `(`, `)`, `{`,
+  `}`, or whitespace). Whitespace is dropped after tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
   string.
 - **Result**: `{ ok: true, value } | { ok: false, error }`. The only way a
