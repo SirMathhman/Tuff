@@ -63,6 +63,49 @@ export interface AnnotationParsed {
   next: number;
 }
 
+// A function type such as &(I32, I32) => I32: scalar parameter types in parentheses, then a scalar result type.
+function parseFunctionAnnotation(tokens: Token[], start: number): Result<AnnotationParsed, TuffError> {
+  if (textAt(tokens, start + 1) !== "(") {
+    return invalidAt(tokens, start + 1, "'(' after '&'", "Write a function type as &(Type, Type) => Type.");
+  }
+
+  const params: ScalarAnnotation[] = [];
+  let next = start + 2;
+
+  if (textAt(tokens, next) !== ")") {
+    let more = true;
+
+    while (more) {
+      const param = scalarAnnotationAt(textAt(tokens, next));
+
+      if (param === undefined) {
+        return invalidAt(tokens, next, "a sized integer type or Bool", "Write each parameter type of a function type as a sized integer or Bool.");
+      }
+
+      params.push(param);
+      next += 1;
+      more = textAt(tokens, next) === ",";
+      next = more ? next + 1 : next;
+    }
+  }
+
+  if (textAt(tokens, next) !== ")") {
+    return invalidAt(tokens, next, "')' after the parameter types", "Close the parameter types with ')'.");
+  }
+
+  if (textAt(tokens, next + 1) !== "=>") {
+    return invalidAt(tokens, next + 1, "'=>' before the result type", "Write the result type after '=>', such as &(I32) => I32.");
+  }
+
+  const returns = scalarAnnotationAt(textAt(tokens, next + 2));
+
+  if (returns === undefined) {
+    return invalidAt(tokens, next + 2, "a sized integer type or Bool", "Write the result type of a function type as a sized integer or Bool.");
+  }
+
+  return ok({ annotation: { kind: "function", params, returns }, next: next + 3 });
+}
+
 /**
  * Parses a type annotation: a scalar type, an array type [Type; length], or a struct name.
  * @param tokens - The token list being parsed.
@@ -70,6 +113,10 @@ export interface AnnotationParsed {
  * @returns The annotation and the index after it, or a structured error.
  */
 export function parseAnnotation(tokens: Token[], start: number): Result<AnnotationParsed, TuffError> {
+  if (textAt(tokens, start) === "&") {
+    return parseFunctionAnnotation(tokens, start);
+  }
+
   if (textAt(tokens, start) !== "[") {
     const scalar = scalarAnnotationAt(textAt(tokens, start));
 

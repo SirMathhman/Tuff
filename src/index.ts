@@ -4,7 +4,7 @@ import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./eval/evaluator.ts";
-import { isInteger, isRecord, type Scope } from "./eval/values.ts";
+import { isFunction, isInteger, isRecord, type Scope } from "./eval/values.ts";
 import { parseStructs } from "./declarations/structs.ts";
 import { parseFunctions } from "./declarations/functions.ts";
 
@@ -91,7 +91,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     return digits >= -safe && digits <= safe ? ok(Number(digits)) : programResultTooLargeAt(whereAt(tokens, 0), digits);
   }
 
-  const found = Array.isArray(result.value) ? "an array" : isRecord(result.value) ? "a record" : "a reference";
+  const found = Array.isArray(result.value) ? "an array" : isRecord(result.value) ? "a record" : isFunction(result.value) ? "a function" : "a reference";
 
   return typeMismatchAt(whereAt(tokens, 0), "a number, boolean, or string", found);
 }

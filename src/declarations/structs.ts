@@ -88,7 +88,7 @@ function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Resul
       return type;
     }
 
-    if (typeof type.value.annotation !== "string" && type.value.annotation.kind === "struct") {
+    if (typeof type.value.annotation !== "string" && (type.value.annotation.kind === "struct" || type.value.annotation.kind === "function")) {
       return invalidAt(tokens, nameAt + 2, "a sized integer type, Bool, or an array type", "Struct-typed fields are not supported yet; use a scalar or array type.");
     }
 

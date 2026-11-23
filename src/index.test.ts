@@ -1069,3 +1069,23 @@ test("interpretTuff: a function body without a closing ';' is an InvalidTerm err
 test("interpretTuff: a body result past the parameter's type range is an IntegerOutOfRange error", () => {
   expectErrorKind("fn f(first : U8) : U8 => first + 1U8; f(255U8)", "IntegerOutOfRange");
 });
+
+test("interpretTuff: a let holding &add calls it, returning Ok(7)", () => {
+  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; let foo : &(I32, I32) => I32 = &add; foo(3I32, 4I32)")).toEqual(ok(7));
+});
+
+test("interpretTuff: a function value passed as a parameter is called in the body, returning Ok(7)", () => {
+  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; fn apply(g : &(I32, I32) => I32, a : I32, b : I32) : I32 => g(a, b); apply(&add, 3I32, 4I32)")).toEqual(ok(7));
+});
+
+test("interpretTuff: a mut function let can be reassigned to another function of the same type, returning Ok(3)", () => {
+  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; fn sub(first : I32, second : I32) : I32 => first - second; let mut foo : &(I32, I32) => I32 = &add; foo = &sub; foo(5I32, 2I32)")).toEqual(ok(3));
+});
+
+test("interpretTuff: a function whose signature differs from its let annotation is a TypeMismatch error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; let foo : &(Bool) => I32 = &add; 1", "TypeMismatch");
+});
+
+test("interpretTuff: a function value as the program result is a TypeMismatch error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; &add", "TypeMismatch");
+});

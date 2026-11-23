@@ -155,8 +155,20 @@ export interface StructAnnotation {
   name: string;
 }
 
+/**
+ * A function type such as &(I32, I32) => I32: the scalar types of its parameters and its scalar result.
+ */
+export interface FunctionAnnotation {
+  /** The discriminant: always "function". */
+  kind: "function";
+  /** The type of each parameter, in order. */
+  params: ScalarAnnotation[];
+  /** The type of the result. */
+  returns: ScalarAnnotation;
+}
+
 /** The type a let annotation names. */
-export type Annotation = ScalarAnnotation | ArrayAnnotation | StructAnnotation;
+export type Annotation = ScalarAnnotation | ArrayAnnotation | StructAnnotation | FunctionAnnotation;
 
 /**
  * One field of a struct declaration, with a scalar or array type.
@@ -340,7 +352,7 @@ export interface FunctionParam {
   /** The parameter name. */
   name: string;
   /** The type every argument for this parameter must have. */
-  annotation: ScalarAnnotation;
+  annotation: ScalarAnnotation | FunctionAnnotation;
 }
 
 /**

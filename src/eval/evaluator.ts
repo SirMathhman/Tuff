@@ -21,7 +21,7 @@ import {
   type TuffError,
 } from "../errors.ts";
 import { INT_RANGES, type Annotation, type FunctionDecl, type FunctionParam, type ScalarAnnotation, type StructDecl, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
-import { type Cell, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isInteger, isRecord, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
+import { type Cell, type FunctionValue, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isFunction, isInteger, isRecord, isReference, escapes, isVisible, signatureMatches, typeName, sameType, asNumber, asBoolean } from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
@@ -259,6 +259,10 @@ function matchesAnnotation(value: Value, annotation: Annotation): boolean {
     return isRecord(value) && value.struct === annotation.name;
   }
 
+  if (annotation.kind === "function") {
+    return isFunction(value) && signatureMatches(value.decl, annotation);
+  }
+
   return Array.isArray(value) && value.length === annotation.length && value.every((element) => matchesScalar(element, annotation.element));
 }
 
@@ -267,7 +271,15 @@ function annotationName(annotation: Annotation): string {
     return `a ${annotation}`;
   }
 
-  return annotation.kind === "struct" ? `a ${annotation.name}` : `[${annotation.element}; ${annotation.length}]`;
+  if (annotation.kind === "struct") {
+    return `a ${annotation.name}`;
+  }
+
+  if (annotation.kind === "function") {
+    return `&(${annotation.params.join(", ")}) => ${annotation.returns}`;
+  }
+
+  return `[${annotation.element}; ${annotation.length}]`;
 }
 
 // The struct and function declarations are kept on the outermost scope of the program.
@@ -309,7 +321,7 @@ function bindArguments(params: FunctionParam[], args: Expr[], where: ErrorWhere,
       return value;
     }
 
-    if (!matchesScalar(value.value, param.annotation)) {
+    if (!matchesAnnotation(value.value, param.annotation)) {
       return typeMismatchAt(where, annotationName(param.annotation), typeName(value.value));
     }
 
@@ -318,7 +330,16 @@ function bindArguments(params: FunctionParam[], args: Expr[], where: ErrorWhere,
 }
 
 // A call runs the body in a scope that sees only its parameters, the program's structs, and the functions declared before it.
+// A call names a let binding that holds a function value, or else a declared function.
 function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const bound = lookup(name, scope);
+
+  if (bound !== undefined) {
+    const callee = bound.cell.value;
+
+    return isFunction(callee) ? invokeFunction(callee, args, where, scope, evaluateRule) : typeMismatchAt(where, "a function", typeName(callee));
+  }
+
   const declared = functionsOf(scope);
   const index = declared.findIndex((decl) => decl.name === name);
   const decl = declared[index];
@@ -327,11 +348,31 @@ function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scop
     return undefinedNameAt(where);
   }
 
+  return invokeFunction({ decl, visible: declared.slice(0, index) }, args, where, scope, evaluateRule);
+}
+
+// &name for a declared function that no binding shadows: a function value, which cannot be borrowed writably.
+function functionReference(name: string, mutable: boolean, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+  const declared = functionsOf(scope);
+  const index = declared.findIndex((decl) => decl.name === name);
+  const decl = declared[index];
+
+  if (decl === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  return mutable ? typeMismatchAt(where, "a binding", "a function") : ok({ decl, visible: declared.slice(0, index) });
+}
+
+// Runs a function value's body on the arguments. The body sees only its parameters, the structs, and the functions the value was declared after.
+function invokeFunction(callee: FunctionValue, args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const { decl } = callee;
+
   if (args.length !== decl.params.length) {
     return typeMismatchAt(where, argumentCount(decl.params.length), argumentCount(args.length));
   }
 
-  const root: Scope = { name: "", cell: { value: 0, moved: false }, mutable: false, structs: structTableOf(scope), functions: declared.slice(0, index) };
+  const root: Scope = { name: "", cell: { value: 0, moved: false }, mutable: false, structs: structTableOf(scope), functions: callee.visible };
   const frame = bindArguments(decl.params, args, where, scope, evaluateRule, root);
 
   if (!frame.ok) {
@@ -913,7 +954,7 @@ function evaluateRef(name: string, mutable: boolean, where: ErrorWhere, scope: S
   const found = lookup(name, scope);
 
   if (found === undefined) {
-    return undefinedNameAt(where);
+    return functionReference(name, mutable, where, scope);
   }
 
   if (mutable && !found.mutable) {

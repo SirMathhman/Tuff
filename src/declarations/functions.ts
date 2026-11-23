@@ -126,7 +126,7 @@ function parseParams(tokens: Token[], pos: number): Result<ParamsParsed, TuffErr
       return invalidAt(tokens, next + 1, "':' after the parameter name", "Write each parameter as name : Type.");
     }
 
-    const type = parseScalarType(tokens, next + 2);
+    const type = parseParamType(tokens, next + 2);
 
     if (!type.ok) {
       return type;
@@ -152,7 +152,29 @@ interface ScalarParsed {
   next: number;
 }
 
-// A parameter or return type: a sized integer type or Bool. Struct and array types are not allowed here yet.
+// A parameter type: a sized integer type, Bool, or a function type. Struct and array types are not allowed here yet.
+function parseParamType(tokens: Token[], start: number): Result<ParamTypeParsed, TuffError> {
+  const annotation = parseAnnotation(tokens, start);
+
+  if (!annotation.ok) {
+    return annotation;
+  }
+
+  const type = annotation.value.annotation;
+
+  if (typeof type === "string" || type.kind === "function") {
+    return ok({ type, next: annotation.value.next });
+  }
+
+  return invalidAt(tokens, start, "a sized integer type, Bool, or a function type", "Declare each parameter as a sized integer, Bool, or a function type such as &(I32) => I32.");
+}
+
+interface ParamTypeParsed {
+  type: FunctionParam["annotation"];
+  next: number;
+}
+
+// A return type: a sized integer type or Bool. Struct, array, and function types are not allowed here.
 function parseScalarType(tokens: Token[], start: number): Result<ScalarParsed, TuffError> {
   const annotation = parseAnnotation(tokens, start);
 

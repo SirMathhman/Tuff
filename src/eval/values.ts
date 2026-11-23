@@ -1,4 +1,4 @@
-import { type Annotation, type FunctionDecl, type IntType, type StructDecl } from "../ast.ts";
+import { type Annotation, type FunctionAnnotation, type FunctionDecl, type IntType, type StructDecl } from "../ast.ts";
 import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
 
 /**
@@ -34,7 +34,17 @@ export interface RecordValue {
   struct ?: string;
 }
 
-export type Value = number | Integer | boolean | string | Value[] | Reference | RecordValue;
+/**
+ * A function value: a declaration, with the functions declared before it, which its body may call.
+ */
+export interface FunctionValue {
+  /** The declaration the value calls. */
+  decl: FunctionDecl;
+  /** The functions declared before this one, which its body may call. */
+  visible: FunctionDecl[];
+}
+
+export type Value = number | Integer | boolean | string | Value[] | Reference | RecordValue | FunctionValue;
 
 /**
  * Reports whether a value is a record.
@@ -69,7 +79,7 @@ export function isInteger(value: Value): value is Integer {
  * @returns True when the value is a Reference.
  */
 export function isReference(value: Value): value is Reference {
-  return typeof value === "object" && !Array.isArray(value) && !isInteger(value) && !isRecord(value);
+  return typeof value === "object" && !Array.isArray(value) && !isInteger(value) && !isRecord(value) && !isFunction(value);
 }
 
 /**
@@ -175,6 +185,10 @@ export function typeName(value: Value): string {
     return "a reference";
   }
 
+  if (isFunction(value)) {
+    return "a function";
+  }
+
   const first = value[0];
 
   return first === undefined ? "an array" : `an array whose elements are ${typeName(first)}`;
@@ -202,6 +216,10 @@ export function sameType(left: Value, right: Value): boolean {
 
   if (isReference(left) || isReference(right)) {
     return isReference(left) && isReference(right);
+  }
+
+  if (isFunction(left) || isFunction(right)) {
+    return isFunction(left) && isFunction(right) && sameSignature(left.decl, right.decl);
   }
 
   if (Array.isArray(left) || Array.isArray(right)) {
@@ -246,3 +264,61 @@ export function asBoolean(value: Value, where: ErrorWhere): Result<boolean, Tuff
   return typeMismatchAt(where, "a boolean", typeName(value));
 }
 
+/**
+ * Reports whether a value is a function value.
+ * @param value - The value to test.
+ * @returns True when the value is a FunctionValue.
+ */
+export function isFunction(value: Value): value is FunctionValue {
+  return typeof value === "object" && !Array.isArray(value) && "decl" in value;
+}
+
+/**
+ * Reports whether two annotations name the same type.
+ * @param left - The first annotation.
+ * @param right - The second annotation.
+ * @returns True when the annotations name the same type.
+ */
+export function sameAnnotation(left: Annotation, right: Annotation): boolean {
+  if (typeof left === "string" || typeof right === "string") {
+    return left === right;
+  }
+
+  if (left.kind === "array") {
+    return right.kind === "array" && left.element === right.element && left.length === right.length;
+  }
+
+  if (left.kind === "struct") {
+    return right.kind === "struct" && left.name === right.name;
+  }
+
+  return right.kind === "function" && left.returns === right.returns && left.params.length === right.params.length && left.params.every((param, index) => param === right.params[index]);
+}
+
+/**
+ * Reports whether a declaration has the signature a function type names.
+ * @param decl - The declaration.
+ * @param annotation - The function type.
+ * @returns True when the parameter and result types match.
+ */
+export function signatureMatches(decl: FunctionDecl, annotation: FunctionAnnotation): boolean {
+  return decl.params.length === annotation.params.length && decl.params.every((param, index) => {
+    const expected = annotation.params[index];
+
+    return expected !== undefined && sameAnnotation(param.annotation, expected);
+  }) && sameAnnotation(decl.returns, annotation.returns);
+}
+
+/**
+ * Reports whether two declarations have the same parameter and result types.
+ * @param left - The first declaration.
+ * @param right - The second declaration.
+ * @returns True when the signatures match.
+ */
+export function sameSignature(left: FunctionDecl, right: FunctionDecl): boolean {
+  return left.params.length === right.params.length && left.params.every((param, index) => {
+    const other = right.params[index];
+
+    return other !== undefined && sameAnnotation(param.annotation, other.annotation);
+  }) && sameAnnotation(left.returns, right.returns);
+}
