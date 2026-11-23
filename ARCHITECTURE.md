@@ -18,17 +18,17 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 ## Structure
 
-Dependency direction is strictly downward. No cycles exist; `madge --circular` in `lint` enforces this. `for` loops are banned; iterate with `map` and `reduce`.
+Dependency direction is strictly downward. No cycles exist; `madge --circular` in `lint` enforces this. `for` loops are banned; prefer `map` and `reduce`, using `while` only where a parse must read ahead.
 
 ### Layers
 
 1. Entry points: REPL and file runner. The only layer allowed to do I/O.
 2. Public API: `interpretTuff` and its types, re-exported from `index.ts`.
-3. Shared core: `Result`, `TuffError`, `Span`, `Value`. Depends on nothing else.
+3. Shared core (`errors.ts`): `Result`, `TuffError`, `Span`, `Value`. Depends on nothing else.
 
 ### Stages and tests
 
-1. Pipeline: tokenizer, then parser (AST), then evaluator. One file per stage, each a pure function.
+1. Pipeline: `tokenizer.ts`, then `parser.ts` (AST), then `evaluator.ts`. Each stage is a pure function.
 2. Tests live beside their code (`*.test.ts`), exercising the public API first and the stages second.
 
 ### Recursion
@@ -47,7 +47,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 - Unbounded input: very large sources and deeply nested expressions can exhaust time or the call stack.
 - Stack exhaustion is prevented by a nesting limit of 1000 levels, which returns a `NestingTooDeep` error instead of a thrown `RangeError`.
-- Operator chains are parsed with loops, so their length does not depend on tail-call elimination.
+- Operator chains are folded with `reduce`, so their length never depends on the call stack.
 - Exception-based failure paths will creep in unless the Result pattern is enforced from the start.
 
 ## Security Concerns
@@ -72,8 +72,7 @@ Nesting depth is limited to 1000 levels; source size and step limits are not enf
 
 ### Near term
 
-1. Build an AST in the parser and evaluate it in a separate stage, as Structure describes.
-2. Replace the token-index `where` of each `TuffError` with character spans.
+1. Replace the token-index `where` of each `TuffError` with character spans.
 
 ### Later
 
