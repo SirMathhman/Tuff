@@ -333,7 +333,40 @@ interface IntNode {
   value: bigint;
 }
 
+/**
+ * One parameter of a function: a name and the scalar type its argument must have.
+ */
+export interface FunctionParam {
+  /** The parameter name. */
+  name: string;
+  /** The type every argument for this parameter must have. */
+  annotation: ScalarAnnotation;
+}
+
+/**
+ * A function declaration, such as fn add(first : I32, second : I32) : I32 => first + second;.
+ */
+export interface FunctionDecl {
+  /** The function name. */
+  name: string;
+  /** The parameters in declaration order. */
+  params: FunctionParam[];
+  /** The type the body's value must have. */
+  returns: ScalarAnnotation;
+  /** The expression computed by a call. */
+  body: Expr;
+}
+
+// A call of a declared function, such as add(3I32, 4I32).
+interface CallNode {
+  kind: "call";
+  name: string;
+  args: Expr[];
+  where: ErrorWhere;
+}
+
 export type Expr =
+  | CallNode
   | ArrayNode
   | IndexNode
   | RecordNode

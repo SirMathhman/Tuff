@@ -5,7 +5,7 @@ import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./eval/evaluator.ts";
 import { isInteger, isRecord, type Scope } from "./eval/values.ts";
-import { parseStructs } from "./structs.ts";
+import { parseFunctions, parseStructs } from "./structs.ts";
 
 export { describeError } from "./errors.ts";
 export type {
@@ -37,7 +37,13 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     return declared;
   }
 
-  const parsed = blockBody(tokens, declared.value.next, 0, parseExpr);
+  const functions = parseFunctions(tokens, declared.value.next, parseExpr);
+
+  if (!functions.ok) {
+    return functions;
+  }
+
+  const parsed = blockBody(tokens, functions.value.next, 0, parseExpr);
 
   if (!parsed.ok) {
     return parsed;
@@ -57,6 +63,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     cell: { value: 0, moved: false },
     mutable: false,
     structs: new Map(declared.value.structs.map((decl) => [decl.name, decl] as const)),
+    functions: functions.value.functions,
   };
   const result = evaluate(parsed.value.value, root);
 

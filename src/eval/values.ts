@@ -1,4 +1,4 @@
-import { type Annotation, type IntType, type StructDecl } from "../ast.ts";
+import { type Annotation, type FunctionDecl, type IntType, type StructDecl } from "../ast.ts";
 import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
 
 /**
@@ -141,6 +141,8 @@ export interface Scope {
   parent?: Scope;
   /** The struct declarations of the program. Only the outermost scope carries them. */
   structs?: Map<string, StructDecl>;
+  /** The function declarations a call may name. Only the outermost scope carries them. */
+  functions?: FunctionDecl[];
 }
 
 /**

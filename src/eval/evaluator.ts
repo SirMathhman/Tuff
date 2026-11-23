@@ -20,7 +20,7 @@ import {
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { INT_RANGES, type Annotation, type ScalarAnnotation, type StructDecl, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
+import { INT_RANGES, type Annotation, type FunctionDecl, type FunctionParam, type ScalarAnnotation, type StructDecl, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
 import { type Cell, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isInteger, isRecord, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
@@ -270,15 +270,81 @@ function annotationName(annotation: Annotation): string {
   return annotation.kind === "struct" ? `a ${annotation.name}` : `[${annotation.element}; ${annotation.length}]`;
 }
 
-// The struct declarations are kept on the outermost scope of the program.
-function structTableOf(scope: Scope | undefined): Map<string, StructDecl> {
+// The struct and function declarations are kept on the outermost scope of the program.
+function outermost(scope: Scope | undefined): Scope | undefined {
   let current = scope;
 
   while (current !== undefined && current.parent !== undefined) {
     current = current.parent;
   }
 
-  return current?.structs ?? new Map<string, StructDecl>();
+  return current;
+}
+
+function structTableOf(scope: Scope | undefined): Map<string, StructDecl> {
+  return outermost(scope)?.structs ?? new Map<string, StructDecl>();
+}
+
+function functionsOf(scope: Scope | undefined): FunctionDecl[] {
+  return outermost(scope)?.functions ?? [];
+}
+
+function argumentCount(count: number): string {
+  return count === 1 ? "1 argument" : `${count} arguments`;
+}
+
+// Binds each argument to its parameter, in a new scope chain above root. Each argument is evaluated in the caller's scope and must have its parameter's type.
+function bindArguments(params: FunctionParam[], args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule, root: Scope): Result<Scope, TuffError> {
+  return params.reduce<Result<Scope, TuffError>>((frame, param, index) => {
+    const arg = args[index];
+
+    // The caller checked the argument count, so every parameter has an argument.
+    if (!frame.ok || arg === undefined) {
+      return frame;
+    }
+
+    const value = evaluateRule(arg, scope);
+
+    if (!value.ok) {
+      return value;
+    }
+
+    if (!matchesScalar(value.value, param.annotation)) {
+      return typeMismatchAt(where, annotationName(param.annotation), typeName(value.value));
+    }
+
+    return ok({ name: param.name, cell: { value: value.value, moved: false, annotation: param.annotation }, mutable: false, parent: frame.value });
+  }, ok(root));
+}
+
+// A call runs the body in a scope that sees only its parameters, the program's structs, and the functions declared before it.
+function evaluateCall(name: string, args: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const declared = functionsOf(scope);
+  const index = declared.findIndex((decl) => decl.name === name);
+  const decl = declared[index];
+
+  if (decl === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  if (args.length !== decl.params.length) {
+    return typeMismatchAt(where, argumentCount(decl.params.length), argumentCount(args.length));
+  }
+
+  const root: Scope = { name: "", cell: { value: 0, moved: false }, mutable: false, structs: structTableOf(scope), functions: declared.slice(0, index) };
+  const frame = bindArguments(decl.params, args, where, scope, evaluateRule, root);
+
+  if (!frame.ok) {
+    return frame;
+  }
+
+  const result = evaluateRule(decl.body, frame.value);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return matchesScalar(result.value, decl.returns) ? result : typeMismatchAt(where, annotationName(decl.returns), typeName(result.value));
 }
 
 // A constructor builds a record of a declared struct: every field once, each with its declared type.
@@ -934,6 +1000,7 @@ type KindRule<K extends Expr["kind"]> = (expr: Extract<Expr, HasKind<K>>, scope:
 
 // One rule per expression kind. The interface makes the table cover every kind.
 interface KindRules {
+  call: KindRule<"call">;
   construct: KindRule<"construct">;
   number: KindRule<"number">;
   boolean: KindRule<"boolean">;
@@ -956,6 +1023,7 @@ interface KindRules {
 }
 
 const RULES: KindRules = {
+  call: (expr, scope) => evaluateCall(expr.name, expr.args, expr.where, scope, evaluate),
   number: (expr) => ok(expr.value),
   boolean: (expr) => ok(expr.value),
   string: (expr) => ok(expr.value),

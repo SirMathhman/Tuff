@@ -1021,3 +1021,23 @@ test("interpretTuff('abc') is an error, not NaN", () => {
 test("interpretTuff('0x1F') is an error", () => {
   expect(interpretTuff("0x1F").ok).toBe(false);
 });
+
+test("interpretTuff: fn add(first : I32, second : I32) : I32 => first + second; add(3I32, 4I32) returns Ok(7)", () => {
+  expect(interpretTuff("fn add(first : I32, second : I32) : I32 => first + second; add(3I32, 4I32)")).toEqual(ok(7));
+});
+
+test("interpretTuff: a plain number argument for an I32 parameter is a TypeMismatch error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; add(3, 4)", "TypeMismatch");
+});
+
+test("interpretTuff: a call with the wrong number of arguments is a TypeMismatch error", () => {
+  expectErrorKind("fn add(first : I32, second : I32) : I32 => first + second; add(3I32)", "TypeMismatch");
+});
+
+test("interpretTuff: a body whose value differs from the return type is a TypeMismatch error", () => {
+  expectErrorKind("fn f(first : I32) : Bool => first; f(1I32)", "TypeMismatch");
+});
+
+test("interpretTuff: a function body cannot read a name that is not its parameter", () => {
+  expectErrorKind("fn f(first : I32) : I32 => second; f(1I32)", "UndefinedName");
+});

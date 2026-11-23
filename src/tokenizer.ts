@@ -67,7 +67,7 @@ export function tokenize(tuffSource: string): Token[] {
 
 const SPACE = [" ", "\t", "\n", "\r"];
 
-const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||", "<<", ">>", "+=", "-=", "*=", "/="];
+const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||", "<<", ">>", "+=", "-=", "*=", "/=", "=>"];
 
 const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "[", "]", ",", "+", "-", "*", "/", ";", "=", "<", ">", "!", "&", "|", ":", "."];
 
@@ -132,6 +132,7 @@ export function isIdentifier(text: string): boolean {
     text !== "else" &&
     text !== "while" &&
     text !== "struct" &&
+    text !== "fn" &&
     text !== "true" &&
     text !== "false" &&
     chars.length > 0 &&

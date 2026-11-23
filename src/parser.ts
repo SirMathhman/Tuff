@@ -151,6 +151,10 @@ function parsePrimary(
     return sized;
   }
 
+  if (token !== undefined && isIdentifier(token) && textAt(tokens, pos + 1) === "(") {
+    return parseCall(tokens, pos, depth, rules);
+  }
+
   if (token !== undefined && isIdentifier(token)) {
     return ok({ value: { kind: "reference", name: token, where: whereAt(tokens, pos) }, next: pos + 1 });
   }
@@ -283,6 +287,39 @@ function parseArray(tokens: Token[], pos: number, depth: number, rules: ParseRul
   }
 
   return ok({ value: { kind: "array", elements, where: whereAt(tokens, pos) }, next: next + 1 });
+}
+
+// A call such as add(3I32, 4I32): a name, then comma-separated argument expressions in parentheses.
+function parseCall(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  const args: Expr[] = [];
+  let next = pos + 2;
+
+  if (textAt(tokens, next) !== ")") {
+    let more = true;
+
+    while (more) {
+      const arg = rules.expr(tokens, next, depth + 1);
+
+      if (!arg.ok) {
+        return arg;
+      }
+
+      args.push(arg.value.value);
+      next = arg.value.next;
+      more = textAt(tokens, next) === ",";
+      next = more ? next + 1 : next;
+    }
+  }
+
+  if (textAt(tokens, next) !== ")") {
+    return invalidAt(tokens, next, "')' to close the call", "Close the argument list with ')'.");
+  }
+
+  return ok({ value: { kind: "call", name: textAt(tokens, pos), args, where: whereAt(tokens, pos) }, next: next + 1 });
 }
 
 // A primary followed by any number of index suffixes, as in grid[0][1].
