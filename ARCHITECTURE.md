@@ -8,7 +8,8 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a boolean, or a one-character string. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its ASCII (code point) value.
+- **Value**: a number, a boolean, or a one-character string. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
+- **Token**: a kind (text, string, or unclosed string) and its text. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
 
@@ -34,7 +35,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 ### Pipeline
 
-1. `tokenizer.ts`: a character scanner that emits numbers, names, brackets, and operators.
+1. `tokenizer.ts`: a character scanner that emits typed tokens, each with its kind and text.
 2. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
 3. `evaluator.ts`: a pure fold over the AST.
 
@@ -97,6 +98,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Brackets, operators, `=`, and `;` are self-delimiting, so spacing never changes meaning.
 - Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them.
+- The parser dispatches on token kind, never on token text. An unclosed quote reports as an unclosed string, never as a bad escape.
 
 ### Compatibility
 
@@ -149,7 +151,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 ### Near term
 
-1. Replace the token-index `where` of each `TuffError` with character spans.
+1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Split `src/` into subdirectories by stage before adding an eleventh file.
 
 ### Later

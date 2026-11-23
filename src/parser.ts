@@ -1,3 +1,4 @@
+import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result } from "./errors.ts";
 import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
@@ -32,7 +33,7 @@ function operatorAt(
 }
 
 function parseChain(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   allowed: Link["op"][],
   operand: (next: number) => Parse,
@@ -45,7 +46,7 @@ function parseChain(
 
   const links: Link[] = [];
   let next = first.value.next;
-  let op = operatorAt(tokens[next], allowed);
+  let op = operatorAt(textAt(tokens, next), allowed);
 
   while (op !== undefined) {
     const right = operand(next + 1);
@@ -56,7 +57,7 @@ function parseChain(
 
     links.push({ op, operand: right.value.value, where: whereAt(tokens, next) });
     next = right.value.next;
-    op = operatorAt(tokens[next], allowed);
+    op = operatorAt(textAt(tokens, next), allowed);
   }
 
   return ok({
@@ -66,12 +67,12 @@ function parseChain(
 }
 
 function parsePrimary(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   rules: ParseRules,
 ): Parse {
-  const token = tokens[pos];
+  const token = textAt(tokens, pos);
 
   if (token === "(" || token === "{") {
     if (depth >= MAX_NESTING_DEPTH) {
@@ -88,7 +89,7 @@ function parsePrimary(
       return inner;
     }
 
-    if (tokens[inner.value.next] !== closer) {
+    if (textAt(tokens, inner.value.next) !== closer) {
       return invalidAt(
         tokens,
         inner.value.next,
@@ -108,7 +109,13 @@ function parsePrimary(
     return parseIf(tokens, pos, depth, rules);
   }
 
-  if (token !== undefined && token.charAt(0) === "'") {
+  const current = tokens[pos];
+
+  if (current?.kind === "unclosedString") {
+    return invalidAt(tokens, pos, "a closing ' after the string", "Close the string with a single quote.");
+  }
+
+  if (current?.kind === "string") {
     return parseString(tokens, pos);
   }
 
@@ -163,14 +170,8 @@ function decodeEscapes(body: string): string | undefined {
   return text;
 }
 
-function parseString(tokens: string[], pos: number): Parse {
-  const raw = tokens[pos] ?? "";
-
-  if (raw.length < 2 || raw.charAt(raw.length - 1) !== "'") {
-    return invalidAt(tokens, pos, "a closing ' after the string", "Close the string with a single quote.");
-  }
-
-  const text = decodeEscapes(raw.slice(1, -1));
+function parseString(tokens: Token[], pos: number): Parse {
+  const text = decodeEscapes(textAt(tokens, pos).slice(1, -1));
 
   if (text === undefined) {
     return invalidAt(tokens, pos, "a valid escape: \\\\, \\', \\n, or \\t", "Use only \\\\, \\', \\n, or \\t inside a string.");
@@ -184,7 +185,7 @@ function parseString(tokens: string[], pos: number): Parse {
 }
 
 function parseIf(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   rules: ParseRules,
@@ -205,7 +206,7 @@ function parseIf(
     return then;
   }
 
-  if (tokens[then.value.next] !== "else") {
+  if (textAt(tokens, then.value.next) !== "else") {
     return invalidAt(tokens, then.value.next, "'else' after the then branch", "Every if needs an else branch.");
   }
 
@@ -228,12 +229,12 @@ function parseIf(
 }
 
 function parseFactor(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   rules: ParseRules,
 ): Parse {
-  if (tokens[pos] === "-") {
+  if (textAt(tokens, pos) === "-") {
     const operand = parsePrimary(tokens, pos + 1, depth, rules);
 
     return operand.ok
@@ -241,7 +242,7 @@ function parseFactor(
       : operand;
   }
 
-  if (tokens[pos] === "!") {
+  if (textAt(tokens, pos) === "!") {
     if (depth >= MAX_NESTING_DEPTH) {
       return nestingTooDeepAt(tokens, pos);
     }
@@ -257,7 +258,7 @@ function parseFactor(
 }
 
 function parseTerm(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   rules: ParseRules,
@@ -267,7 +268,7 @@ function parseTerm(
   );
 }
 
-function parseSum(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseSum(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
   return parseChain(tokens, pos, ["+", "-"], (next) =>
     parseTerm(tokens, next, depth, rules),
   );
@@ -287,14 +288,14 @@ function comparisonAt(token: string | undefined): CompareOp | undefined {
  * @param rules - The rules this parse needs from above.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
-function parseComparison(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseComparison(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
   const left = parseSum(tokens, pos, depth, rules);
 
   if (!left.ok) {
     return left;
   }
 
-  const op = comparisonAt(tokens[left.value.next]);
+  const op = comparisonAt(textAt(tokens, left.value.next));
 
   if (op === undefined) {
     return left;
@@ -327,7 +328,7 @@ function parseComparison(tokens: string[], pos: number, depth: number, rules: Pa
  * @returns The expression tree and the index of the next unread token, or an error.
  */
 function parseLogical(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   operator: LogicalOp,
   operand: (next: number) => Parse,
@@ -341,7 +342,7 @@ function parseLogical(
   let left = first.value.value;
   let next = first.value.next;
 
-  while (tokens[next] === operator) {
+  while (textAt(tokens, next) === operator) {
     const right = operand(next + 1);
 
     if (!right.ok) {
@@ -355,7 +356,7 @@ function parseLogical(
   return ok({ value: left, next });
 }
 
-function parseAnd(tokens: string[], pos: number, depth: number, rules: ParseRules): Parse {
+function parseAnd(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
   return parseLogical(tokens, pos, "&&", (next) => parseComparison(tokens, next, depth, rules));
 }
 
@@ -366,7 +367,7 @@ function parseAnd(tokens: string[], pos: number, depth: number, rules: ParseRule
  * @param depth - The number of groups enclosing this position.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
-export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
+export function parseExpr(tokens: Token[], pos: number, depth: number): Parse {
   const rules: ParseRules = { expr: parseExpr, comparison: parseComparison };
 
   return parseLogical(tokens, pos, "||", (next) => parseAnd(tokens, next, depth, rules));

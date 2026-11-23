@@ -1,3 +1,4 @@
+import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
 import { type Statement } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
@@ -14,10 +15,10 @@ interface StatementsParsed {
   next: number;
 }
 
-type StatementsRule = (tokens: string[], pos: number, depth: number, expr: ExprRule) => Result<StatementsParsed, TuffError>;
+type StatementsRule = (tokens: Token[], pos: number, depth: number, expr: ExprRule) => Result<StatementsParsed, TuffError>;
 
 function parseStatementValue(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
@@ -29,7 +30,7 @@ function parseStatementValue(
     return value;
   }
 
-  if (tokens[value.value.next] !== ";") {
+  if (textAt(tokens, value.value.next) !== ";") {
     return invalidAt(tokens, value.value.next, "';' after the value", `End the ${keyword} with ';'.`);
   }
 
@@ -37,20 +38,20 @@ function parseStatementValue(
 }
 
 function parseLet(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
 ): Result<StatementParsed, TuffError> {
-  const mutable = tokens[pos + 1] === "mut";
+  const mutable = textAt(tokens, pos + 1) === "mut";
   const nameIndex = mutable ? pos + 2 : pos + 1;
-  const name = tokens[nameIndex];
+  const name = textAt(tokens, nameIndex);
 
   if (name === undefined || !isIdentifier(name)) {
     return invalidAt(tokens, nameIndex, "a name after 'let'", "Write a name such as x after 'let'.");
   }
 
-  if (tokens[nameIndex + 1] !== "=") {
+  if (textAt(tokens, nameIndex + 1) !== "=") {
     return invalidAt(tokens, nameIndex + 1, "'=' after the name", "Write '=' and a value after the name.");
   }
 
@@ -67,12 +68,12 @@ function parseLet(
 }
 
 function parseAssign(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
 ): Result<StatementParsed, TuffError> {
-  const name = tokens[pos] ?? "";
+  const name = textAt(tokens, pos) ?? "";
   const value = parseStatementValue(tokens, pos + 2, depth, expr, "assignment");
 
   if (!value.ok) {
@@ -85,18 +86,18 @@ function parseAssign(
   });
 }
 
-function startsStatement(tokens: string[], pos: number): boolean {
-  const token = tokens[pos];
+function startsStatement(tokens: Token[], pos: number): boolean {
+  const token = textAt(tokens, pos);
 
-  return token === "let" || (token !== undefined && isIdentifier(token) && tokens[pos + 1] === "=");
+  return token === "let" || (token !== undefined && isIdentifier(token) && textAt(tokens, pos + 1) === "=");
 }
 
-function closingOf(tokens: string[], open: number, opener: string, closer: string): number | undefined {
+function closingOf(tokens: Token[], open: number, opener: string, closer: string): number | undefined {
   let level = 0;
   let index = open;
 
   while (index < tokens.length) {
-    const token = tokens[index];
+    const token = textAt(tokens, index);
 
     if (token === opener) {
       level += 1;
@@ -131,8 +132,8 @@ function canFollowStatementBlock(token: string | undefined): boolean {
 // the token after its closing "}" can start a statement, an expression, or end
 // an enclosing block. A block followed by an operator is a value, as in
 // "{ let x = 2; x } * 4".
-function isStatementBlock(tokens: string[], open: number): boolean {
-  if (tokens[open] !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1))) {
+function isStatementBlock(tokens: Token[], open: number): boolean {
+  if (textAt(tokens, open) !== "{" || (!startsStatement(tokens, open + 1) && !isBranchStatement(tokens, open + 1))) {
     return false;
   }
 
@@ -142,10 +143,10 @@ function isStatementBlock(tokens: string[], open: number): boolean {
     return false;
   }
 
-  const follower = tokens[close + 1];
+  const follower = textAt(tokens, close + 1);
 
-  if (follower === undefined) {
-    return tokens[close - 1] === ";";
+  if (close + 1 >= tokens.length) {
+    return textAt(tokens, close - 1) === ";";
   }
 
   return canFollowStatementBlock(follower);
@@ -158,42 +159,42 @@ function continuesExpression(token: string | undefined): boolean {
   return token === "+" || token === "-" || token === "*";
 }
 
-function isBranchStatement(tokens: string[], pos: number): boolean {
-  if (tokens[pos] !== "if" || tokens[pos + 1] !== "(") {
+function isBranchStatement(tokens: Token[], pos: number): boolean {
+  if (textAt(tokens, pos) !== "if" || textAt(tokens, pos + 1) !== "(") {
     return false;
   }
 
   const conditionClose = closingOf(tokens, pos + 1, "(", ")");
 
-  if (conditionClose === undefined || tokens[conditionClose + 1] !== "{") {
+  if (conditionClose === undefined || textAt(tokens, conditionClose + 1) !== "{") {
     return false;
   }
 
   const thenClose = closingOf(tokens, conditionClose + 1, "{", "}");
 
-  if (thenClose === undefined || tokens[thenClose - 1] !== ";") {
+  if (thenClose === undefined || textAt(tokens, thenClose - 1) !== ";") {
     return false;
   }
 
-  if (tokens[thenClose + 1] !== "else") {
-    return !continuesExpression(tokens[thenClose + 1]);
+  if (textAt(tokens, thenClose + 1) !== "else") {
+    return !continuesExpression(textAt(tokens, thenClose + 1));
   }
 
-  if (tokens[thenClose + 2] !== "{") {
+  if (textAt(tokens, thenClose + 2) !== "{") {
     return false;
   }
 
   const elseClose = closingOf(tokens, thenClose + 2, "{", "}");
 
-  if (elseClose === undefined || tokens[elseClose - 1] !== ";") {
+  if (elseClose === undefined || textAt(tokens, elseClose - 1) !== ";") {
     return false;
   }
 
-  return !continuesExpression(tokens[elseClose + 1]);
+  return !continuesExpression(textAt(tokens, elseClose + 1));
 }
 
 function parseBranchStatement(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
@@ -215,7 +216,7 @@ function parseBranchStatement(
     return then;
   }
 
-  if (tokens[then.value.next + 1] !== "else") {
+  if (textAt(tokens, then.value.next + 1) !== "else") {
     return ok({
       statement: {
         kind: "branch",
@@ -247,7 +248,7 @@ function parseBranchStatement(
 }
 
 function parseStatementList(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
@@ -256,7 +257,7 @@ function parseStatementList(
   let next = pos;
 
   while (startsStatement(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
-    if (tokens[next] === "if") {
+    if (textAt(tokens, next) === "if") {
       const branch = parseBranchStatement(tokens, next, depth, expr, parseStatementList);
 
       if (!branch.ok) {
@@ -265,7 +266,7 @@ function parseStatementList(
 
       statements.push(branch.value.statement);
       next = branch.value.next;
-    } else if (tokens[next] === "{") {
+    } else if (textAt(tokens, next) === "{") {
       if (depth >= MAX_NESTING_DEPTH) {
         return nestingTooDeepAt(tokens, next);
       }
@@ -276,7 +277,7 @@ function parseStatementList(
         return body;
       }
 
-      if (tokens[body.value.next] !== "}") {
+      if (textAt(tokens, body.value.next) !== "}") {
         return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
       }
 
@@ -284,7 +285,7 @@ function parseStatementList(
       next = body.value.next + 1;
     } else {
       const parsed =
-        tokens[next] === "let"
+        textAt(tokens, next) === "let"
           ? parseLet(tokens, next, depth, expr)
           : parseAssign(tokens, next, depth, expr);
 
@@ -309,7 +310,7 @@ function parseStatementList(
  * @returns The body as an expression, or a block when it has statements.
  */
 export function blockBody(
-  tokens: string[],
+  tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,

@@ -455,6 +455,27 @@ test("interpretTuff: an unknown escape '\\q' is an InvalidTerm error", () => {
   expectErrorKind("'\\q'", "InvalidTerm");
 });
 
+test("interpretTuff: an escaped quote with no closer reports the missing closing quote", () => {
+  const result = interpretTuff("'\\");
+
+  expect(!result.ok && result.error.kind).toBe("InvalidTerm");
+  expect(!result.ok && result.error.why.includes("closing")).toBe(true);
+});
+
+test("interpretTuff: an unclosed string 'a reports the missing closing quote", () => {
+  const result = interpretTuff("'a");
+
+  expect(!result.ok && result.error.why.includes("closing")).toBe(true);
+});
+
+test("interpretTuff: a non-ASCII character is its code point: 'é' returns Ok(233)", () => {
+  expect(interpretTuff("'é'")).toEqual(ok(233));
+});
+
+test("interpretTuff: 'a' + 1 is a TypeMismatch error", () => {
+  expectErrorKind("'a' + 1", "TypeMismatch");
+});
+
 test("interpretTuff: an escaped backslash '\\\\' returns its code 92", () => {
   expect(interpretTuff("'\\\\'")).toEqual(ok(92));
 });

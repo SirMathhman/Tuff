@@ -1,3 +1,4 @@
+import { textAt, type Token } from "./tokenizer.ts";
 import { ok } from "./errors.ts";
 import { invalidAt, type Parse, type ExprRule } from "./parse-errors.ts";
 
@@ -9,8 +10,8 @@ import { invalidAt, type Parse, type ExprRule } from "./parse-errors.ts";
  * @param expr - The expression rule used for the condition.
  * @returns The condition and the index just after its closing parenthesis, or an error.
  */
-export function parseCondition(tokens: string[], pos: number, depth: number, expr: ExprRule): Parse {
-  if (tokens[pos + 1] !== "(") {
+export function parseCondition(tokens: Token[], pos: number, depth: number, expr: ExprRule): Parse {
+  if (textAt(tokens, pos + 1) !== "(") {
     return invalidAt(tokens, pos + 1, "'(' after 'if'", "Write the condition in parentheses after 'if'.");
   }
 
@@ -20,7 +21,7 @@ export function parseCondition(tokens: string[], pos: number, depth: number, exp
     return condition;
   }
 
-  if (tokens[condition.value.next] !== ")") {
+  if (textAt(tokens, condition.value.next) !== ")") {
     return invalidAt(tokens, condition.value.next, "')' after the condition", "Close the condition with ')'.");
   }
 

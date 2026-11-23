@@ -1,3 +1,4 @@
+import { textAt, type Token } from "./tokenizer.ts";
 import { err, type Err, type ErrorWhere, type Result, type TuffError } from "./errors.ts";
 import { type Expr } from "./ast.ts";
 
@@ -10,12 +11,12 @@ interface Parsed {
 
 export type Parse = Result<Parsed, TuffError>;
 
-export type ExprRule = (tokens: string[], pos: number, depth: number) => Parse;
+export type ExprRule = (tokens: Token[], pos: number, depth: number) => Parse;
 
 /**
  * A comparison-level rule that receives the full rule set, so it can be passed as a value.
  */
-export type ComparisonRule = (tokens: string[], pos: number, depth: number, rules: ParseRules) => Parse;
+export type ComparisonRule = (tokens: Token[], pos: number, depth: number, rules: ParseRules) => Parse;
 
 /**
  * The rules a parser function needs from above, passed as a parameter so no function calls a rule by name.
@@ -33,8 +34,8 @@ export interface ParseRules {
  * @param index - The position of the token.
  * @returns The index and text of the token.
  */
-export function whereAt(tokens: string[], index: number): ErrorWhere {
-  return { index, text: tokens[index] ?? "" };
+export function whereAt(tokens: Token[], index: number): ErrorWhere {
+  return { index, text: textAt(tokens, index) ?? "" };
 }
 
 /**
@@ -46,7 +47,7 @@ export function whereAt(tokens: string[], index: number): ErrorWhere {
  * @returns An Err result holding the InvalidTerm error.
  */
 export function invalidAt(
-  tokens: string[],
+  tokens: Token[],
   index: number,
   expected: string,
   fix: string,
@@ -69,7 +70,7 @@ export function invalidAt(
  * @param index - The position of the literal.
  * @returns An Err result holding the TermTooLarge error.
  */
-export function termTooLargeAt(tokens: string[], index: number): Err<TuffError> {
+export function termTooLargeAt(tokens: Token[], index: number): Err<TuffError> {
   const where = whereAt(tokens, index);
 
   return err({
@@ -86,7 +87,7 @@ export function termTooLargeAt(tokens: string[], index: number): Err<TuffError> 
  * @param index - The position of the group that exceeds the limit.
  * @returns An Err result holding the NestingTooDeep error.
  */
-export function nestingTooDeepAt(tokens: string[], index: number): Err<TuffError> {
+export function nestingTooDeepAt(tokens: Token[], index: number): Err<TuffError> {
   return err({
     kind: "NestingTooDeep",
     why: `Groups nest deeper than ${MAX_NESTING_DEPTH} levels.`,
