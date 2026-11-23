@@ -330,6 +330,32 @@ export function undeclaredTypeAt(where: ErrorWhere, name: string): Err<TuffError
 }
 
 /**
+ * Builds an ImmutableAssignment error for a field that cannot be assigned: a field not declared mut,
+ * or any field of an anonymous record, which has no declaration to mark it.
+ * @param where - The token of the record name.
+ * @param field - The field that was assigned.
+ * @param struct - The struct the record was built from, or undefined for an anonymous record.
+ * @returns An Err result holding the ImmutableAssignment error.
+ */
+export function immutableFieldAt(where: ErrorWhere, field: string, struct: string | undefined): Err<TuffError> {
+  if (struct === undefined) {
+    return err({
+      where,
+      fix: "Build the value with a struct constructor and declare the field mut.",
+      why: "The fields of an anonymous record cannot be assigned.",
+      kind: "ImmutableAssignment",
+    });
+  }
+
+  return err({
+    where,
+    fix: `Declare it in the struct definition as mut ${field} : Type.`,
+    why: `${JSON.stringify(field)} is not declared mut in struct ${struct}, so it cannot be assigned.`,
+    kind: "ImmutableAssignment",
+  });
+}
+
+/**
  * Builds an UndefinedStruct error for a constructor whose struct name was not declared.
  * @param where - The token of the struct name.
  * @param name - The struct name that was used.

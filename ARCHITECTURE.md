@@ -121,9 +121,9 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - A record literal `{ name : value, name : value }` has named fields, each holding any value. A field name is used once. A `{` followed by a name and `:` is a record, never a block.
 - `pt.x` reads a field, and chains such as `pt.a.b` read nested fields. Reading a field copies any array in it. An unknown field is an UndefinedField error.
-- `pt.x = value;` assigns a field of a mut record, and the value must have the field's type. The record is replaced, not changed in place, and a struct value keeps its struct name through the replacement.
+- `pt.x = value;` assigns a field when both the binding is mut and the struct declares that field mut, and the value must have the field's type. An anonymous record's fields cannot be assigned. The record is replaced, not changed in place, and a struct value keeps its struct name through the replacement.
 - A record moves on whole-name use, as an array does, so a later use is a UseAfterMove error. Reading a field does not move it.
-- A struct declaration `struct Point { x : I32, y : I32 }` starts the program and names a record type. Its name starts with a capital letter, and each field has a scalar or array type. A constructor `Point { x : 3I32, y : 4I32 }` builds one value with every field once and each field's type, and plain numbers do not convert to sized types.
+- A struct declaration `struct Point { x : I32, y : I32 }` starts the program and names a record type. Its name starts with a capital letter, and each field has a scalar or array type; a field marked `mut x : I32` may be assigned. A constructor `Point { x : 3I32, y : 4I32 }` builds one value with every field once and each field's type, and plain numbers do not convert to sized types.
 - A let annotation `: Point` accepts only a value built by Point's constructor, so an anonymous record does not match. An undeclared struct name in an annotation is an InvalidTerm error, and an undeclared constructor is an UndefinedStruct error.
 - Records cannot be compared or returned as a program result. Comparing them reports a TypeMismatch that names the record.
 

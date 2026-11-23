@@ -2,6 +2,7 @@ import {
   ok,
   bitwiseOutOfRangeAt,
   missingFieldAt,
+  immutableFieldAt,
   undeclaredTypeAt,
   undefinedStructAt,
   type Err,
@@ -809,6 +810,12 @@ function assignField(statement: FieldAssignStatement, scope: Scope | undefined, 
 
   if (old === undefined) {
     return fieldNotFoundAt(statement.where, statement.field, [...record.fields.keys()]);
+  }
+
+  const declared = record.struct === undefined ? undefined : structTableOf(scope).get(record.struct)?.fields.find((field) => field.name === statement.field);
+
+  if (declared === undefined || !declared.mutable) {
+    return immutableFieldAt(statement.where, statement.field, record.struct);
   }
 
   const replacement = evaluateRule(statement.value, scope);

@@ -63,31 +63,33 @@ function parseStruct(tokens: Token[], pos: number, earlier: StructDecl[]): Resul
   let next = pos + 3;
 
   while (true) {
-    const fieldName = textAt(tokens, next);
+    const mutable = textAt(tokens, next) === "mut";
+    const nameAt = mutable ? next + 1 : next;
+    const fieldName = textAt(tokens, nameAt);
 
     if (!isIdentifier(fieldName)) {
-      return invalidAt(tokens, next, "a field name", "Write each field as name : Type.");
+      return invalidAt(tokens, nameAt, "a field name", "Write each field as mut name : Type or name : Type.");
     }
 
     if (fields.some((field) => field.name === fieldName)) {
-      return invalidAt(tokens, next, "a field name not used before in this struct", "Give each field a different name.");
+      return invalidAt(tokens, nameAt, "a field name not used before in this struct", "Give each field a different name.");
     }
 
-    if (textAt(tokens, next + 1) !== ":") {
-      return invalidAt(tokens, next + 1, "':' after the field name", "Write each field as name : Type.");
+    if (textAt(tokens, nameAt + 1) !== ":") {
+      return invalidAt(tokens, nameAt + 1, "':' after the field name", "Write each field as name : Type.");
     }
 
-    const type = parseAnnotation(tokens, next + 2);
+    const type = parseAnnotation(tokens, nameAt + 2);
 
     if (!type.ok) {
       return type;
     }
 
     if (typeof type.value.annotation !== "string" && type.value.annotation.kind === "struct") {
-      return invalidAt(tokens, next + 2, "a sized integer type, Bool, or an array type", "Struct-typed fields are not supported yet; use a scalar or array type.");
+      return invalidAt(tokens, nameAt + 2, "a sized integer type, Bool, or an array type", "Struct-typed fields are not supported yet; use a scalar or array type.");
     }
 
-    fields.push({ name: fieldName, annotation: type.value.annotation });
+    fields.push({ name: fieldName, mutable, annotation: type.value.annotation });
     next = type.value.next;
 
     if (textAt(tokens, next) === "}") {

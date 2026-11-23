@@ -164,6 +164,8 @@ export type Annotation = ScalarAnnotation | ArrayAnnotation | StructAnnotation;
 export interface StructField {
   /** The field name. */
   name: string;
+  /** True when the declaration marks the field mut, so a mut binding may assign it. */
+  mutable: boolean;
   /** The type every value of this field must have. */
   annotation: ScalarAnnotation | ArrayAnnotation;
 }

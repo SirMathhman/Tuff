@@ -830,8 +830,8 @@ test("interpretTuff: \"let pt = { x : 3, y : 4 }; pt.x + pt.y\" => 7", () => {
   expect(interpretTuff("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toEqual(ok(7));
 });
 
-test("interpretTuff: a mut record field can be assigned, and a nested field can be read", () => {
-  expect(interpretTuff("let mut pt = { x : 3, y : 4 }; pt.x = 10; pt.x + pt.y")).toEqual(ok(14));
+test("interpretTuff: an anonymous record field cannot be assigned, and a nested field can be read", () => {
+  expectErrorKind("let mut pt = { x : 3, y : 4 }; pt.x = 10; pt.x + pt.y", "ImmutableAssignment");
   expect(interpretTuff("let pt = { a : { b : 5 } }; pt.a.b")).toEqual(ok(5));
 });
 
@@ -863,11 +863,15 @@ test("interpretTuff: a struct constructor with plain number fields is a TypeMism
 });
 
 test("interpretTuff: a struct keeps its struct name when one of its fields is written", () => {
-  expect(interpretTuff("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = p; q.x")).toEqual(ok(5));
+  expect(interpretTuff("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = p; q.x")).toEqual(ok(5));
 });
 
 test("interpretTuff: an anonymous record does not match a struct annotation even with the same fields", () => {
-  expectErrorKind("struct Point { x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = { x : 5I32, y : 2I32 }; 1", "TypeMismatch");
+  expectErrorKind("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.x = 5I32; let q : Point = { x : 5I32, y : 2I32 }; 1", "TypeMismatch");
+});
+
+test("interpretTuff: assigning a struct field the declaration does not mark mut is an ImmutableAssignment error", () => {
+  expectErrorKind("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.y = 5I32; p.y", "ImmutableAssignment");
 });
 
 test("interpretTuff: a struct constructor that leaves out a field is a MissingField error", () => {
