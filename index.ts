@@ -109,7 +109,7 @@ function nextState(state: State, token: string): State | undefined {
 }
 
 interface Scan {
-  state: State | undefined;
+  state?: State;
   failedAt: number;
   expected: State;
 }
