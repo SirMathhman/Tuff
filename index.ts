@@ -5,14 +5,11 @@ import { evaluate } from "./evaluator.ts";
 
 export * from "./errors.ts";
 
-// Grammar:
-//   expr    := term (("+" | "-") term)*
-//   term    := factor ("*" factor)*
-//   factor  := "-"? primary
-//   primary := number | "(" expr ")" | "{" expr "}"
-// The parser builds an AST; evaluate computes the value.
-// primary receives expr as a parameter, so the rules form no static cycle.
-
+/**
+ * Interprets Tuff source text and returns its numeric value.
+ * @param tuffSource - The Tuff program text.
+ * @returns The computed value, or a structured error describing the first problem.
+ */
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tokenize(tuffSource);
   const parsed = parseExpr(tokens, 0, 0);
