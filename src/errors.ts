@@ -136,6 +136,14 @@ export interface ReferenceEscapes extends TuffErrorDetails {
   kind: "ReferenceEscapes";
 }
 
+/**
+ * The divisor of a division is zero.
+ */
+export interface DivisionByZero extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "DivisionByZero";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -147,6 +155,7 @@ export type TuffError =
   | IndexOutOfRange
   | UseAfterMove
   | EmptyArrayLiteral
+  | DivisionByZero
   | ReferenceEscapes;
 
 function describeWhere(where: ErrorWhere): string {
@@ -214,6 +223,20 @@ export function referenceEscapesAt(where: ErrorWhere): Err<TuffError> {
     fix: "Keep the reference inside the block of the value it points to, or copy the value instead.",
     why: "The referenced name is declared in a block that has already ended.",
     kind: "ReferenceEscapes",
+  });
+}
+
+/**
+ * Builds a DivisionByZero error for a division whose divisor is zero.
+ * @param where - The token of the division operator.
+ * @returns An Err result holding the DivisionByZero error.
+ */
+export function divisionByZeroAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    where,
+    fix: "Use a divisor other than zero.",
+    why: "A number cannot be divided by zero.",
+    kind: "DivisionByZero",
   });
 }
 

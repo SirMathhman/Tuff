@@ -572,6 +572,22 @@ test("interpretTuff: a block-local reference stored in a block-local holder stay
   expect(interpretTuff("let mut x = 1; let mut h = &x; let u = { let mut y = 2; let k = &mut y; h = &x; 0 }; *h")).toEqual(ok(1));
 });
 
+test("interpretTuff: 7 / 2 truncates toward zero and returns Ok(3)", () => {
+  expect(interpretTuff("7 / 2")).toEqual(ok(3));
+});
+
+test("interpretTuff: -7 / 2 truncates toward zero and returns Ok(-3)", () => {
+  expect(interpretTuff("-7 / 2")).toEqual(ok(-3));
+});
+
+test("interpretTuff: 1 / 0 is a DivisionByZero error", () => {
+  expectErrorKind("1 / 0", "DivisionByZero");
+});
+
+test("interpretTuff: 8 / 2 * 2 evaluates left to right and returns Ok(8)", () => {
+  expect(interpretTuff("8 / 2 * 2")).toEqual(ok(8));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

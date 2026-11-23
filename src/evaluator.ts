@@ -1,5 +1,6 @@
 import {
   ok,
+  divisionByZeroAt,
   immutableAssignmentAt,
   indexOutOfRangeAt,
   referenceEscapesAt,
@@ -132,7 +133,11 @@ function apply(op: Link["op"], left: number, right: number): number {
     return left + right;
   }
 
-  return op === "-" ? left - right : left * right;
+  if (op === "-") {
+    return left - right;
+  }
+
+  return op === "*" ? left * right : Math.trunc(left / right);
 }
 
 function lookup(name: string, scope: Scope | undefined): Scope | undefined {
@@ -556,6 +561,10 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
 
       if (!rightNumber.ok) {
         return rightNumber;
+      }
+
+      if (link.op === "/" && rightNumber.value === 0) {
+        return divisionByZeroAt(link.where);
       }
 
       const value = apply(link.op, left.value, rightNumber.value);

@@ -358,7 +358,7 @@ function parseTerm(
   depth: number,
   rules: ParseRules,
 ): Parse {
-  return parseChain(tokens, pos, ["*"], (next) =>
+  return parseChain(tokens, pos, ["*", "/"], (next) =>
     parseFactor(tokens, next, depth, rules),
   );
 }

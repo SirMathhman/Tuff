@@ -78,7 +78,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Arithmetic and unary operators
 
-- `+`, `-`, and `*` fold left to right, with `*` binding tighter.
+- `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if
