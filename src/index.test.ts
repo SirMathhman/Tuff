@@ -814,6 +814,22 @@ test("interpretTuff: let x : Foo = 1; x is an InvalidTerm error", () => {
   expectErrorKind("let x : Foo = 1; x", "InvalidTerm");
 });
 
+test("interpretTuff: \"let mut x = 0; while (x < 4) { x += 1; } x\" => 4", () => {
+  expect(interpretTuff("let mut x = 0; while (x < 4) { x += 1; } x")).toEqual(ok(4));
+});
+
+test("interpretTuff: a while loop whose condition is false runs zero times", () => {
+  expect(interpretTuff("let mut x = 0; while (false) { x += 1; } x")).toEqual(ok(0));
+});
+
+test("interpretTuff: while (1) { } is a TypeMismatch error", () => {
+  expectErrorKind("while (1) { } 0", "TypeMismatch");
+});
+
+test("interpretTuff: x /= 0 is a DivisionByZero error", () => {
+  expectErrorKind("let mut x = 5; x /= 0; x", "DivisionByZero");
+});
+
 test("interpretTuff: 4I8 >> 0I8 returns Ok(4)", () => {
   expect(interpretTuff("4I8 >> 0I8")).toEqual(ok(4));
 });

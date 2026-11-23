@@ -130,13 +130,22 @@ interface ElementStatement {
   where: ErrorWhere;
 }
 
+// A loop that runs its body while its boolean condition holds.
+interface WhileStatement {
+  kind: "while";
+  condition: Expr;
+  body: Statement[];
+  where: ErrorWhere;
+}
+
 export type Statement =
   | LetStatement
   | AssignStatement
   | ScopeStatement
   | BranchStatement
   | ElementStatement
-  | DerefAssignStatement;
+  | DerefAssignStatement
+  | WhileStatement;
 
 interface BlockNode {
   kind: "block";

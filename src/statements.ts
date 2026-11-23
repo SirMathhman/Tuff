@@ -1,6 +1,6 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
-import { INT_TYPES, type IntType, type Statement } from "./ast.ts";
+import { INT_TYPES, type Expr, type IntType, type Link, type Statement } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -101,6 +101,49 @@ function parseAssign(
   });
 }
 
+// x op= value; reads x, applies op, and assigns the result: the same as x = x op value;.
+function parseCompoundAssign(tokens: Token[], pos: number, depth: number, expr: ExprRule): Result<StatementParsed, TuffError> {
+  const op = compoundOpAt(textAt(tokens, pos + 1));
+
+  if (op === undefined) {
+    return invalidAt(tokens, pos + 1, "a compound operator", "Use +=, -=, *=, or /=.");
+  }
+
+  const value = parseStatementValue(tokens, pos + 2, depth, expr, "assignment");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  const name = textAt(tokens, pos);
+  const where = whereAt(tokens, pos);
+  const read = { kind: "reference" as const, name, where };
+  const link = { op, operand: value.value.value, where: whereAt(tokens, pos + 1) };
+
+  return ok({
+    statement: { kind: "assign", name, value: { kind: "chain", first: read, links: [link] }, where },
+    next: value.value.next,
+  });
+}
+
+// while (condition) { body }: runs the body while the condition holds.
+function parseWhile(tokens: Token[], pos: number, depth: number, expr: ExprRule, statementsRule: StatementsRule): Result<StatementParsed, TuffError> {
+  const loop = parseConditionBody(tokens, pos, depth, expr, statementsRule);
+
+  if (!loop.ok) {
+    return loop;
+  }
+
+  if (textAt(tokens, loop.value.next) !== "}") {
+    return invalidAt(tokens, loop.value.next, "'}' after the loop body", "Close the loop body with '}'.");
+  }
+
+  return ok({
+    statement: { kind: "while", condition: loop.value.condition, body: loop.value.statements, where: whereAt(tokens, pos) },
+    next: loop.value.next + 1,
+  });
+}
+
 // An assignment to one element, as in array[0] = 5; : a name, a bracketed index, and "=".
 function isElementAssign(tokens: Token[], pos: number): boolean {
   if (!isIdentifier(textAt(tokens, pos)) || textAt(tokens, pos + 1) !== "[") {
@@ -154,10 +197,23 @@ function parseElementAssign(tokens: Token[], pos: number, depth: number, expr: E
   });
 }
 
+function compoundOpAt(token: string | undefined): Link["op"] | undefined {
+  return token === "+=" ? "+" : token === "-=" ? "-" : token === "*=" ? "*" : token === "/=" ? "/" : undefined;
+}
+
+// A compound assignment such as x += 1; : a name followed by an operator and "=".
+function isCompoundAssign(tokens: Token[], pos: number): boolean {
+  return isIdentifier(textAt(tokens, pos)) && compoundOpAt(textAt(tokens, pos + 1)) !== undefined;
+}
+
 function startsStatement(tokens: Token[], pos: number): boolean {
   const token = textAt(tokens, pos);
 
-  return token === "let" || (token !== undefined && isIdentifier(token) && textAt(tokens, pos + 1) === "=");
+  return (
+    token === "let" ||
+    token === "while" ||
+    (token !== undefined && isIdentifier(token) && (textAt(tokens, pos + 1) === "=" || isCompoundAssign(tokens, pos)))
+  );
 }
 
 function closingOf(tokens: Token[], open: number, opener: string, closer: string): number | undefined {
@@ -192,6 +248,7 @@ function canFollowStatementBlock(token: string | undefined): boolean {
     token === "{" ||
     token === "}" ||
     token === "if" ||
+    token === "while" ||
     (token !== undefined && (isDigits(token) || intLiteralType(token) !== undefined || isIdentifier(token)))
   );
 }
@@ -261,13 +318,21 @@ function isBranchStatement(tokens: Token[], pos: number): boolean {
   return !continuesExpression(textAt(tokens, elseClose + 1));
 }
 
-function parseBranchStatement(
+interface ConditionBody {
+  condition: Expr;
+  statements: Statement[];
+  // The index of the closing "}" of the body.
+  next: number;
+}
+
+// The "(condition)" after if or while, then its "{ statements }" body.
+function parseConditionBody(
   tokens: Token[],
   pos: number,
   depth: number,
   expr: ExprRule,
   statementsRule: StatementsRule,
-): Result<StatementParsed, TuffError> {
+): Result<ConditionBody, TuffError> {
   if (depth >= MAX_NESTING_DEPTH) {
     return nestingTooDeepAt(tokens, pos);
   }
@@ -278,7 +343,23 @@ function parseBranchStatement(
     return condition;
   }
 
-  const then = statementsRule(tokens, condition.value.next + 1, depth + 1, expr);
+  const body = statementsRule(tokens, condition.value.next + 1, depth + 1, expr);
+
+  if (!body.ok) {
+    return body;
+  }
+
+  return ok({ condition: condition.value.value, statements: body.value.statements, next: body.value.next });
+}
+
+function parseBranchStatement(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+  statementsRule: StatementsRule,
+): Result<StatementParsed, TuffError> {
+  const then = parseConditionBody(tokens, pos, depth, expr, statementsRule);
 
   if (!then.ok) {
     return then;
@@ -288,7 +369,7 @@ function parseBranchStatement(
     return ok({
       statement: {
         kind: "branch",
-        condition: condition.value.value,
+        condition: then.value.condition,
         then: then.value.statements,
         otherwise: [],
         where: whereAt(tokens, pos),
@@ -306,7 +387,7 @@ function parseBranchStatement(
   return ok({
     statement: {
       kind: "branch",
-      condition: condition.value.value,
+      condition: then.value.condition,
       then: then.value.statements,
       otherwise: otherwise.value.statements,
       where: whereAt(tokens, pos),
@@ -334,6 +415,15 @@ function parseStatementList(
 
       statements.push(branch.value.statement);
       next = branch.value.next;
+    } else if (textAt(tokens, next) === "while") {
+      const loop = parseWhile(tokens, next, depth, expr, parseStatementList);
+
+      if (!loop.ok) {
+        return loop;
+      }
+
+      statements.push(loop.value.statement);
+      next = loop.value.next;
     } else if (textAt(tokens, next) === "{") {
       if (depth >= MAX_NESTING_DEPTH) {
         return nestingTooDeepAt(tokens, next);
@@ -359,7 +449,9 @@ function parseStatementList(
             ? parseElementAssign(tokens, next, depth, expr)
             : isDerefAssign(tokens, next)
               ? parseDerefAssign(tokens, next, depth, expr)
-              : parseAssign(tokens, next, depth, expr);
+              : isCompoundAssign(tokens, next)
+                ? parseCompoundAssign(tokens, next, depth, expr)
+                : parseAssign(tokens, next, depth, expr);
 
       if (!parsed.ok) {
         return parsed;

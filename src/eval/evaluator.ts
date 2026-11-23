@@ -232,6 +232,38 @@ function assignElement(
   return ok(scope);
 }
 
+// Runs the body while the condition is true. The body's bindings end with each pass, and its
+// changes to outer mut names persist. The loop is iterative, so long loops do not deepen the call stack.
+function runWhile(
+  condition: Expr,
+  body: Statement[],
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Scope | undefined, TuffError> {
+  while (true) {
+    const test = evaluateRule(condition, scope);
+
+    if (!test.ok) {
+      return test;
+    }
+
+    if (typeof test.value !== "boolean") {
+      return typeMismatchAt(where, "a boolean condition", typeName(test.value));
+    }
+
+    if (!test.value) {
+      return ok(scope);
+    }
+
+    const inner = runStatements(body, scope, evaluateRule);
+
+    if (!inner.ok) {
+      return inner;
+    }
+  }
+}
+
 function runStatements(
   statements: Statement[],
   scope: Scope | undefined,
@@ -275,6 +307,10 @@ function runStatements(
         const chosen = runStatements(condition.value ? statement.then : statement.otherwise, acc.value, evaluateRule);
 
         return chosen.ok ? ok(acc.value) : chosen;
+      }
+
+      if (statement.kind === "while") {
+        return runWhile(statement.condition, statement.body, statement.where, acc.value, evaluateRule);
       }
 
       const value = evaluateRule(statement.value, acc.value);
