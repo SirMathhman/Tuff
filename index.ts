@@ -22,11 +22,15 @@ export function err<E>(error: E): Err<E> {
   return { ok: false, error };
 }
 
-const DIGITS = /^\d+$/;
+function isDigits(text: string): boolean {
+  return (
+    text.length > 0 && [...text].every((char) => char >= "0" && char <= "9")
+  );
+}
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const parts = tuffSource.split("+").map((part) => part.trim());
-  if (!parts.every((part) => DIGITS.test(part))) {
+  if (!parts.every(isDigits)) {
     return err({ message: `Invalid number in: ${JSON.stringify(tuffSource)}` });
   }
   return ok(

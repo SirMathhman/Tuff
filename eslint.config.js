@@ -14,6 +14,18 @@ export default [
           selector: "TSTypeLiteral",
           message: "Use an interface instead of an object type literal.",
         },
+        {
+          selector: "Literal[regex]",
+          message: "Regex literals are not allowed.",
+        },
+        {
+          selector: "NewExpression[callee.name='RegExp']",
+          message: "new RegExp is not allowed.",
+        },
+        {
+          selector: "CallExpression[callee.name='RegExp']",
+          message: "RegExp() is not allowed.",
+        },
       ],
     },
   },
