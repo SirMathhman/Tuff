@@ -374,7 +374,17 @@ function isStatementBlock(tokens: string[], open: number): boolean {
 
   const close = closingBrace(tokens, open);
 
-  return close !== undefined && canFollowStatementBlock(tokens[close + 1]);
+  if (close === undefined) {
+    return false;
+  }
+
+  const follower = tokens[close + 1];
+
+  if (follower === undefined) {
+    return tokens[close - 1] === ";";
+  }
+
+  return canFollowStatementBlock(follower);
 }
 
 function parseStatementList(
@@ -443,6 +453,14 @@ export function blockBody(
   }
 
   const { statements } = list.value;
+
+  if (depth === 0 && list.value.next === tokens.length && statements.length > 0) {
+    return ok({
+      value: { kind: "block", statements, result: { kind: "number", value: 0 } },
+      next: list.value.next,
+    });
+  }
+
   const result = expr(tokens, list.value.next, depth);
 
   if (!result.ok) {

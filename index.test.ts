@@ -194,8 +194,12 @@ test("interpretTuff('y') is an UndefinedName error", () => {
   expectErrorKind("y", "UndefinedName");
 });
 
-test("interpretTuff('{ let x = 2; }') is an InvalidTerm error", () => {
-  expectErrorKind("{ let x = 2; }", "InvalidTerm");
+test("interpretTuff('{ let x = 2; }') returns Ok(0), a program made only of statements", () => {
+  expect(interpretTuff("{ let x = 2; }")).toEqual(ok(0));
+});
+
+test("interpretTuff('let mut x = 0; { x = 1; }') returns Ok(0), a program made only of statements", () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; }")).toEqual(ok(0));
 });
 
 test("interpretTuff inner shadowing across blocks returns Ok(20)", () => {
