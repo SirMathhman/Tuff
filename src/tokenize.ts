@@ -76,6 +76,16 @@ export interface AndToken {
   pos: number;
 }
 
+export interface IfToken {
+  kind: "if";
+  pos: number;
+}
+
+export interface ElseToken {
+  kind: "else";
+  pos: number;
+}
+
 export type ComparisonSymbol = "<" | ">" | "<=" | ">=" | "==" | "!=";
 
 export interface ComparisonToken {
@@ -116,7 +126,9 @@ export type Token =
   | BooleanToken
   | OrToken
   | AndToken
-  | ComparisonToken;
+  | ComparisonToken
+  | IfToken
+  | ElseToken;
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
@@ -128,13 +140,20 @@ function isLetter(char: string): boolean {
   );
 }
 
-// The token for a run of letters. `let` and `mut` are keywords, not names.
+// The token for a run of letters. `let`, `mut`, `if`, and `else` are keywords,
+// not names.
 function wordToken(word: string, pos: number): Token {
   if (word === "let") {
     return { kind: "let", pos };
   }
   if (word === "mut") {
     return { kind: "mut", pos };
+  }
+  if (word === "if") {
+    return { kind: "if", pos };
+  }
+  if (word === "else") {
+    return { kind: "else", pos };
   }
   if (word === "true" || word === "false") {
     return { kind: "boolean", value: word === "true", pos };
@@ -254,6 +273,12 @@ export function tokenText(token: Token): string {
   }
   if (token.kind === "comparison") {
     return token.symbol;
+  }
+  if (token.kind === "if") {
+    return "if";
+  }
+  if (token.kind === "else") {
+    return "else";
   }
   if (token.kind === "or") {
     return "||";

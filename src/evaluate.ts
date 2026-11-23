@@ -59,7 +59,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   //   compare    = "<" | ">" | "<=" | ">=" | "==" | "!="
   //   sum        = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
-  //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}"
+  //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}" | "if" factor expression "else" expression
   // Precedence, tightest first: "*", then "+" and "-", then the comparisons, then "&&", then "||".
   // A comparison takes numbers and gives a boolean; a second comparison is an error. Operands of "&&"
   // and "||" must be booleans; the right side is skipped when the left side decides

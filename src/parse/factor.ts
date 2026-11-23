@@ -8,13 +8,14 @@ import { err, ok } from "../result.ts";
 import type { Scope } from "../scope.ts";
 import { isStarAt, tokenText } from "../tokenize.ts";
 import type { NameToken, Token } from "../tokenize.ts";
+import { parseConditional } from "./conditional.ts";
 import { parseDeref } from "./deref.ts";
 import { parseGroup } from "./group.ts";
 import type { ParseResult, Parsed } from "./types.ts";
 
-// A factor is a number, a boolean, a variable, a dereference, or a grouped
-// expression. Signs are not allowed directly before a factor; a sign inside a
-// group belongs to that expression.
+// A factor is a number, a boolean, a variable, a dereference, a grouped
+// expression, or an if expression. Signs are not allowed directly before a
+// factor; a sign inside a group belongs to that expression.
 export function parseFactor(
   tokens: Token[],
   index: number,
@@ -24,6 +25,9 @@ export function parseFactor(
   const token = tokens[index];
   if (token?.kind === "open") {
     return parseGroup(tokens, index, scope, end, parseFactor);
+  }
+  if (token?.kind === "if") {
+    return parseConditional(tokens, index, scope, end, parseFactor);
   }
   if (token?.kind === "name") {
     return parseVariable(token, index, scope);

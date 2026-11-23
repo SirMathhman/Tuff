@@ -130,15 +130,40 @@ export function referenceAsNumber(name: string, where: number): TuffError {
   };
 }
 
+// How an operand is named in a message. An operand that starts a group is named
+// as the group, not by its bracket.
+function operandSubject(text: string): string {
+  return text === "(" || text === "{" ? "This group" : `"${text}"`;
+}
+
 // Reported when a boolean is used where arithmetic needs a number.
 export function booleanAsNumber(where: number, text: string): TuffError {
-  // An operand that starts a group is named as the group, not by its bracket.
-  const subject = text === "(" || text === "{" ? "This group" : `"${text}"`;
   return {
     what: "Boolean used as a number",
     where,
-    why: `${subject} is a boolean, not a number`,
+    why: `${operandSubject(text)} is a boolean, not a number`,
     fix: "Use a number instead of the boolean, or drop the operator",
+  };
+}
+
+// Reported when an if condition is a number. `text` is the condition's spelling.
+export function numberAsCondition(where: number, text: string): TuffError {
+  return {
+    what: "Number used as a condition",
+    where,
+    why: `${operandSubject(text)} is a number, but an if condition must be a boolean`,
+    fix: "Use a boolean condition, such as true, false, or a comparison",
+  };
+}
+
+// Reported when an if branch is not followed by "else". `where` is the offset of
+// the token found there, or the source length at the end.
+export function missingElse(where: number): TuffError {
+  return {
+    what: "Missing else",
+    where,
+    why: 'An if needs an "else" branch after its value',
+    fix: 'Add "else" and a value after the if branch',
   };
 }
 

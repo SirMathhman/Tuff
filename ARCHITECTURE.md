@@ -11,15 +11,20 @@ as the language grows. It describes the ideal, not the current code.
 - **Tuff source**: a string written by a user or a program. It is untrusted.
 - **Number**: a decimal literal made of ASCII digits. Values use IEEE-754 double
   precision, the same as JavaScript `number`.
-- **Name**: a run of ASCII letters and `_`. `let` is reserved and cannot be a
-  name.
+- **Name**: a run of ASCII letters and `_`. `let`, `mut`, `if`, and `else` are
+  reserved and cannot be names.
 - **Boolean and operand**: a boolean is the keyword `true` or `false`. It is a
   plain value like a number, but not a number: it cannot take part in
   arithmetic. An operand is a number or a boolean, the plain values a variable
   or a factor can hold.
-- **Factor**: a number, a boolean, a name, a dereference `*name`, or a grouped
-  expression `( expression )` or a block `{ sequence }`. A sign is never
-  written directly before a factor; a sign is part of an expression.
+- **Factor**: a number, a boolean, a name, a dereference `*name`, a grouped
+  expression `( expression )`, a block `{ sequence }`, or an if expression
+  `if factor expression else expression`. A sign is never written directly
+  before a factor; a sign is part of an expression. The if condition must be a
+  boolean (`NumberAsCondition` otherwise), and `else` is required (`MissingElse`
+  otherwise). The branches may differ in type. Both branches are parsed, so an
+  error in either is reported, but only the chosen branch keeps its assignments,
+  as with `&&` and `||`.
 - **Sequence**: zero or more statements, then one expression. A statement is
   `let [mut] name = value ;`, `name = value ;`, or `*name = expression ;`. The
   sequence evaluates to its final expression. A `let` name is visible to the
@@ -69,8 +74,9 @@ as the language grows. It describes the ideal, not the current code.
   is a `ChainedComparison` error, so `1 < 2 < 3` is rejected. Comparisons
   are exact: `==` and `!=` compare the double values, so they do not treat
   nearby values as equal.
-- **Token**: a classified piece of source (number, name, `let`, `mut`, `true`,
-  `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `>`, `<=`, `>=`, `==`, `!=`, `+`,
+- **Token**: a classified piece of source (number, name, `let`, `mut`, `if`,
+  `else`, `true`, `false`, `=`, `;`, `&`, `&&`, `||`, `<`, `>`, `<=`, `>=`, `==`,
+  `!=`, `+`,
   `-`, `*`, `(`, `)`, `{`, `}`, or whitespace). Whitespace is dropped after
   tokenizing.
 - **TuffError**: a structured error value (see Errors below). Never a bare
@@ -119,9 +125,11 @@ src/scope.ts             Scope, Variable, Reference, Value; rootScope, childScop
 src/tokenize.ts          string -> Result<Token[], TuffError>; token types and helpers
 src/evaluate.ts          string -> Result<number, TuffError>; checks nesting, then parses
 src/parse/types.ts       Parsed, Evaluated, Parser, ParseResult
-src/parse/factor.ts      number, boolean, name, and group; the only file that calls group
+src/parse/factor.ts      number, boolean, name, group, and if; the only file that calls
+                         group or if
 src/parse/deref.ts       "*name" read through a reference (a factor)
 src/parse/group.ts       "( expression )" and "{ sequence }"
+src/parse/conditional.ts "if" factor, then two branches joined by "else"
 src/parse/sequence.ts    let, assignment, and "*name =" statements, then an
                          expression
 src/parse/value.ts       a let or assignment value: "&name", "&mut name", or an
@@ -135,7 +143,8 @@ Dependency direction (arrows mean "imports from"):
 ```
 index.ts            -> evaluate.ts
 evaluate.ts         -> tokenize.ts, scope.ts, parse/factor.ts, parse/sequence.ts
-parse/factor.ts     -> parse/group.ts, parse/deref.ts
+parse/factor.ts     -> parse/group.ts, parse/deref.ts, parse/conditional.ts
+parse/conditional.ts -> parse/expression.ts
 parse/group.ts      -> parse/sequence.ts, parse/expression.ts, scope.ts
 parse/sequence.ts   -> parse/value.ts, parse/expression.ts, scope.ts
 parse/value.ts      -> parse/expression.ts
@@ -224,6 +233,13 @@ Comparison:
 - `ChainedComparison { offset, first, second }`: a second comparison operator
   follows a comparison, for example `1 < 2 < 3` or `1 == 1 == 1`. `offset` is
   the second operator; `first` and `second` are the two operators as spelled.
+
+If:
+
+- `MissingElse { offset }`: an if branch is not followed by `else`. `offset` is
+  the token found there, or the source length at the end.
+- `NumberAsCondition { offset, text }`: an if condition is a number, not a
+  boolean. `text` is the condition's spelling.
 
 Names, assignments, and scope:
 

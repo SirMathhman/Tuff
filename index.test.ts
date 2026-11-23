@@ -530,3 +530,48 @@ test('interpretTuff("true == true") => boolean used as a number error', () => {
     },
   });
 });
+
+test('interpretTuff("if (true) 2 else 3") => 2', () => {
+  expect(interpretTuff("if (true) 2 else 3")).toEqual({ ok: true, value: 2 });
+});
+
+test('interpretTuff("if (false) 2 else 3") => 3', () => {
+  expect(interpretTuff("if (false) 2 else 3")).toEqual({ ok: true, value: 3 });
+});
+
+test('interpretTuff("if (false) 2 else true") => 1 (branches may differ in type)', () => {
+  expect(interpretTuff("if (false) 2 else true")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let mut x = 0; let y = if (true) 1 else { x = 5; 2 }; x") => 0 (untaken branch discarded)', () => {
+  expect(
+    interpretTuff("let mut x = 0; let y = if (true) 1 else { x = 5; 2 }; x"),
+  ).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("if (2) 1 else 3") => number used as a condition error', () => {
+  expect(interpretTuff("if (2) 1 else 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Number used as a condition",
+      where: 3,
+      why: "This group is a number, but an if condition must be a boolean",
+      fix: "Use a boolean condition, such as true, false, or a comparison",
+    },
+  });
+});
+
+test('interpretTuff("if (true) 2") => missing else error', () => {
+  expect(interpretTuff("if (true) 2")).toEqual({
+    ok: false,
+    error: {
+      what: "Missing else",
+      where: 11,
+      why: 'An if needs an "else" branch after its value',
+      fix: 'Add "else" and a value after the if branch',
+    },
+  });
+});
