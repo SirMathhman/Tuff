@@ -45,7 +45,7 @@ Recursion is limited to the parser and evaluator over the AST. Mutual recursion 
 
 - Narrow grammar: integers joined by `+`, `-`, or `*`, with `*` binding tighter. A single unary `-` may precede a number, a name, or a group, and groups nest. A group is `( )` or `{ }`, each closed by its own bracket.
 - Brackets, operators, `=`, and `;` are self-delimiting tokens, so spacing never changes meaning. Spaces, tabs, and newlines separate tokens.
-- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, or `}`.
+- Names bind with `let`, or `let mut` to allow later assignment. Undeclared names and assignments to immutable names are errors. A block used as a value always ends in a final expression; a program made only of statements evaluates to 0. A `{` at statement position opens a statement block, which needs no result of its own, when its contents begin with a statement and the token after its `}` is a name, number, `(`, `{`, `let`, or `}`, or the `}` ends the input and directly follows a `;`.
 - Numbers are JavaScript doubles: integer literals and intermediate or final results above 2^53 are rejected, so precision is never lost silently.
 - Number literals will follow JavaScript number syntax. Widening the grammar is additive; narrowing it is breaking.
 
@@ -91,6 +91,7 @@ Nesting depth is limited to 1000 levels; source size and step limits are not enf
 ### Parsing and evaluation
 
 - Tokenizing and parsing should be linear in source length. Avoid regular expressions with nested quantifiers, which backtrack badly on adversarial input.
+- Statement-block detection scans forward to the matching `}`, so nested statement blocks can cost roughly source length times depth. Matching brackets should be found in one pass before parsing.
 - Step limits will guard against unbounded loops, which the language will eventually need.
 - Scope lookup walks the bindings in order, so a long run of `let` statements can make evaluation quadratic. A map keyed by name avoids this.
 

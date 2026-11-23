@@ -3,7 +3,21 @@ import { tokenize } from "./tokenizer.ts";
 import { blockBody, invalidAt, parseExpr } from "./parser.ts";
 import { evaluate } from "./evaluator.ts";
 
-export * from "./errors.ts";
+export { describeError } from "./errors.ts";
+export type {
+  Ok,
+  Err,
+  Result,
+  ErrorWhere,
+  TuffError,
+  TuffErrorDetails,
+  InvalidTerm,
+  TermTooLarge,
+  ResultTooLarge,
+  NestingTooDeep,
+  UndefinedName,
+  ImmutableAssignment,
+} from "./errors.ts";
 
 /**
  * Interprets Tuff source text and returns its numeric value.

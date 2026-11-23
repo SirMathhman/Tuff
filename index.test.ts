@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { interpretTuff, ok, type TuffError } from "./index.ts";
+import { interpretTuff, type TuffError } from "./index.ts";
+import { ok } from "./errors.ts";
 
 function expectErrorKind(source: string, kind: TuffError["kind"]): void {
   const result = interpretTuff(source);

@@ -1,18 +1,5 @@
 import { type ErrorWhere } from "./errors.ts";
 
-// Grammar, implemented by the functions below:
-//   program   := body
-//   body      := statement* expr
-//   statement := "let" "mut"? name "=" expr ";" | name "=" expr ";" | "{" statement* "}"
-//   expr      := term (("+" | "-") term)*
-//   term      := factor ("*" factor)*
-//   factor    := "-"? primary
-//   primary   := number | name | "(" expr ")" | "{" body "}"
-// A name starts with a letter or underscore and continues with letters,
-// digits, or underscores; "let" and "mut" are reserved. The parser builds an
-// AST; the evaluator computes its value. primary receives expr as a parameter,
-// so the rules form no static cycle.
-
 interface NumberNode {
   kind: "number";
   value: number;
