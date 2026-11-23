@@ -1,6 +1,6 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { emptyArrayAt, integerOutOfRangeAt, ok, type Result } from "./errors.ts";
-import { INT_RANGES, type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
+import { INT_RANGES, type CompareOp, type Expr, type Link, type LogicalOp, type RecordField } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -72,6 +72,10 @@ function parsePrimary(
   depth: number,
   rules: ParseRules,
 ): Parse {
+  if (isRecordLiteral(tokens, pos)) {
+    return parseRecord(tokens, pos, depth, rules);
+  }
+
   const token = textAt(tokens, pos);
 
   if (token === "(" || token === "{") {
@@ -282,22 +286,83 @@ function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseR
   let target: Expr = base.value.value;
   let next = base.value.next;
 
-  while (textAt(tokens, next) === "[") {
-    const index = rules.expr(tokens, next + 1, depth + 1);
+  while (textAt(tokens, next) === "[" || textAt(tokens, next) === ".") {
+    if (textAt(tokens, next) === ".") {
+      const field = textAt(tokens, next + 1);
 
-    if (!index.ok) {
-      return index;
+      if (!isIdentifier(field)) {
+        return invalidAt(tokens, next + 1, "a field name after '.'", "Write the name of a field after the '.'.");
+      }
+
+      target = { kind: "field", target, name: field, where: whereAt(tokens, next) };
+      next += 2;
+    } else {
+      const index = rules.expr(tokens, next + 1, depth + 1);
+
+      if (!index.ok) {
+        return index;
+      }
+
+      if (textAt(tokens, index.value.next) !== "]") {
+        return invalidAt(tokens, index.value.next, "']' after the index", "Close the index with ']'.");
+      }
+
+      target = { kind: "index", target, index: index.value.value, where: whereAt(tokens, next) };
+      next = index.value.next + 1;
     }
-
-    if (textAt(tokens, index.value.next) !== "]") {
-      return invalidAt(tokens, index.value.next, "']' after the index", "Close the index with ']'.");
-    }
-
-    target = { kind: "index", target, index: index.value.value, where: whereAt(tokens, next) };
-    next = index.value.next + 1;
   }
 
   return ok({ value: target, next });
+}
+
+// A record literal starts with "{", a field name, and ":", which no block can begin with.
+function isRecordLiteral(tokens: Token[], pos: number): boolean {
+  return textAt(tokens, pos) === "{" && isIdentifier(textAt(tokens, pos + 1)) && textAt(tokens, pos + 2) === ":";
+}
+
+// { name : value, name : value }: each field name is used once.
+function parseRecord(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  const fields: RecordField[] = [];
+  let next = pos + 1;
+
+  while (true) {
+    const name = textAt(tokens, next);
+
+    if (!isIdentifier(name)) {
+      return invalidAt(tokens, next, "a field name", "Write a field as name : value.");
+    }
+
+    if (textAt(tokens, next + 1) !== ":") {
+      return invalidAt(tokens, next + 1, "':' after the field name", "Write each field as name : value.");
+    }
+
+    if (fields.some((field) => field.name === name)) {
+      return invalidAt(tokens, next, "a field name not used before in this record", "Give each field a different name.");
+    }
+
+    const value = rules.expr(tokens, next + 2, depth + 1);
+
+    if (!value.ok) {
+      return value;
+    }
+
+    fields.push({ name, value: value.value.value });
+    next = value.value.next;
+
+    if (textAt(tokens, next) === "}") {
+      return ok({ value: { kind: "record", fields, where: whereAt(tokens, pos) }, next: next + 1 });
+    }
+
+    if (textAt(tokens, next) !== ",") {
+      return invalidAt(tokens, next, "',' or '}' after the field", "Separate fields with ',' and close the record with '}'.");
+    }
+
+    next += 1;
+  }
 }
 
 // A borrow of a declared name: &name, or &mut name for a writable reference.

@@ -826,6 +826,19 @@ test("interpretTuff: an element write must keep the element type of an annotated
   expectErrorKind("let mut x : [U8; 2] = [1U8, 2U8]; x[0] = 1; x[0]", "TypeMismatch");
 });
 
+test("interpretTuff: \"let pt = { x : 3, y : 4 }; pt.x + pt.y\" => 7", () => {
+  expect(interpretTuff("let pt = { x : 3, y : 4 }; pt.x + pt.y")).toEqual(ok(7));
+});
+
+test("interpretTuff: a mut record field can be assigned, and a nested field can be read", () => {
+  expect(interpretTuff("let mut pt = { x : 3, y : 4 }; pt.x = 10; pt.x + pt.y")).toEqual(ok(14));
+  expect(interpretTuff("let pt = { a : { b : 5 } }; pt.a.b")).toEqual(ok(5));
+});
+
+test("interpretTuff: reading a field the record does not have is an UndefinedField error", () => {
+  expectErrorKind("let pt = { x : 3 }; pt.z", "UndefinedField");
+});
+
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
   expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
 });

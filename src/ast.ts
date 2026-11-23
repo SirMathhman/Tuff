@@ -154,6 +154,58 @@ interface WhileStatement {
   where: ErrorWhere;
 }
 
+/**
+ * One named field of a record literal.
+ */
+export interface RecordField {
+  /** The field name. */
+  name: string;
+  /** The expression whose value the field holds. */
+  value: Expr;
+}
+
+/**
+ * A record literal such as { x : 3, y : 4 }.
+ */
+interface RecordNode {
+  /** The statement kind. */
+  kind: "record";
+  /** The fields in source order. */
+  fields: RecordField[];
+  /** Where the record literal opens. */
+  where: ErrorWhere;
+}
+
+/**
+ * A read of one field, as in pt.x.
+ */
+interface FieldNode {
+  /** The expression kind. */
+  kind: "field";
+  /** The record expression whose field is read. */
+  target: Expr;
+  /** The field name. */
+  name: string;
+  /** Where the dot appears. */
+  where: ErrorWhere;
+}
+
+/**
+ * An assignment to one field of a mut record, as in pt.x = 5;.
+ */
+export interface FieldAssignStatement {
+  /** The statement kind. */
+  kind: "fieldAssign";
+  /** The name of the record binding. */
+  name: string;
+  /** The field being assigned. */
+  field: string;
+  /** The expression whose value replaces the field. */
+  value: Expr;
+  /** Where the record name appears. */
+  where: ErrorWhere;
+}
+
 export type Statement =
   | LetStatement
   | AssignStatement
@@ -161,7 +213,8 @@ export type Statement =
   | BranchStatement
   | ElementStatement
   | DerefAssignStatement
-  | WhileStatement;
+  | WhileStatement
+  | FieldAssignStatement;
 
 interface BlockNode {
   kind: "block";
@@ -241,6 +294,8 @@ interface IntNode {
 export type Expr =
   | ArrayNode
   | IndexNode
+  | RecordNode
+  | FieldNode
   | RefNode
   | DerefNode
   | NumberNode

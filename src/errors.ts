@@ -161,6 +161,14 @@ export interface U64OutOfRange extends TuffErrorDetails {
 }
 
 /**
+ * A record has no field with the name that was read or assigned.
+ */
+export interface UndefinedField extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "UndefinedField";
+}
+
+/**
  * A value of a sized integer type other than U64 is outside that type's range.
  */
 export interface IntegerOutOfRange extends TuffErrorDetails {
@@ -183,7 +191,8 @@ export type TuffError =
   | BitwiseOutOfRange
   | ReferenceEscapes
   | U64OutOfRange
-  | IntegerOutOfRange;
+  | IntegerOutOfRange
+  | UndefinedField;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -284,6 +293,22 @@ export function integerOutOfRangeAt(where: ErrorWhere, value: bigint, type: stri
     fix: `Use a ${type} value from ${min} to ${max}.`,
     why: `${value} is outside the ${type} range, which runs from ${min} to ${max}.`,
     kind: type === "U64" ? "U64OutOfRange" : "IntegerOutOfRange",
+  });
+}
+
+/**
+ * Builds an UndefinedField error for a field name that a record does not have.
+ * @param where - The token of the field name.
+ * @param name - The field name that was used.
+ * @param fields - The names of the record's fields.
+ * @returns An Err result holding the UndefinedField error.
+ */
+export function fieldNotFoundAt(where: ErrorWhere, name: string, fields: string[]): Err<TuffError> {
+  return err({
+    where,
+    fix: `Use one of the record's fields: ${fields.join(", ")}.`,
+    why: `${JSON.stringify(name)} is not a field of this record.`,
+    kind: "UndefinedField",
   });
 }
 

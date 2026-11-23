@@ -24,7 +24,33 @@ export interface Integer {
 /**
  * A runtime value: a plain number, a sized integer, a boolean, a one-character string, an array, or a reference.
  */
-export type Value = number | Integer | boolean | string | Value[] | Reference;
+/**
+ * A record: named fields, each holding a value. A record is never changed in place; a field write makes a new record.
+ */
+export interface RecordValue {
+  /** The fields, keyed by name, in declaration order. */
+  fields: Map<string, Value>;
+}
+
+export type Value = number | Integer | boolean | string | Value[] | Reference | RecordValue;
+
+/**
+ * Reports whether a value is a record.
+ * @param value - The value to test.
+ * @returns True when the value is a RecordValue.
+ */
+export function isRecord(value: Value): value is RecordValue {
+  return typeof value === "object" && !Array.isArray(value) && "fields" in value;
+}
+
+/**
+ * Returns a copy of an array value, copying nested arrays too, so the copy can change without touching its source.
+ * @param value - The value to copy.
+ * @returns The copied value; values other than arrays are returned as they are.
+ */
+export function copyValue(value: Value): Value {
+  return Array.isArray(value) ? value.map(copyValue) : value;
+}
 
 /**
  * Reports whether a value is a sized integer.
@@ -41,7 +67,7 @@ export function isInteger(value: Value): value is Integer {
  * @returns True when the value is a Reference.
  */
 export function isReference(value: Value): value is Reference {
-  return typeof value === "object" && !Array.isArray(value) && !isInteger(value);
+  return typeof value === "object" && !Array.isArray(value) && !isInteger(value) && !isRecord(value);
 }
 
 /**
@@ -54,6 +80,10 @@ export function isReference(value: Value): value is Reference {
 export function escapes(value: Value, holder: Scope | undefined): boolean {
   if (isReference(value)) {
     return !isVisible(value.target, holder);
+  }
+
+  if (isRecord(value)) {
+    return [...value.fields.values()].some((field) => escapes(field, holder));
   }
 
   if (Array.isArray(value)) {
@@ -119,6 +149,10 @@ export function typeName(value: Value): string {
     return "a number";
   }
 
+  if (isRecord(value)) {
+    return `a record with fields ${[...value.fields.keys()].join(", ")}`;
+  }
+
   if (isInteger(value)) {
     return `a ${value.type}`;
   }
@@ -150,6 +184,14 @@ export function typeName(value: Value): string {
 export function sameType(left: Value, right: Value): boolean {
   if (isInteger(left) || isInteger(right)) {
     return isInteger(left) && isInteger(right) && left.type === right.type;
+  }
+
+  if (isRecord(left) || isRecord(right)) {
+    return isRecord(left) && isRecord(right) && left.fields.size === right.fields.size && [...left.fields].every(([name, field]) => {
+      const other = right.fields.get(name);
+
+      return other !== undefined && sameType(field, other);
+    });
   }
 
   if (isReference(left) || isReference(right)) {

@@ -284,6 +284,24 @@ function compoundOpAt(token: string | undefined): Link["op"] | undefined {
   return token === "+=" ? "+" : token === "-=" ? "-" : token === "*=" ? "*" : token === "/=" ? "/" : undefined;
 }
 
+// A field assignment such as pt.x = 5; : a name, a field name, and "=" after the dot.
+function isFieldAssign(tokens: Token[], pos: number): boolean {
+  return isIdentifier(textAt(tokens, pos)) && textAt(tokens, pos + 1) === "." && isIdentifier(textAt(tokens, pos + 2)) && textAt(tokens, pos + 3) === "=";
+}
+
+function parseFieldAssign(tokens: Token[], pos: number, depth: number, expr: ExprRule): Result<StatementParsed, TuffError> {
+  const value = parseStatementValue(tokens, pos + 4, depth, expr, "field assignment");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  return ok({
+    statement: { kind: "fieldAssign", name: textAt(tokens, pos), field: textAt(tokens, pos + 2), value: value.value.value, where: whereAt(tokens, pos) },
+    next: value.value.next,
+  });
+}
+
 // A compound assignment such as x += 1; : a name followed by an operator and "=".
 function isCompoundAssign(tokens: Token[], pos: number): boolean {
   return isIdentifier(textAt(tokens, pos)) && compoundOpAt(textAt(tokens, pos + 1)) !== undefined;
@@ -295,7 +313,7 @@ function startsStatement(tokens: Token[], pos: number): boolean {
   return (
     token === "let" ||
     token === "while" ||
-    (token !== undefined && isIdentifier(token) && (textAt(tokens, pos + 1) === "=" || isCompoundAssign(tokens, pos)))
+    (token !== undefined && isIdentifier(token) && (textAt(tokens, pos + 1) === "=" || isCompoundAssign(tokens, pos) || isFieldAssign(tokens, pos)))
   );
 }
 
@@ -602,6 +620,10 @@ function parseOneStatement(
 
   if (isCompoundAssign(tokens, pos)) {
     return parseCompoundAssign(tokens, pos, depth, expr);
+  }
+
+  if (isFieldAssign(tokens, pos)) {
+    return parseFieldAssign(tokens, pos, depth, expr);
   }
 
   return parseAssign(tokens, pos, depth, expr);

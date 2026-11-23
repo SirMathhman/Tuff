@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a sized integer, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
+- **Value**: a number, a sized integer, a boolean, a one-character string, an array, or a record. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -114,6 +114,13 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - A nested array read is a copy, so the copy can be changed without touching its source.
 - Arrays cannot be compared or returned as a program result.
 - `&x` borrows a declared name read-only and `&mut x` borrows it writably (only if `x` is mut). `*r` reads through a reference and `*r = v;` writes through a mutable one. Reading through a reference copies the value, so it never moves the target. A reference cannot be stored where its target would outlive it (ReferenceEscapes), and cannot be a program result or compared.
+
+### Records
+
+- A record literal `{ name : value, name : value }` has named fields, each holding any value. A field name is used once. A `{` followed by a name and `:` is a record, never a block.
+- `pt.x` reads a field, and chains such as `pt.a.b` read nested fields. Reading a field copies any array in it. An unknown field is an UndefinedField error.
+- `pt.x = value;` assigns a field of a mut record, and the value must have the field's type. The record is replaced, not changed in place.
+- A record moves on whole-name use, as an array does, so a later use is a UseAfterMove error. Reading a field does not move it.
 
 ### Tokens
 

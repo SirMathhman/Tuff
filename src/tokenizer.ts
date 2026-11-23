@@ -69,7 +69,7 @@ const SPACE = [" ", "\t", "\n", "\r"];
 
 const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||", "<<", ">>", "+=", "-=", "*=", "/="];
 
-const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "[", "]", ",", "+", "-", "*", "/", ";", "=", "<", ">", "!", "&", "|", ":"];
+const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "[", "]", ",", "+", "-", "*", "/", ";", "=", "<", ">", "!", "&", "|", ":", "."];
 
 // Returns the index of the single quote that closes the string opened at start,
 // skipping backslash-escaped characters, or undefined when the string is never closed.

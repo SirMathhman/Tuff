@@ -4,6 +4,7 @@ import {
   type Err,
   divisionByZeroAt,
   immutableAssignmentAt,
+  fieldNotFoundAt,
   indexOutOfRangeAt,
   integerOutOfRangeAt,
   referenceEscapesAt,
@@ -15,8 +16,8 @@ import {
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { INT_RANGES, type Annotation, type ScalarAnnotation, type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
-import { type Cell, type Integer, type Reference, type Scope, type Value, isInteger, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
+import { INT_RANGES, type Annotation, type ScalarAnnotation, type AssignStatement, type CompareOp, type Expr, type FieldAssignStatement, type Link, type LogicalOp, type RecordField, type Statement } from "../ast.ts";
+import { type Cell, type Integer, type RecordValue, type Reference, type Scope, type Value, copyValue, isInteger, isRecord, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
 import { apply, applyInteger, numericCompare } from "./operators.ts";
 
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
@@ -117,7 +118,7 @@ function readWhole(name: string, where: ErrorWhere, scope: Scope | undefined): R
     return cell;
   }
 
-  if (Array.isArray(cell.value.value)) {
+  if (Array.isArray(cell.value.value) || isRecord(cell.value.value)) {
     cell.value.moved = true;
   }
 
@@ -346,6 +347,10 @@ function runStatements(
 
       if (statement.kind === "while") {
         return runWhile(statement.condition, statement.body, statement.where, acc.value, evaluateRule, runStatements);
+      }
+
+      if (statement.kind === "fieldAssign") {
+        return assignField(statement, acc.value, evaluateRule);
       }
 
       const value = evaluateRule(statement.value, acc.value);
@@ -638,9 +643,21 @@ function evaluateArray(elements: Expr[], where: ErrorWhere, scope: Scope | undef
   );
 }
 
+// Runs check on the value of an indexed or field-read expression, or returns the error that reading it gave.
+function withContainer<T>(target: Expr, scope: Scope | undefined, evaluateRule: EvalRule, check: (container: Value) => Result<T, TuffError>): Result<T, TuffError> {
+  const container = readContainer(target, scope, evaluateRule);
+
+  return container.ok ? check(container.value) : container;
+}
+
+// The value of an indexed or field-read expression. A name is read without moving it.
+function readContainer(target: Expr, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  return target.kind === "reference" ? readWithoutMoving(target.name, target.where, scope) : evaluateRule(target, scope);
+}
+
 // Indexing does not move the array. A nested array is copied on read, so the copy can be changed independently.
 function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
-  const container = target.kind === "reference" ? readWithoutMoving(target.name, target.where, scope) : evaluateRule(target, scope);
+  const container = readContainer(target, scope, evaluateRule);
 
   if (!container.ok) {
     return container;
@@ -659,6 +676,92 @@ function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scop
   const element = container.value[slot.value];
 
   return ok(Array.isArray(element) ? [...element] : element ?? 0);
+}
+
+// A record literal evaluates its fields in order. A field may not hold a reference that would outlive its target.
+function evaluateRecord(fields: RecordField[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<RecordValue, TuffError> {
+  return fields.reduce<Result<RecordValue, TuffError>>(
+    (acc, field) => {
+      if (!acc.ok) {
+        return acc;
+      }
+
+      const value = evaluateRule(field.value, scope);
+
+      if (!value.ok) {
+        return value;
+      }
+
+      if (escapes(value.value, scope)) {
+        return referenceEscapesAt(where);
+      }
+
+      return ok({ fields: new Map<string, Value>([...acc.value.fields, [field.name, value.value]]) });
+    },
+    ok({ fields: new Map<string, Value>() }),
+  );
+}
+
+// Reading a field copies any array in it, so the copy can change without touching the record.
+function evaluateField(target: Expr, name: string, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  return withContainer(target, scope, evaluateRule, (container) => {
+    if (!isRecord(container)) {
+      return typeMismatchAt(where, "a record", typeName(container));
+    }
+
+    const field = container.fields.get(name);
+
+    return field === undefined ? fieldNotFoundAt(where, name, [...container.fields.keys()]) : ok(copyValue(field));
+  });
+}
+
+// pt.x = value; replaces the record in its mut binding with a copy that has the new field value.
+function assignField(statement: FieldAssignStatement, scope: Scope | undefined, evaluateRule: EvalRule): Result<Scope | undefined, TuffError> {
+  const holder = lookup(statement.name, scope);
+
+  if (holder === undefined) {
+    return undefinedNameAt(statement.where);
+  }
+
+  if (!holder.mutable) {
+    return immutableAssignmentAt(statement.where);
+  }
+
+  const cell = findCell(statement.name, statement.where, scope);
+
+  if (!cell.ok) {
+    return cell;
+  }
+
+  const record = cell.value.value;
+
+  if (!isRecord(record)) {
+    return typeMismatchAt(statement.where, "a record", typeName(record));
+  }
+
+  const old = record.fields.get(statement.field);
+
+  if (old === undefined) {
+    return fieldNotFoundAt(statement.where, statement.field, [...record.fields.keys()]);
+  }
+
+  const replacement = evaluateRule(statement.value, scope);
+
+  if (!replacement.ok) {
+    return replacement;
+  }
+
+  if (!sameType(old, replacement.value)) {
+    return typeMismatchAt(statement.where, typeName(old), typeName(replacement.value));
+  }
+
+  if (escapes(replacement.value, holder)) {
+    return referenceEscapesAt(statement.where);
+  }
+
+  cell.value.value = { fields: new Map<string, Value>(record.fields).set(statement.field, replacement.value) };
+
+  return ok(scope);
 }
 
 function readWithoutMoving(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
@@ -758,6 +861,14 @@ function assignThroughReference(
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
   if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
     return ok(expr.value);
+  }
+
+  if (expr.kind === "record") {
+    return evaluateRecord(expr.fields, expr.where, scope, evaluate);
+  }
+
+  if (expr.kind === "field") {
+    return evaluateField(expr.target, expr.name, expr.where, scope, evaluate);
   }
 
   if (expr.kind === "int") {
