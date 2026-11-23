@@ -13,9 +13,11 @@ export * from "./errors.ts";
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tokenize(tuffSource);
   const parsed = parseExpr(tokens, 0, 0);
+
   if (!parsed.ok) {
     return parsed;
   }
+
   if (parsed.value.next !== tokens.length) {
     return invalidAt(
       tokens,
@@ -24,6 +26,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
       "Remove the extra token, or add an operator before it.",
     );
   }
+
   return evaluate(parsed.value.value);
 }
 

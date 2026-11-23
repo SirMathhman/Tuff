@@ -3,6 +3,7 @@ import { interpretTuff, ok, type TuffError } from "./index.ts";
 
 function expectErrorKind(source: string, kind: TuffError["kind"]): void {
   const result = interpretTuff(source);
+
   expect(result.ok).toBe(false);
   expect(!result.ok && result.error.kind).toBe(kind);
 }
@@ -41,7 +42,9 @@ test("interpretTuff('9007199254740993') is a TermTooLarge error", () => {
 
 function expectErrorDetails(source: string): void {
   const result = interpretTuff(source);
+
   expect(result.ok).toBe(false);
+
   if (!result.ok) {
     expect(result.error.why).not.toBe("");
     expect(result.error.where.index).toBeGreaterThanOrEqual(0);
@@ -123,8 +126,10 @@ test("interpretTuff with 1000 nested parentheses returns Ok(1)", () => {
 
 test("NestingTooDeep has why, where, and fix", () => {
   const source = "(".repeat(1001) + "1" + ")".repeat(1001);
+
   expectErrorDetails(source);
   const result = interpretTuff(source);
+
   expect(!result.ok && result.error.where.index).toBe(1000);
 });
 
@@ -139,6 +144,7 @@ function expectWhere(
   index: number,
 ): void {
   const result = interpretTuff(source);
+
   expect(!result.ok && result.error.kind).toBe(kind);
   expect(!result.ok && result.error.where.text).toBe(text);
   expect(!result.ok && result.error.where.index).toBe(index);

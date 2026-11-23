@@ -86,6 +86,7 @@ export function invalidAt(
   const where = whereAt(tokens, index);
   const found =
     where.text === "" ? "the end of the input" : JSON.stringify(where.text);
+
   return err({
     kind: "InvalidTerm",
     why: `Expected ${expected} but found ${found}.`,
@@ -96,6 +97,7 @@ export function invalidAt(
 
 function termTooLargeAt(tokens: string[], index: number): Err<TuffError> {
   const where = whereAt(tokens, index);
+
   return err({
     kind: "TermTooLarge",
     why: `${JSON.stringify(where.text)} is larger than ${Number.MAX_SAFE_INTEGER}, so it cannot be stored exactly.`,
@@ -127,21 +129,27 @@ function parseChain(
   operand: (next: number) => Parse,
 ): Parse {
   const first = operand(pos);
+
   if (!first.ok) {
     return first;
   }
+
   const links: Link[] = [];
   let next = first.value.next;
   let op = operatorAt(tokens[next], allowed);
+
   while (op !== undefined) {
     const right = operand(next + 1);
+
     if (!right.ok) {
       return right;
     }
+
     links.push({ op, operand: right.value.value, where: whereAt(tokens, next) });
     next = right.value.next;
     op = operatorAt(tokens[next], allowed);
   }
+
   return ok({
     value: links.length === 0 ? first.value.value : { kind: "chain", first: first.value.value, links },
     next,
@@ -155,15 +163,19 @@ function parsePrimary(
   expr: ExprRule,
 ): Parse {
   const token = tokens[pos];
+
   if (token === "(" || token === "{") {
     if (depth >= MAX_NESTING_DEPTH) {
       return nestingTooDeepAt(tokens, pos);
     }
+
     const closer = token === "(" ? ")" : "}";
     const inner = expr(tokens, pos + 1, depth + 1);
+
     if (!inner.ok) {
       return inner;
     }
+
     if (tokens[inner.value.next] !== closer) {
       return invalidAt(
         tokens,
@@ -172,14 +184,18 @@ function parsePrimary(
         `Close the group with '${closer}'.`,
       );
     }
+
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
+
   if (token !== undefined && isDigits(token)) {
     if (Number(token) > Number.MAX_SAFE_INTEGER) {
       return termTooLargeAt(tokens, pos);
     }
+
     return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
   }
+
   return invalidAt(
     tokens,
     pos,
@@ -196,10 +212,12 @@ function parseFactor(
 ): Parse {
   if (tokens[pos] === "-") {
     const operand = parsePrimary(tokens, pos + 1, depth, expr);
+
     return operand.ok
       ? ok({ value: { kind: "negate", operand: operand.value.value }, next: operand.value.next })
       : operand;
   }
+
   return parsePrimary(tokens, pos, depth, expr);
 }
 

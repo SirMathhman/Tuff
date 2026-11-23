@@ -20,6 +20,30 @@ export default [
       ],
       "jsdoc/require-param": "error",
       "jsdoc/require-returns": "error",
+      "padding-line-between-statements": [
+        "error",
+        { blankLine: "always", prev: "*", next: "return" },
+        {
+          blankLine: "always",
+          prev: ["const", "let", "var"],
+          next: "*",
+        },
+        {
+          blankLine: "any",
+          prev: ["const", "let", "var"],
+          next: ["const", "let", "var"],
+        },
+        {
+          blankLine: "always",
+          prev: "*",
+          next: ["if", "while", "try"],
+        },
+        {
+          blankLine: "always",
+          prev: ["if", "while", "try"],
+          next: "*",
+        },
+      ],
       "no-restricted-syntax": [
         "error",
         {
