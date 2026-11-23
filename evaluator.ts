@@ -6,7 +6,7 @@ import {
   type Result,
   type TuffError,
 } from "./errors.ts";
-import { type AssignStatement, type Expr, type Link, type Statement } from "./parser.ts";
+import { type AssignStatement, type Expr, type Link, type Statement } from "./ast.ts";
 
 interface Cell {
   value: number;
