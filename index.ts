@@ -35,6 +35,13 @@ export interface ResultTooLarge extends TuffErrorDetails {
 
 export type TuffError = InvalidTerm | TermTooLarge | ResultTooLarge;
 
+interface Parsed {
+  value: number;
+  next: number;
+}
+
+type Parse = Result<Parsed, TuffError>;
+
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
     ? "the end of the input"
@@ -98,13 +105,6 @@ function resultTooLargeAt(tokens: string[], index: number): Err<TuffError> {
     fix: `Keep every intermediate and final result within ±${Number.MAX_SAFE_INTEGER}, for example by splitting the calculation.`,
   });
 }
-
-interface Parsed {
-  value: number;
-  next: number;
-}
-
-type Parse = Result<Parsed, TuffError>;
 
 // Grammar:
 //   expr    := term (("+" | "-") term)*
