@@ -1,6 +1,6 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
-import { type Statement } from "./ast.ts";
+import { INT_TYPES, type IntType, type Statement } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -51,18 +51,33 @@ function parseLet(
     return invalidAt(tokens, nameIndex, "a name after 'let'", "Write a name such as x after 'let'.");
   }
 
-  if (textAt(tokens, nameIndex + 1) !== "=") {
-    return invalidAt(tokens, nameIndex + 1, "'=' after the name", "Write '=' and a value after the name.");
+  let annotation: IntType | undefined;
+  let equalsIndex = nameIndex + 1;
+
+  if (textAt(tokens, nameIndex + 1) === ":") {
+    const typeText = textAt(tokens, nameIndex + 2);
+
+    annotation = INT_TYPES.find((candidate) => candidate === typeText);
+
+    if (annotation === undefined) {
+      return invalidAt(tokens, nameIndex + 2, "a sized integer type such as U8", "Write one of U8, U16, U32, U64, I8, I16, I32, or I64 after ':'.");
+    }
+
+    equalsIndex = nameIndex + 3;
   }
 
-  const value = parseStatementValue(tokens, nameIndex + 2, depth, expr, "let statement");
+  if (textAt(tokens, equalsIndex) !== "=") {
+    return invalidAt(tokens, equalsIndex, "'=' after the name", "Write '=' and a value after the name.");
+  }
+
+  const value = parseStatementValue(tokens, equalsIndex + 1, depth, expr, "let statement");
 
   if (!value.ok) {
     return value;
   }
 
   return ok({
-    statement: { kind: "let", name, mutable, value: value.value.value, where: whereAt(tokens, nameIndex) },
+    statement: { kind: "let", name, mutable, annotation, value: value.value.value, where: whereAt(tokens, nameIndex) },
     next: value.value.next,
   });
 }

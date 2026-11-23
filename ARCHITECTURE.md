@@ -96,7 +96,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Names and numbers
 
-- Names bind with `let`. Undeclared names and assignments to immutable names are errors.
+- Names bind with `let`. Undeclared names and assignments to immutable names are errors. A `let` may annotate a sized integer type, as in `let x : U8 = 100U8;`; the value must have exactly that type, so a plain number is a TypeMismatch.
 - Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
 - A sized literal such as `100U64` or `-128I8` is exact and must lie within its type's range, or the literal is IntegerOutOfRange. The suffix is case-sensitive, so `1u64` is an invalid term.
 
@@ -112,7 +112,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Tokens
 
-- Brackets, operators, `=`, and `;` are self-delimiting, so spacing never changes meaning.
+- Brackets, operators, `=`, `:`, and `;` are self-delimiting, so spacing never changes meaning.
 - Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them.
 - The parser dispatches on token kind, never on token text. An unclosed quote reports as an unclosed string, never as a bad escape.
 

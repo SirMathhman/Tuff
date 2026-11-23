@@ -283,6 +283,10 @@ function runStatements(
         return value;
       }
 
+      if (statement.annotation !== undefined && !(isInteger(value.value) && value.value.type === statement.annotation)) {
+        return typeMismatchAt(statement.where, `a ${statement.annotation}`, typeName(value.value));
+      }
+
       if (escapes(value.value, acc.value)) {
         return referenceEscapesAt(statement.where);
       }

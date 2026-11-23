@@ -786,6 +786,18 @@ test("interpretTuff: 1I8 << -1I8 is a BitwiseOutOfRange error", () => {
   expectErrorKind("1I8 << -1I8", "BitwiseOutOfRange");
 });
 
+test("interpretTuff: \"let x : U8 = 100U8; x\" => 100", () => {
+  expect(interpretTuff("let x : U8 = 100U8; x")).toEqual(ok(100));
+});
+
+test("interpretTuff: let x : U8 = 100; x is a TypeMismatch error", () => {
+  expectErrorKind("let x : U8 = 100; x", "TypeMismatch");
+});
+
+test("interpretTuff: let x : Foo = 1; x is an InvalidTerm error", () => {
+  expectErrorKind("let x : Foo = 1; x", "InvalidTerm");
+});
+
 test("interpretTuff: 4I8 >> 0I8 returns Ok(4)", () => {
   expect(interpretTuff("4I8 >> 0I8")).toEqual(ok(4));
 });

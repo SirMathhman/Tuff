@@ -67,6 +67,7 @@ interface LetStatement {
   kind: "let";
   name: string;
   mutable: boolean;
+  annotation ?: IntType;
   value: Expr;
   where: ErrorWhere;
 }
