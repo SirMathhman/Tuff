@@ -21,6 +21,9 @@ import { apply, applyInteger, numericCompare } from "./operators.ts";
 
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
 
+// Runs a list of statements, returning the scope they leave behind.
+type StatementsRunner = (statements: Statement[], scope: Scope | undefined, evaluateRule: EvalRule) => Result<Scope | undefined, TuffError>;
+
 function isInt32(value: number): boolean {
   return value >= -2147483648 && value <= 2147483647;
 }
@@ -240,6 +243,7 @@ function runWhile(
   where: ErrorWhere,
   scope: Scope | undefined,
   evaluateRule: EvalRule,
+  runBody: StatementsRunner,
 ): Result<Scope | undefined, TuffError> {
   while (true) {
     const test = evaluateRule(condition, scope);
@@ -256,7 +260,7 @@ function runWhile(
       return ok(scope);
     }
 
-    const inner = runStatements(body, scope, evaluateRule);
+    const inner = runBody(body, scope, evaluateRule);
 
     if (!inner.ok) {
       return inner;
@@ -310,7 +314,7 @@ function runStatements(
       }
 
       if (statement.kind === "while") {
-        return runWhile(statement.condition, statement.body, statement.where, acc.value, evaluateRule);
+        return runWhile(statement.condition, statement.body, statement.where, acc.value, evaluateRule, runStatements);
       }
 
       const value = evaluateRule(statement.value, acc.value);

@@ -17,6 +17,9 @@ interface StatementsParsed {
 
 type StatementsRule = (tokens: Token[], pos: number, depth: number, expr: ExprRule) => Result<StatementsParsed, TuffError>;
 
+// Parses exactly one statement; see parseOneStatement.
+type OneStatementRule = (tokens: Token[], pos: number, depth: number, expr: ExprRule, statementsRule: StatementsRule) => Result<StatementParsed, TuffError>;
+
 function parseStatementValue(
   tokens: Token[],
   pos: number,
@@ -128,7 +131,14 @@ function parseCompoundAssign(tokens: Token[], pos: number, depth: number, expr: 
 
 // while (condition) { body }: runs the body while the condition holds.
 // while (condition) { body }, or while (condition) statement; with one unbraced statement as the body.
-function parseWhile(tokens: Token[], pos: number, depth: number, expr: ExprRule, statementsRule: StatementsRule): Result<StatementParsed, TuffError> {
+function parseWhile(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+  statementsRule: StatementsRule,
+  oneRule: OneStatementRule,
+): Result<StatementParsed, TuffError> {
   const closing = closingOf(tokens, pos + 1, "(", ")");
 
   if (closing !== undefined && textAt(tokens, closing + 1) === "{") {
@@ -158,7 +168,7 @@ function parseWhile(tokens: Token[], pos: number, depth: number, expr: ExprRule,
     return invalidAt(tokens, condition.value.next, "a statement other than let as the loop body", "Wrap the let in braces, or use a statement that does not bind a name.");
   }
 
-  const single = parseOneStatement(tokens, condition.value.next, depth + 1, expr, statementsRule);
+  const single = oneRule(tokens, condition.value.next, depth + 1, expr, statementsRule);
 
   if (!single.ok) {
     return single;
@@ -437,7 +447,7 @@ function parseOneStatement(
   }
 
   if (token === "while") {
-    return parseWhile(tokens, pos, depth, expr, statementsRule);
+    return parseWhile(tokens, pos, depth, expr, statementsRule, parseOneStatement);
   }
 
   if (token === "{") {
