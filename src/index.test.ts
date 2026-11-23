@@ -839,6 +839,21 @@ test("interpretTuff: reading a field the record does not have is an UndefinedFie
   expectErrorKind("let pt = { x : 3 }; pt.z", "UndefinedField");
 });
 
+test("interpretTuff: comparing two records is a TypeMismatch that names the record", () => {
+  const result = interpretTuff("let a = { x : 1 }; let b = { x : 1 }; a == b");
+
+  expect(result.ok).toBe(false);
+
+  if (!result.ok) {
+    expect(result.error.kind).toBe("TypeMismatch");
+    expect(result.error.why).toContain("a record");
+  }
+});
+
+test("interpretTuff: assigning a field the record does not have is an UndefinedField error", () => {
+  expectErrorKind("let mut p = { x : 1 }; p.z = 2; p.x", "UndefinedField");
+});
+
 test("interpretTuff: let x : Bool = 1 == 1; x returns Ok(1)", () => {
   expect(interpretTuff("let x : Bool = 1 == 1; x")).toEqual(ok(1));
 });

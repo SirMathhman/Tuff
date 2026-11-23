@@ -505,7 +505,7 @@ function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): R
   }
 
   if (typeof left === "object" || typeof right === "object") {
-    return typeMismatchAt(where, "a number, boolean, or string", "an array or a reference");
+    return typeMismatchAt(where, "a number, boolean, or string", typeName(typeof left === "object" ? left : right));
   }
 
   if (op === "==" || op === "!=") {
@@ -852,6 +852,60 @@ function assignThroughReference(
   return ok(scope);
 }
 
+// A rule receives the node of one expression kind and the scope, and evaluates its children with evaluate.
+interface HasKind<K extends string> {
+  kind: K;
+}
+
+type KindRule<K extends Expr["kind"]> = (expr: Extract<Expr, HasKind<K>>, scope: Scope | undefined) => Result<Value, TuffError>;
+
+// One rule per expression kind. The interface makes the table cover every kind.
+interface KindRules {
+  number: KindRule<"number">;
+  boolean: KindRule<"boolean">;
+  string: KindRule<"string">;
+  int: KindRule<"int">;
+  record: KindRule<"record">;
+  field: KindRule<"field">;
+  negate: KindRule<"negate">;
+  reference: KindRule<"reference">;
+  ref: KindRule<"ref">;
+  deref: KindRule<"deref">;
+  array: KindRule<"array">;
+  index: KindRule<"index">;
+  if: KindRule<"if">;
+  not: KindRule<"not">;
+  logical: KindRule<"logical">;
+  compare: KindRule<"compare">;
+  block: KindRule<"block">;
+  chain: KindRule<"chain">;
+}
+
+const RULES: KindRules = {
+  number: (expr) => ok(expr.value),
+  boolean: (expr) => ok(expr.value),
+  string: (expr) => ok(expr.value),
+  int: (expr) => ok({ type: expr.type, value: expr.value }),
+  record: (expr, scope) => evaluateRecord(expr.fields, expr.where, scope, evaluate),
+  field: (expr, scope) => evaluateField(expr.target, expr.name, expr.where, scope, evaluate),
+  negate: (expr, scope) => evaluateNegate(expr.operand, expr.where, scope, evaluate),
+  reference: (expr, scope) => readWhole(expr.name, expr.where, scope),
+  ref: (expr, scope) => evaluateRef(expr.name, expr.mutable, expr.where, scope),
+  deref: (expr, scope) => evaluateDeref(expr.operand, expr.where, scope, evaluate),
+  array: (expr, scope) => {
+    const elements = evaluateArray(expr.elements, expr.where, scope, evaluate);
+
+    return elements.ok ? ok(elements.value) : elements;
+  },
+  index: (expr, scope) => evaluateIndex(expr.target, expr.index, expr.where, scope, evaluate),
+  if: (expr, scope) => evaluateIf(expr.condition, expr.then, expr.otherwise, expr.where, scope, evaluate),
+  not: (expr, scope) => evaluateNot(expr.operand, expr.where, scope, evaluate),
+  logical: (expr, scope) => evaluateLogical(expr.op, expr.left, expr.right, expr.where, scope, evaluate),
+  compare: (expr, scope) => evaluateCompare(expr.op, expr.left, expr.right, expr.where, scope, evaluate),
+  block: (expr, scope) => evaluateBlock(expr.statements, expr.result, scope, evaluate),
+  chain: (expr, scope) => evaluateChain(expr.first, expr.links, scope, evaluate),
+};
+
 /**
  * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, bad indexes, moved arrays, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
@@ -859,67 +913,7 @@ function assignThroughReference(
  * @returns The computed value, a number, boolean, string, or array, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
-  if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
-    return ok(expr.value);
-  }
+  const rule = RULES[expr.kind] as (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
 
-  if (expr.kind === "record") {
-    return evaluateRecord(expr.fields, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "field") {
-    return evaluateField(expr.target, expr.name, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "int") {
-    return ok({ type: expr.type, value: expr.value });
-  }
-
-  if (expr.kind === "negate") {
-    return evaluateNegate(expr.operand, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "reference") {
-    return readWhole(expr.name, expr.where, scope);
-  }
-
-  if (expr.kind === "ref") {
-    return evaluateRef(expr.name, expr.mutable, expr.where, scope);
-  }
-
-  if (expr.kind === "deref") {
-    return evaluateDeref(expr.operand, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "array") {
-    const elements = evaluateArray(expr.elements, expr.where, scope, evaluate);
-
-    return elements.ok ? ok(elements.value) : elements;
-  }
-
-  if (expr.kind === "index") {
-    return evaluateIndex(expr.target, expr.index, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "if") {
-    return evaluateIf(expr.condition, expr.then, expr.otherwise, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "not") {
-    return evaluateNot(expr.operand, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "logical") {
-    return evaluateLogical(expr.op, expr.left, expr.right, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "compare") {
-    return evaluateCompare(expr.op, expr.left, expr.right, expr.where, scope, evaluate);
-  }
-
-  if (expr.kind === "block") {
-    return evaluateBlock(expr.statements, expr.result, scope, evaluate);
-  }
-
-  return evaluateChain(expr.first, expr.links, scope, evaluate);
+  return rule(expr, scope);
 }

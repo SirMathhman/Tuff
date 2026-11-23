@@ -121,10 +121,11 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - `pt.x` reads a field, and chains such as `pt.a.b` read nested fields. Reading a field copies any array in it. An unknown field is an UndefinedField error.
 - `pt.x = value;` assigns a field of a mut record, and the value must have the field's type. The record is replaced, not changed in place.
 - A record moves on whole-name use, as an array does, so a later use is a UseAfterMove error. Reading a field does not move it.
+- Records cannot be compared or returned as a program result. Comparing them reports a TypeMismatch that names the record.
 
 ### Tokens
 
-- Brackets, operators, `=`, `:`, and `;` are self-delimiting, so spacing never changes meaning.
+- Brackets, operators, `=`, `:`, `.`, and `;` are self-delimiting, so spacing never changes meaning.
 - Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them.
 - The parser dispatches on token kind, never on token text. An unclosed quote reports as an unclosed string, never as a bad escape.
 
@@ -204,6 +205,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 ### Parsing and evaluation
 
 - Tokenizing and parsing should be linear in source length. Avoid regular expressions with nested quantifiers.
+- A field write rebuilds the record's field map, so its cost grows with the record's field count.
 - Statement-block detection scans forward to the matching `}`, so nested blocks can cost source length times depth.
 
 ### Scope and loops
