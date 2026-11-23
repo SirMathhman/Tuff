@@ -1041,3 +1041,31 @@ test("interpretTuff: a body whose value differs from the return type is a TypeMi
 test("interpretTuff: a function body cannot read a name that is not its parameter", () => {
   expectErrorKind("fn f(first : I32) : I32 => second; f(1I32)", "UndefinedName");
 });
+
+test("interpretTuff: a function cannot call itself", () => {
+  expectErrorKind("fn f(first : I32) : I32 => f(first); f(1I32)", "UndefinedName");
+});
+
+test("interpretTuff: a function cannot call a function declared after it", () => {
+  expectErrorKind("fn f(first : I32) : I32 => g(first); fn g(second : I32) : I32 => second; f(1I32)", "UndefinedName");
+});
+
+test("interpretTuff: two functions with one name are an InvalidTerm error", () => {
+  expectErrorKind("fn f(first : I32) : I32 => first; fn f(second : I32) : I32 => second; f(1I32)", "InvalidTerm");
+});
+
+test("interpretTuff: a struct type as a parameter is an InvalidTerm error", () => {
+  expectErrorKind("struct P { x : I32 } fn f(p : P) : I32 => 1I32; f(P { x : 1I32 })", "InvalidTerm");
+});
+
+test("interpretTuff: two parameters with one name are an InvalidTerm error", () => {
+  expectErrorKind("fn f(first : I32, first : I32) : I32 => first; f(1I32, 2I32)", "InvalidTerm");
+});
+
+test("interpretTuff: a function body without a closing ';' is an InvalidTerm error", () => {
+  expectErrorKind("fn f(first : I32) : I32 => first f(1I32)", "InvalidTerm");
+});
+
+test("interpretTuff: a body result past the parameter's type range is an IntegerOutOfRange error", () => {
+  expectErrorKind("fn f(first : U8) : U8 => first + 1U8; f(255U8)", "IntegerOutOfRange");
+});
