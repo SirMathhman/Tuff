@@ -818,6 +818,14 @@ test("interpretTuff: \"let mut x = 0; while (x < 4) { x += 1; } x\" => 4", () =>
   expect(interpretTuff("let mut x = 0; while (x < 4) { x += 1; } x")).toEqual(ok(4));
 });
 
+test("interpretTuff: \"let mut x = 0; while (x < 4) x += 1; x\" => 4", () => {
+  expect(interpretTuff("let mut x = 0; while (x < 4) x += 1; x")).toEqual(ok(4));
+});
+
+test("interpretTuff: an unbraced while body that is a let is an InvalidTerm error", () => {
+  expectErrorKind("let mut x = 0; while (x < 2) let y = 1; x", "InvalidTerm");
+});
+
 test("interpretTuff: a while loop whose condition is false runs zero times", () => {
   expect(interpretTuff("let mut x = 0; while (false) { x += 1; } x")).toEqual(ok(0));
 });

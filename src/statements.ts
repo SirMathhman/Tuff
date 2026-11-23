@@ -127,20 +127,46 @@ function parseCompoundAssign(tokens: Token[], pos: number, depth: number, expr: 
 }
 
 // while (condition) { body }: runs the body while the condition holds.
+// while (condition) { body }, or while (condition) statement; with one unbraced statement as the body.
 function parseWhile(tokens: Token[], pos: number, depth: number, expr: ExprRule, statementsRule: StatementsRule): Result<StatementParsed, TuffError> {
-  const loop = parseConditionBody(tokens, pos, depth, expr, statementsRule);
+  const closing = closingOf(tokens, pos + 1, "(", ")");
 
-  if (!loop.ok) {
-    return loop;
+  if (closing !== undefined && textAt(tokens, closing + 1) === "{") {
+    const loop = parseConditionBody(tokens, pos, depth, expr, statementsRule);
+
+    if (!loop.ok) {
+      return loop;
+    }
+
+    if (textAt(tokens, loop.value.next) !== "}") {
+      return invalidAt(tokens, loop.value.next, "'}' after the loop body", "Close the loop body with '}'.");
+    }
+
+    return ok({
+      statement: { kind: "while", condition: loop.value.condition, body: loop.value.statements, where: whereAt(tokens, pos) },
+      next: loop.value.next + 1,
+    });
   }
 
-  if (textAt(tokens, loop.value.next) !== "}") {
-    return invalidAt(tokens, loop.value.next, "'}' after the loop body", "Close the loop body with '}'.");
+  const condition = parseCondition(tokens, pos, depth, expr);
+
+  if (!condition.ok) {
+    return condition;
+  }
+
+  if (textAt(tokens, condition.value.next) === "let") {
+    return invalidAt(tokens, condition.value.next, "a statement other than let as the loop body", "Wrap the let in braces, or use a statement that does not bind a name.");
+  }
+
+  const single = parseOneStatement(tokens, condition.value.next, depth + 1, expr, statementsRule);
+
+  if (!single.ok) {
+    return single;
   }
 
   return ok({
-    statement: { kind: "while", condition: loop.value.condition, body: loop.value.statements, where: whereAt(tokens, pos) },
-    next: loop.value.next + 1,
+    statement: { kind: "while", condition: condition.value.value, body: [single.value.statement], where: whereAt(tokens, pos) },
+    next: single.value.next,
   });
 }
 
@@ -396,6 +422,61 @@ function parseBranchStatement(
   });
 }
 
+// Parses exactly one statement at pos. Branches, loops, and blocks parse their bodies with statementsRule.
+function parseOneStatement(
+  tokens: Token[],
+  pos: number,
+  depth: number,
+  expr: ExprRule,
+  statementsRule: StatementsRule,
+): Result<StatementParsed, TuffError> {
+  const token = textAt(tokens, pos);
+
+  if (token === "if") {
+    return parseBranchStatement(tokens, pos, depth, expr, statementsRule);
+  }
+
+  if (token === "while") {
+    return parseWhile(tokens, pos, depth, expr, statementsRule);
+  }
+
+  if (token === "{") {
+    if (depth >= MAX_NESTING_DEPTH) {
+      return nestingTooDeepAt(tokens, pos);
+    }
+
+    const body = statementsRule(tokens, pos + 1, depth + 1, expr);
+
+    if (!body.ok) {
+      return body;
+    }
+
+    if (textAt(tokens, body.value.next) !== "}") {
+      return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
+    }
+
+    return ok({ statement: { kind: "scope", statements: body.value.statements }, next: body.value.next + 1 });
+  }
+
+  if (token === "let") {
+    return parseLet(tokens, pos, depth, expr);
+  }
+
+  if (isElementAssign(tokens, pos)) {
+    return parseElementAssign(tokens, pos, depth, expr);
+  }
+
+  if (isDerefAssign(tokens, pos)) {
+    return parseDerefAssign(tokens, pos, depth, expr);
+  }
+
+  if (isCompoundAssign(tokens, pos)) {
+    return parseCompoundAssign(tokens, pos, depth, expr);
+  }
+
+  return parseAssign(tokens, pos, depth, expr);
+}
+
 function parseStatementList(
   tokens: Token[],
   pos: number,
@@ -406,60 +487,14 @@ function parseStatementList(
   let next = pos;
 
   while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isDerefAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
-    if (textAt(tokens, next) === "if") {
-      const branch = parseBranchStatement(tokens, next, depth, expr, parseStatementList);
+    const parsed = parseOneStatement(tokens, next, depth, expr, parseStatementList);
 
-      if (!branch.ok) {
-        return branch;
-      }
-
-      statements.push(branch.value.statement);
-      next = branch.value.next;
-    } else if (textAt(tokens, next) === "while") {
-      const loop = parseWhile(tokens, next, depth, expr, parseStatementList);
-
-      if (!loop.ok) {
-        return loop;
-      }
-
-      statements.push(loop.value.statement);
-      next = loop.value.next;
-    } else if (textAt(tokens, next) === "{") {
-      if (depth >= MAX_NESTING_DEPTH) {
-        return nestingTooDeepAt(tokens, next);
-      }
-
-      const body = parseStatementList(tokens, next + 1, depth + 1, expr);
-
-      if (!body.ok) {
-        return body;
-      }
-
-      if (textAt(tokens, body.value.next) !== "}") {
-        return invalidAt(tokens, body.value.next, "'}' after the statements", "Close the statement block with '}'.");
-      }
-
-      statements.push({ kind: "scope", statements: body.value.statements });
-      next = body.value.next + 1;
-    } else {
-      const parsed =
-        textAt(tokens, next) === "let"
-          ? parseLet(tokens, next, depth, expr)
-          : isElementAssign(tokens, next)
-            ? parseElementAssign(tokens, next, depth, expr)
-            : isDerefAssign(tokens, next)
-              ? parseDerefAssign(tokens, next, depth, expr)
-              : isCompoundAssign(tokens, next)
-                ? parseCompoundAssign(tokens, next, depth, expr)
-                : parseAssign(tokens, next, depth, expr);
-
-      if (!parsed.ok) {
-        return parsed;
-      }
-
-      statements.push(parsed.value.statement);
-      next = parsed.value.next;
+    if (!parsed.ok) {
+      return parsed;
     }
+
+    statements.push(parsed.value.statement);
+    next = parsed.value.next;
   }
 
   return ok({ statements, next });
