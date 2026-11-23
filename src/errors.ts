@@ -281,13 +281,14 @@ export function u64OutOfRangeAt(where: ErrorWhere, value: bigint): Err<TuffError
 /**
  * Builds a DivisionByZero error for a division whose divisor is zero.
  * @param where - The token of the division operator.
+ * @param operand - What is being divided, such as "A number" or "A U64".
  * @returns An Err result holding the DivisionByZero error.
  */
-export function divisionByZeroAt(where: ErrorWhere): Err<TuffError> {
+export function divisionByZeroAt(where: ErrorWhere, operand: string): Err<TuffError> {
   return err({
     where,
     fix: "Use a divisor other than zero.",
-    why: "A number cannot be divided by zero.",
+    why: `${operand} cannot be divided by zero.`,
     kind: "DivisionByZero",
   });
 }
@@ -361,6 +362,21 @@ export function immutableAssignmentAt(where: ErrorWhere): Err<TuffError> {
     why: `${JSON.stringify(where.text)} was declared without mut, so it cannot be assigned.`,
     where,
     fix: `Declare it as let mut ${where.text} = ...; to allow assignment.`,
+  });
+}
+
+/**
+ * Builds a ResultTooLarge error for a program whose final U64 value is too large to return as a number.
+ * @param where - The token where the program's result is found.
+ * @param value - The result that cannot be returned exactly as a number.
+ * @returns An Err result holding the ResultTooLarge error.
+ */
+export function programResultTooLargeAt(where: ErrorWhere, value: bigint): Err<TuffError> {
+  return err({
+    kind: "ResultTooLarge",
+    why: `The program's result, ${value}, is larger than ${Number.MAX_SAFE_INTEGER}, so it cannot be returned as a number without losing digits.`,
+    where,
+    fix: `End the program with a value of at most ${Number.MAX_SAFE_INTEGER}.`,
   });
 }
 

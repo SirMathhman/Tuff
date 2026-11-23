@@ -15,127 +15,12 @@ import {
   type ErrorWhere,
   type Result,
   type TuffError,
-} from "./errors.ts";
-import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "./ast.ts";
-
-// A borrow of a binding: reads see the binding's current value, and writes go to it.
-interface Reference {
-  target: Scope;
-  mutable: boolean;
-}
-
-// A U64 is a bigint, so its full range is exact and it never equals a plain number.
-type Value = number | bigint | boolean | string | Value[] | Reference;
-
-function isReference(value: Value): value is Reference {
-  return typeof value === "object" && !Array.isArray(value);
-}
-
-// A reference stays valid only while its target binding is in the scope chain.
-// True when a value holds a reference whose target is not visible from holder, at any depth.
-function escapes(value: Value, holder: Scope | undefined): boolean {
-  if (isReference(value)) {
-    return !isVisible(value.target, holder);
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((element) => escapes(element, holder));
-  }
-
-  return false;
-}
-
-function isVisible(target: Scope, scope: Scope | undefined): boolean {
-  let current = scope;
-
-  while (current !== undefined) {
-    if (current === target) {
-      return true;
-    }
-
-    current = current.parent;
-  }
-
-  return false;
-}
-
-interface Cell {
-  value: Value;
-  moved: boolean;
-}
-
-interface Scope {
-  name: string;
-  cell: Cell;
-  mutable: boolean;
-  parent?: Scope;
-}
+} from "../errors.ts";
+import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
+import { type Cell, type Reference, type Scope, type Value, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean, asU64 } from "./values.ts";
+import { apply, applyU64, numericCompare } from "./operators.ts";
 
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
-
-function typeName(value: Value): string {
-  if (typeof value === "number") {
-    return "a number";
-  }
-
-  if (typeof value === "bigint") {
-    return "a U64";
-  }
-
-  if (typeof value === "boolean") {
-    return "a boolean";
-  }
-
-  if (typeof value === "string") {
-    return "a string";
-  }
-
-  if (isReference(value)) {
-    return "a reference";
-  }
-
-  const first = value[0];
-
-  return first === undefined ? "an array" : `an array whose elements are ${typeName(first)}`;
-}
-
-// Two values have the same type when both are the same primitive type, or both are
-// arrays whose elements have the same type. An empty array has no element to
-// compare, so it matches any array.
-function sameType(left: Value, right: Value): boolean {
-  if (isReference(left) || isReference(right)) {
-    return isReference(left) && isReference(right);
-  }
-
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right)) {
-      return false;
-    }
-
-    const first = left[0];
-    const other = right[0];
-
-    return first === undefined || other === undefined || sameType(first, other);
-  }
-
-  return typeof left === typeof right;
-}
-
-function asNumber(value: Value, where: ErrorWhere): Result<number, TuffError> {
-  if (typeof value === "number") {
-    return ok(value);
-  }
-
-  return typeMismatchAt(where, "a number", typeName(value));
-}
-
-function asBoolean(value: Value, where: ErrorWhere): Result<boolean, TuffError> {
-  if (typeof value === "boolean") {
-    return ok(value);
-  }
-
-  return typeMismatchAt(where, "a boolean", typeName(value));
-}
 
 function isInt32(value: number): boolean {
   return value >= -2147483648 && value <= 2147483647;
@@ -160,42 +45,6 @@ function bitwiseProblem(op: Link["op"], left: number, right: number, where: Erro
   return undefined;
 }
 
-function apply(op: Link["op"], left: number, right: number): number {
-  if (op === "+") {
-    return left + right;
-  }
-
-  if (op === "-") {
-    return left - right;
-  }
-
-  if (op === "|") {
-    return left | right;
-  }
-
-  if (op === "&") {
-    return left & right;
-  }
-
-  if (op === "<<") {
-    return left << right;
-  }
-
-  if (op === ">>") {
-    return left >> right;
-  }
-
-  return op === "*" ? left * right : Math.trunc(left / right);
-}
-
-function asU64(value: Value, where: ErrorWhere): Result<bigint, TuffError> {
-  if (typeof value === "bigint") {
-    return ok(value);
-  }
-
-  return typeMismatchAt(where, "a U64", typeName(value));
-}
-
 // Both operands are U64. Division truncates toward zero, and a shift amount is from 0 to 31.
 function combineU64(link: Link, left: Value, right: Value): Result<Value, TuffError> {
   const a = asU64(left, link.where);
@@ -211,7 +60,7 @@ function combineU64(link: Link, left: Value, right: Value): Result<Value, TuffEr
   }
 
   if (link.op === "/" && b.value === 0n) {
-    return divisionByZeroAt(link.where);
+    return divisionByZeroAt(link.where, "A U64");
   }
 
   if ((link.op === "<<" || link.op === ">>") && b.value > 31n) {
@@ -221,38 +70,6 @@ function combineU64(link: Link, left: Value, right: Value): Result<Value, TuffEr
   const value = applyU64(link.op, a.value, b.value);
 
   return value >= 0n && value <= MAX_U64 ? ok(value) : u64OutOfRangeAt(link.where, value);
-}
-
-function applyU64(op: Link["op"], left: bigint, right: bigint): bigint {
-  if (op === "+") {
-    return left + right;
-  }
-
-  if (op === "-") {
-    return left - right;
-  }
-
-  if (op === "*") {
-    return left * right;
-  }
-
-  if (op === "/") {
-    return left / right;
-  }
-
-  if (op === "|") {
-    return left | right;
-  }
-
-  if (op === "&") {
-    return left & right;
-  }
-
-  if (op === "<<") {
-    return left << right;
-  }
-
-  return left >> right;
 }
 
 function lookup(name: string, scope: Scope | undefined): Scope | undefined {
@@ -574,22 +391,6 @@ function evaluateLogical(
   return asBoolean(rightValue.value, where);
 }
 
-function numericCompare<T extends number | bigint>(op: CompareOp, left: T, right: T): boolean {
-  if (op === "<") {
-    return left < right;
-  }
-
-  if (op === "<=") {
-    return left <= right;
-  }
-
-  if (op === ">") {
-    return left > right;
-  }
-
-  return left >= right;
-}
-
 function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
   if (typeof left === "object" || typeof right === "object") {
     return typeMismatchAt(where, "a number, boolean, or string", "an array or a reference");
@@ -699,7 +500,7 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
       }
 
       if (link.op === "/" && rightNumber.value === 0) {
-        return divisionByZeroAt(link.where);
+        return divisionByZeroAt(link.where, "A number");
       }
 
       const bitwise = bitwiseProblem(link.op, left.value, rightNumber.value, link.where);

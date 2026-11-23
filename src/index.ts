@@ -1,9 +1,9 @@
-import { ok, resultTooLargeAt, typeMismatchAt, type Result, type TuffError } from "./errors.ts";
+import { ok, programResultTooLargeAt, typeMismatchAt, type Result, type TuffError } from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
 import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
-import { evaluate } from "./evaluator.ts";
+import { evaluate } from "./eval/evaluator.ts";
 
 export { describeError } from "./errors.ts";
 export type {
@@ -63,7 +63,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   }
 
   if (typeof result.value === "bigint") {
-    return result.value <= BigInt(Number.MAX_SAFE_INTEGER) ? ok(Number(result.value)) : resultTooLargeAt(whereAt(tokens, 0));
+    return result.value <= BigInt(Number.MAX_SAFE_INTEGER) ? ok(Number(result.value)) : programResultTooLargeAt(whereAt(tokens, 0), result.value);
   }
 
   const found = Array.isArray(result.value) ? "an array" : "a reference";

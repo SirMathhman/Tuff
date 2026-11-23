@@ -39,7 +39,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 1. `tokenizer.ts`: a character scanner that emits typed tokens, each with its kind and text.
 2. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
-3. `evaluator.ts`: a fold over the AST. It changes cells in place for assignment and moves until Future Work item 3 lands.
+3. `eval/evaluator.ts`: a fold over the AST. `eval/values.ts` holds the value model and type checks; `eval/operators.ts` holds the operator tables. Cells change in place for assignment and moves until Future Work item 2 lands.
 
 ### Shared rules
 
@@ -81,7 +81,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Bitwise `|` and `&` sit between `&&` and comparisons, and `<<` and `>>` between comparisons and `+ -`. Bitwise operands are 32-bit signed integers and a shift amount is from 0 to 31; otherwise the result is a BitwiseOutOfRange error. The `&` after an operand is bitwise-and, and at the start of an operand it is a reference.
 - `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
-- A U64 takes the same operators, with results that must stay within 0 to 2^64-1 (otherwise U64OutOfRange). A U64 never mixes with a number, which is a TypeMismatch.
+- A U64 takes `+`, `-`, `*`, `/`, `|`, `&`, `<<`, and `>>`. Its operands are not limited to 32 bits, but a shift amount is still from 0 to 31. Results must stay within 0 to 2^64-1 (otherwise U64OutOfRange). A U64 never mixes with a number, and unary `-` on a U64 is a TypeMismatch.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if
@@ -98,6 +98,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Names bind with `let`. Undeclared names and assignments to immutable names are errors.
 - Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
+- A U64 literal such as `100U64` is exact; a literal above 2^64-1 is a U64OutOfRange error. The U64 suffix is case-sensitive, so `1u64` is an invalid term.
 
 ### Arrays
 
@@ -173,7 +174,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Split `src/` into subdirectories by stage before adding an eleventh file, and split `evaluator.ts`, which is over its 500-line limit.
+3. Shrink `eval/evaluator.ts`, which is still over its 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
 
 ### Later
 

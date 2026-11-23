@@ -16,6 +16,6 @@
   },
   "scripts": {
     "lint": "eslint . && madge --circular --extensions ts . && bun run cpd && bun scripts/check-file-count.ts",
-    "cpd": "pmd cpd --language typescript --minimum-tokens 50 src/index.ts src/errors.ts src/tokenizer.ts src/ast.ts src/parse-errors.ts src/conditions.ts src/statements.ts src/parser.ts src/evaluator.ts src/index.test.ts"
+    "cpd": "pmd cpd --language typescript --minimum-tokens 50 src/index.ts src/errors.ts src/tokenizer.ts src/ast.ts src/parse-errors.ts src/conditions.ts src/statements.ts src/parser.ts src/eval/evaluator.ts src/eval/values.ts src/eval/operators.ts src/index.test.ts"
   }
 }

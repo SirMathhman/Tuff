@@ -664,6 +664,60 @@ test("interpretTuff: 18446744073709551615U64 & 1U64 returns Ok(1)", () => {
   expect(interpretTuff("18446744073709551615U64 & 1U64")).toEqual(ok(1));
 });
 
+test("interpretTuff: 2U64 / 0U64 is a DivisionByZero error that says U64, not number", () => {
+  const result = interpretTuff("2U64 / 0U64");
+
+  expect(result.ok).toBe(false);
+
+  if (!result.ok) {
+    expect(result.error.kind).toBe("DivisionByZero");
+    expect(result.error.why).not.toContain("number");
+  }
+});
+
+test("interpretTuff: 9007199254740993U64 is a ResultTooLarge error that describes the program result", () => {
+  const result = interpretTuff("9007199254740993U64");
+
+  expect(result.ok).toBe(false);
+
+  if (!result.ok) {
+    expect(result.error.kind).toBe("ResultTooLarge");
+    expect(result.error.why).not.toContain("running value");
+  }
+});
+
+test("interpretTuff: 9007199254740992U64 - 1U64 returns Ok(9007199254740991)", () => {
+  expect(interpretTuff("9007199254740992U64 - 1U64")).toEqual(ok(9007199254740991));
+});
+
+test("interpretTuff: 9007199254740991U64 + 1U64 is a ResultTooLarge error", () => {
+  expectErrorKind("9007199254740991U64 + 1U64", "ResultTooLarge");
+});
+
+test("interpretTuff: 18446744073709551615U64 + 1U64 is a U64OutOfRange error", () => {
+  expectErrorKind("18446744073709551615U64 + 1U64", "U64OutOfRange");
+});
+
+test("interpretTuff: 1U64 << 31U64 returns Ok(2147483648)", () => {
+  expect(interpretTuff("1U64 << 31U64")).toEqual(ok(2147483648));
+});
+
+test("interpretTuff: 1U64 << 32U64 is a BitwiseOutOfRange error", () => {
+  expectErrorKind("1U64 << 32U64", "BitwiseOutOfRange");
+});
+
+test("interpretTuff: -1U64 is a TypeMismatch error", () => {
+  expectErrorKind("-1U64", "TypeMismatch");
+});
+
+test("interpretTuff: 1U64 == 1 is a TypeMismatch error", () => {
+  expectErrorKind("1U64 == 1", "TypeMismatch");
+});
+
+test("interpretTuff: 1U64 & 3U64 | 4U64 returns Ok(5)", () => {
+  expect(interpretTuff("1U64 & 3U64 | 4U64")).toEqual(ok(5));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });
