@@ -198,6 +198,22 @@ test("interpretTuff('{ let x = 2; }') is an InvalidTerm error", () => {
   expectErrorKind("{ let x = 2; }", "InvalidTerm");
 });
 
+test("interpretTuff inner shadowing across blocks returns Ok(20)", () => {
+  expect(interpretTuff("let a = 1; let b = a + 1; { let a = b * 10; a }")).toEqual(ok(20));
+});
+
+test("interpretTuff block scope does not leak", () => {
+  expectErrorKind("{ let x = 1; x } + x", "UndefinedName");
+});
+
+test("interpretTuff('let x=2; x') returns Ok(2)", () => {
+  expect(interpretTuff("let x=2; x")).toEqual(ok(2));
+});
+
+test("interpretTuff('1\\n+2') returns Ok(3)", () => {
+  expect(interpretTuff("1\n+2")).toEqual(ok(3));
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });
