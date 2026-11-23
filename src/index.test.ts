@@ -367,6 +367,34 @@ test("interpretTuff: 1 <= 2 <= 3 is an InvalidTerm error", () => {
   expectErrorKind("1 <= 2 <= 3", "InvalidTerm");
 });
 
+test("interpretTuff: true && false returns Ok(0)", () => {
+  expect(interpretTuff("true && false")).toEqual(ok(0));
+});
+
+test("interpretTuff: true || false returns Ok(1)", () => {
+  expect(interpretTuff("true || false")).toEqual(ok(1));
+});
+
+test("interpretTuff: !true returns Ok(0)", () => {
+  expect(interpretTuff("!true")).toEqual(ok(0));
+});
+
+test("interpretTuff: 1 < 2 && 3 < 4 returns Ok(1)", () => {
+  expect(interpretTuff("1 < 2 && 3 < 4")).toEqual(ok(1));
+});
+
+test("interpretTuff: false && 1 short-circuits and returns Ok(0)", () => {
+  expect(interpretTuff("false && 1")).toEqual(ok(0));
+});
+
+test("interpretTuff: true || undeclared short-circuits and returns Ok(1)", () => {
+  expect(interpretTuff("true || undeclared")).toEqual(ok(1));
+});
+
+test("interpretTuff: !1 is a TypeMismatch error", () => {
+  expectErrorKind("!1", "TypeMismatch");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

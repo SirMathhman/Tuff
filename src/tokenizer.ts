@@ -35,9 +35,9 @@ export function tokenize(tuffSource: string): string[] {
 
 const SPACE = [" ", "\t", "\n", "\r"];
 
-const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!="];
+const TWO_CHAR_OPERATORS = ["<=", ">=", "==", "!=", "&&", "||"];
 
-const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "+", "-", "*", ";", "=", "<", ">"];
+const SINGLE_CHAR_TOKENS = ["(", ")", "{", "}", "+", "-", "*", ";", "=", "<", ">", "!"];
 
 function flush(current: string): string[] {
   return current === "" ? [] : [current];

@@ -1,5 +1,5 @@
 import { ok, type Result } from "./errors.ts";
-import { type CompareOp, type Expr, type Link } from "./ast.ts";
+import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
 import { isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -181,6 +181,14 @@ function parseFactor(
       : operand;
   }
 
+  if (tokens[pos] === "!") {
+    const operand = parsePrimary(tokens, pos + 1, depth, expr);
+
+    return operand.ok
+      ? ok({ value: { kind: "not", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
+      : operand;
+  }
+
   return parsePrimary(tokens, pos, depth, expr);
 }
 
@@ -214,7 +222,7 @@ function comparisonAt(token: string | undefined): CompareOp | undefined {
  * @param depth - The number of groups enclosing this position.
  * @returns The expression tree and the index of the next unread token, or an error.
  */
-export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
+function parseComparison(tokens: string[], pos: number, depth: number): Parse {
   const left = parseSum(tokens, pos, depth);
 
   if (!left.ok) {
@@ -243,6 +251,58 @@ export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
     },
     next: right.value.next,
   });
+}
+
+/**
+ * Parses a left-associative chain of one logical operator over a lower-precedence operand.
+ * @param tokens - The token list to parse.
+ * @param pos - The index of the first token of the chain.
+ * @param operator - The logical operator that separates the operands.
+ * @param operand - The rule for one operand.
+ * @returns The expression tree and the index of the next unread token, or an error.
+ */
+function parseLogical(
+  tokens: string[],
+  pos: number,
+  operator: LogicalOp,
+  operand: (next: number) => Parse,
+): Parse {
+  const first = operand(pos);
+
+  if (!first.ok) {
+    return first;
+  }
+
+  let left = first.value.value;
+  let next = first.value.next;
+
+  while (tokens[next] === operator) {
+    const right = operand(next + 1);
+
+    if (!right.ok) {
+      return right;
+    }
+
+    left = { kind: "logical", op: operator, left, right: right.value.value, where: whereAt(tokens, next) };
+    next = right.value.next;
+  }
+
+  return ok({ value: left, next });
+}
+
+function parseAnd(tokens: string[], pos: number, depth: number): Parse {
+  return parseLogical(tokens, pos, "&&", (next) => parseComparison(tokens, next, depth));
+}
+
+/**
+ * Parses a full expression: disjunctions of conjunctions of comparisons.
+ * @param tokens - The token list to parse.
+ * @param pos - The index of the first token of the expression.
+ * @param depth - The number of groups enclosing this position.
+ * @returns The expression tree and the index of the next unread token, or an error.
+ */
+export function parseExpr(tokens: string[], pos: number, depth: number): Parse {
+  return parseLogical(tokens, pos, "||", (next) => parseAnd(tokens, next, depth));
 }
 
 // A "{" starts a statement block when its contents begin with a statement and

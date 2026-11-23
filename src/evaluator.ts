@@ -154,6 +154,14 @@ function evaluateBlock(
   return evaluateRule(result, inner.value);
 }
 
+function asBoolean(value: Value, where: ErrorWhere): Result<boolean, TuffError> {
+  if (typeof value === "boolean") {
+    return ok(value);
+  }
+
+  return typeMismatchAt(where, "a boolean", typeName(value));
+}
+
 function numericCompare(op: CompareOp, left: number, right: number): boolean {
   if (op === "<") {
     return left < right;
@@ -237,6 +245,50 @@ export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
     }
 
     return evaluate(condition.value ? expr.then : expr.otherwise, scope);
+  }
+
+  if (expr.kind === "not") {
+    const inner = evaluate(expr.operand, scope);
+
+    if (!inner.ok) {
+      return inner;
+    }
+
+    const negated = asBoolean(inner.value, expr.where);
+
+    if (!negated.ok) {
+      return negated;
+    }
+
+    return ok(!negated.value);
+  }
+
+  if (expr.kind === "logical") {
+    const left = evaluate(expr.left, scope);
+
+    if (!left.ok) {
+      return left;
+    }
+
+    const leftBoolean = asBoolean(left.value, expr.where);
+
+    if (!leftBoolean.ok) {
+      return leftBoolean;
+    }
+
+    const decided = expr.op === "&&" ? !leftBoolean.value : leftBoolean.value;
+
+    if (decided) {
+      return ok(leftBoolean.value);
+    }
+
+    const right = evaluate(expr.right, scope);
+
+    if (!right.ok) {
+      return right;
+    }
+
+    return asBoolean(right.value, expr.where);
   }
 
   if (expr.kind === "compare") {

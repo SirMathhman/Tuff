@@ -106,6 +106,22 @@ interface BlockNode {
 /**
  * A parsed expression: a number, a boolean, a name, a negation, a chain of operators, an if, or a block.
  */
+export type LogicalOp = "&&" | "||";
+
+interface LogicalNode {
+  kind: "logical";
+  op: LogicalOp;
+  left: Expr;
+  right: Expr;
+  where: ErrorWhere;
+}
+
+interface NotNode {
+  kind: "not";
+  operand: Expr;
+  where: ErrorWhere;
+}
+
 export type Expr =
   | NumberNode
   | BooleanNode
@@ -114,4 +130,6 @@ export type Expr =
   | ChainNode
   | IfNode
   | CompareNode
+  | LogicalNode
+  | NotNode
   | BlockNode;
