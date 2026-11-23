@@ -15,7 +15,7 @@ import { blockBody } from "./statements.ts";
 //   and       := comparison ("&&" comparison)*
 //   comparison := sum (cmp sum)?
 //   sum       := term (("+" | "-") term)*
-//   term      := factor ("*" factor)*
+//   term      := factor (("*" | "/") factor)*
 //   factor    := "-" primary | "!" factor | primary
 //   primary   := number | "true" | "false" | name | "(" expr ")" | "{" body "}"
 //              | "if" "(" expr ")" expr "else" comparison

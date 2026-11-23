@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a boolean, a one-character string, or an array. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
+- **Value**: a number, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -168,10 +168,9 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 ### Near term
 
-1. Check reference storage against the holder's scope, so a reference cannot be stored into an outer binding or array slot.
-2. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
-3. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-4. Split `src/` into subdirectories by stage before adding an eleventh file, and split `evaluator.ts`, which is over its 500-line limit.
+1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
+2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
+3. Split `src/` into subdirectories by stage before adding an eleventh file, and split `evaluator.ts`, which is over its 500-line limit.
 
 ### Later
 
