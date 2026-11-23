@@ -67,7 +67,7 @@ interface LetStatement {
   kind: "let";
   name: string;
   mutable: boolean;
-  annotation ?: IntType;
+  annotation ?: Annotation;
   value: Expr;
   where: ErrorWhere;
 }
@@ -129,6 +129,9 @@ interface ElementStatement {
   value: Expr;
   where: ErrorWhere;
 }
+
+/** The type a let annotation names: a sized integer type, or Bool. */
+export type Annotation = IntType | "Bool";
 
 // A loop that runs its body while its boolean condition holds.
 interface WhileStatement {

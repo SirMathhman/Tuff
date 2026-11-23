@@ -14,7 +14,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 ### Bindings and scope
 
 - **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment.
-- **Annotation**: an optional sized integer type after the name, as in `let x : U8 = 100U8;`. The value must have exactly that type when the binding is made, and reassignment must keep it.
+- **Annotation**: an optional type after the name, either a sized integer type or `Bool`, as in `let x : U8 = 100U8;` or `let x : Bool = true;`. The value must have exactly that type when the binding is made, and reassignment must keep it.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
 - **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
 - **Block**: bindings followed by one result expression.
@@ -101,7 +101,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Names and numbers
 
-- Names bind with `let`. Undeclared names and assignments to immutable names are errors. A `let` may annotate a sized integer type, as in `let x : U8 = 100U8;`; the value must have exactly that type, so a plain number is a TypeMismatch.
+- Names bind with `let`. Undeclared names and assignments to immutable names are errors. A `let` may annotate a sized integer type or `Bool`, as in `let x : U8 = 100U8;` or `let x : Bool = true;`; the value must have exactly that type, so a plain number is a TypeMismatch.
 - Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
 - A sized literal such as `100U64` or `-128I8` is exact and must lie within its type's range, or the literal is IntegerOutOfRange. The suffix is case-sensitive, so `1u64` is an invalid term.
 

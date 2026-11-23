@@ -790,6 +790,14 @@ test("interpretTuff: \"let x : U8 = 100U8; x\" => 100", () => {
   expect(interpretTuff("let x : U8 = 100U8; x")).toEqual(ok(100));
 });
 
+test("interpretTuff: \"let x : Bool =  true; x\" => 1", () => {
+  expect(interpretTuff("let x : Bool =  true; x")).toEqual(ok(1));
+});
+
+test("interpretTuff: let x : Bool = 1; x is a TypeMismatch error", () => {
+  expectErrorKind("let x : Bool = 1; x", "TypeMismatch");
+});
+
 test("interpretTuff: let x : U8 = 100; x is a TypeMismatch error", () => {
   expectErrorKind("let x : U8 = 100; x", "TypeMismatch");
 });

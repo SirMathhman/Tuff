@@ -1,6 +1,6 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
-import { INT_TYPES, type Expr, type IntType, type Link, type Statement } from "./ast.ts";
+import { INT_TYPES, type Annotation, type Expr, type Link, type Statement } from "./ast.ts";
 import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
@@ -54,16 +54,16 @@ function parseLet(
     return invalidAt(tokens, nameIndex, "a name after 'let'", "Write a name such as x after 'let'.");
   }
 
-  let annotation: IntType | undefined;
+  let annotation: Annotation | undefined;
   let equalsIndex = nameIndex + 1;
 
   if (textAt(tokens, nameIndex + 1) === ":") {
     const typeText = textAt(tokens, nameIndex + 2);
 
-    annotation = INT_TYPES.find((candidate) => candidate === typeText);
+    annotation = typeText === "Bool" ? "Bool" : INT_TYPES.find((candidate) => candidate === typeText);
 
     if (annotation === undefined) {
-      return invalidAt(tokens, nameIndex + 2, "a sized integer type such as U8", "Write one of U8, U16, U32, U64, I8, I16, I32, or I64 after ':'.");
+      return invalidAt(tokens, nameIndex + 2, "a type such as U8 or Bool", "Write one of U8, U16, U32, U64, I8, I16, I32, I64, or Bool after ':'.");
     }
 
     equalsIndex = nameIndex + 3;
