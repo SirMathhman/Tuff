@@ -5,7 +5,8 @@ import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./eval/evaluator.ts";
 import { isInteger, isRecord, type Scope } from "./eval/values.ts";
-import { parseFunctions, parseStructs } from "./structs.ts";
+import { parseStructs } from "./declarations/structs.ts";
+import { parseFunctions } from "./declarations/functions.ts";
 
 export { describeError } from "./errors.ts";
 export type {

@@ -10,6 +10,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 - **Entry point**: `interpretTuff(source)`, the only public function.
 - **Value**: a number, a sized integer, a boolean, a one-character string, an array, or a record. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
 - **Struct**: a named record type declared at the start of a program, such as `struct Point { x : I32, y : I32 }`. Its name starts with a capital letter. A struct value is a record tagged with its struct name, and the tag survives every copy, field write, and move.
+- **Function**: a named expression declared after the structs, such as `fn add(first : I32, second : I32) : I32 => first + second;`. Its parameters and return type are sized integers or Bool. A function sees its parameters, the structs, and the functions declared before it, never a caller's bindings.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -40,9 +41,9 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 ### Pipeline
 
 1. `tokenizer.ts`: a character scanner that emits typed tokens, each with its kind and text.
-2. `structs.ts`: parses the struct declarations at the start of a program, and returns them with the index of the first statement. It reads `statements.ts` only for annotations.
-3. `parser.ts` parses expressions by precedence; `statements.ts` parses statements and blocks.
-4. `eval/evaluator.ts`: a fold over the AST. The outermost scope carries the struct table that constructors and struct annotations read. `eval/values.ts` holds the value model and type checks; `eval/operators.ts` holds the operator tables. Cells change in place for assignment and moves until Future Work item 2 lands.
+2. `declarations/`: parses the declarations at the start of a program, in order: structs, then functions. Each parser takes the expression rule as a parameter, and reads `statements.ts` only for annotations. The directory keeps `src/` under its file cap.
+3. `parser.ts` parses expressions by precedence, including calls; `statements.ts` parses statements and blocks.
+4. `eval/evaluator.ts`: a fold over the AST. The outermost scope carries the struct and function tables that constructors, struct annotations, and calls read. `eval/values.ts` holds the value model and type checks; `eval/operators.ts` holds the operator tables. Cells change in place for assignment and moves until Future Work item 2 lands.
 
 ### Shared rules
 
@@ -73,6 +74,10 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - A rule that would close a cycle receives the other rule as a parameter, as `blockBody` receives `parseExpr`.
 - Each expression kind is evaluated by its own rule, and each rule receives `evaluate` as a parameter. The evaluator never runs during parsing.
+
+### Acyclic calls
+
+- A function body sees only earlier functions, so the call graph has no cycles and no call recurses. Call depth is bounded by the number of declared functions.
 
 ## Grammar
 
@@ -127,6 +132,13 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 - A let annotation `: Point` accepts only a value built by Point's constructor, so an anonymous record does not match. An undeclared struct name in an annotation is an InvalidTerm error, and an undeclared constructor is an UndefinedStruct error.
 - Records cannot be compared or returned as a program result. Comparing them reports a TypeMismatch that names the record.
 
+### Functions
+
+- A program declares its functions after its structs and before its body. Each declaration is `fn name(p : Type, ...) : Type => expr;`, with scalar parameter and return types.
+- A call `name(args)` evaluates its arguments in the caller's scope. The body then runs in a fresh scope holding only the structs and the functions declared before the callee.
+- Arguments must match each parameter's type exactly, and the argument count must match. The result must match the return type. A mismatch is a TypeMismatch, and an unknown name is an UndefinedName.
+- Parameters are immutable bindings with their annotations. A body cannot call itself or a later function.
+
 ### Tokens
 
 - Brackets, operators, `=`, `:`, `.`, and `;` are self-delimiting, so spacing never changes meaning.
@@ -153,6 +165,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Operator chains fold with `reduce`, so their length never depends on the call stack.
 - Exception-based failure paths creep in unless the Result pattern is enforced from the start.
+- Call depth is bounded by the declared functions, so calls cannot exhaust the stack through recursion.
 
 ### Growth
 
@@ -166,6 +179,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 - No `eval`, `Function`, or dynamic import of anything derived from source.
 - No filesystem, network, process, or global access. Host capabilities are passed in explicitly and absent by default.
+- A function body is a pure expression over its parameters and earlier functions, so a call reads no caller state and performs no host access.
 
 ### Input tokens
 
@@ -191,12 +205,13 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 
 1. Add character spans to typed tokens, replacing the token-index `where` of each `TuffError`.
 2. Track moves as state threaded through the fold instead of flags on cells, so the evaluator stays a pure fold.
-3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, `errors.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.
+3. Shrink `eval/evaluator.ts`, `parser.ts`, `statements.ts`, `errors.ts`, and `index.test.ts`, which are over their 500-line limit, and split `src/` into stage subdirectories before adding an eleventh file.4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
 7. Derive the annotation names, the `let` type check, and the `let` error hint from one declaration in `ast.ts`, instead of writing `Bool`, the type list, and `annotationName` by hand in several places.
 8. Allow struct-typed fields, so a struct can name another struct as a field type.
+9. Report a wrong argument count as an ArityMismatch and an unknown function as an UndefinedFunction, instead of reusing TypeMismatch and UndefinedName.
 
 ### Later
 
@@ -216,6 +231,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 ### Scope and loops
 
 - Scope lookup walks bindings in order, so many `let` statements can make evaluation quadratic. A map by name avoids this.
+- Each call builds a new root scope and copies the list of earlier functions, so a call costs time in the number of declared functions.
 - Step limits will guard unbounded loops, which the language will eventually need.
 
 ### Arrays
