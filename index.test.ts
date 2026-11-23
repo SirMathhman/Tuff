@@ -241,6 +241,33 @@ test('interpretTuff("let x = 1; let y = &mut x; y") => cannot borrow mutably err
   });
 });
 
+test('interpretTuff("let x = true; x") => 1', () => {
+  expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("false") => 0', () => {
+  expect(interpretTuff("false")).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("let x = true; let y = &x; *y") => 1', () => {
+  expect(interpretTuff("let x = true; let y = &x; *y")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let x = true; x + 1") => boolean used as a number error', () => {
+  expect(interpretTuff("let x = true; x + 1")).toEqual({
+    ok: false,
+    error: {
+      what: "Boolean used as a number",
+      where: 14,
+      why: '"x" is a boolean, not a number',
+      fix: "Use a number instead of the boolean, or drop the operator",
+    },
+  });
+});
+
 test('interpretTuff("{ 2 + 3") => error at the unmatched brace', () => {
   expect(interpretTuff("{ 2 + 3")).toEqual({
     ok: false,

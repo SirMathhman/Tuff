@@ -79,6 +79,12 @@ interface SemicolonToken {
   pos: number;
 }
 
+interface BooleanToken {
+  kind: "boolean";
+  value: boolean;
+  pos: number;
+}
+
 type Token =
   | NumberToken
   | OperatorToken
@@ -89,7 +95,8 @@ type Token =
   | MutToken
   | AmpersandToken
   | EqualsToken
-  | SemicolonToken;
+  | SemicolonToken
+  | BooleanToken;
 
 // A declared variable. `id` names its slot in the value table. `mutable` is
 // true only for `let mut`.
@@ -104,8 +111,11 @@ interface Reference {
   mutable: boolean;
 }
 
-// What a variable slot holds: a number, or a reference to another slot.
-type Value = number | Reference;
+// A plain value: a number or a boolean.
+type Operand = number | boolean;
+
+// What a variable slot holds: a number, a boolean, or a reference to another slot.
+type Value = Operand | Reference;
 
 // The state at one point of the source. `names` maps visible names to their
 // variables, including those of enclosing blocks. `own` holds the names declared
@@ -119,7 +129,7 @@ interface Scope {
 }
 
 interface Parsed {
-  value: number;
+  value: Operand;
   next: number;
   scope: Scope;
 }
@@ -229,6 +239,9 @@ function wordToken(word: string, pos: number): Token {
   if (word === "mut") {
     return { kind: "mut", pos };
   }
+  if (word === "true" || word === "false") {
+    return { kind: "boolean", value: word === "true", pos };
+  }
   return { kind: "name", name: word, pos };
 }
 
@@ -258,6 +271,9 @@ function tokenText(token: Token): string {
   }
   if (token.kind === "equals") {
     return "=";
+  }
+  if (token.kind === "boolean") {
+    return token.value ? "true" : "false";
   }
   return ";";
 }
@@ -414,6 +430,43 @@ function referenceAsNumber<T>(name: string, where: number): Result<T> {
   });
 }
 
+// Reported when a boolean is used where arithmetic needs a number.
+function booleanAsNumber<T>(where: number, text: string): Result<T> {
+  return err({
+    what: "Boolean used as a number",
+    where,
+    why: `"${text}" is a boolean, not a number`,
+    fix: "Use a number instead of the boolean, or drop the operator",
+  });
+}
+
+// A number from an operand, or an error if the operand is a boolean. `where` and
+// `text` locate the operand in the message.
+function numberFrom(
+  value: Operand,
+  where: number,
+  text: string,
+): Result<number> {
+  if (typeof value === "boolean") {
+    return booleanAsNumber(where, text);
+  }
+  return ok(value);
+}
+
+// The source text of the token at `index`, or "" past the end.
+function textAt(tokens: Token[], index: number): string {
+  const token = tokens[index];
+  return token === undefined ? "" : tokenText(token);
+}
+
+// A program's final value as a number: true is 1 and false is 0.
+function asNumber(value: Operand): number {
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+  return value;
+}
+
 // A block's scope starts with every variable of the enclosing scope and no
 // declarations of its own.
 function childScope(outer: Scope): Scope {
@@ -449,7 +502,7 @@ function closeBlock(outer: Scope, inner: Scope, pos: number): Result<Scope> {
     const cell = inner.cells.get(variable.id);
     if (
       cell !== undefined &&
-      typeof cell !== "number" &&
+      typeof cell === "object" &&
       ownIds.has(cell.target)
     ) {
       return err({
@@ -523,7 +576,7 @@ function parseVariable(
     return undefinedVariable(token.name, token.pos);
   }
   const cell = scope.cells.get(variable.id);
-  if (typeof cell !== "number") {
+  if (cell === undefined || typeof cell === "object") {
     return referenceAsNumber(token.name, token.pos);
   }
   return ok({ value: cell, next: index + 1, scope });
@@ -541,7 +594,7 @@ function parseDeref(
     return undefinedVariable(nameToken.name, nameToken.pos);
   }
   const cell = scope.cells.get(variable.id);
-  if (cell === undefined || typeof cell === "number") {
+  if (cell === undefined || typeof cell !== "object") {
     return err({
       what: "Not a reference",
       where: nameToken.pos,
@@ -550,7 +603,7 @@ function parseDeref(
     });
   }
   const target = scope.cells.get(cell.target);
-  if (typeof target !== "number") {
+  if (target === undefined || typeof target === "object") {
     return err({
       what: "Reference used as a number",
       where: nameToken.pos,
@@ -576,6 +629,9 @@ function parseFactor(
   }
   if (token?.kind === "name") {
     return parseVariable(token, index, scope);
+  }
+  if (token?.kind === "boolean") {
+    return ok({ value: token.value, next: index + 1, scope });
   }
   const nameToken = tokens[index + 1];
   if (isStarAt(tokens, index) && nameToken?.kind === "name") {
@@ -635,10 +691,13 @@ function parseGroup(
   return ok({ value: inner.value.value, next: next + 1, scope: closed.value });
 }
 
+// Parses factors joined by "*", with an optional sign before the first. `sign` is
+// 0 when there is no sign. A term that is one factor with no sign or "*" keeps
+// its value, so a boolean passes through. Any arithmetic needs numbers.
 function parseTerm(
   tokens: Token[],
   index: number,
-  sign: 1 | -1,
+  sign: 1 | -1 | 0,
   scope: Scope,
   end: number,
   factor: Parser,
@@ -647,21 +706,47 @@ function parseTerm(
   if (!first.ok) {
     return first;
   }
-  let value = sign * first.value.value;
+  const firstPos = tokens[index]?.pos ?? end;
+  let value: Operand = first.value.value;
   let next = first.value.next;
   let current = first.value.scope;
   let token = tokens[next];
+  let operated = sign !== 0;
   while (token?.kind === "operator" && token.symbol === "*") {
     const nextFactor = factor(tokens, next + 1, current, end);
     if (!nextFactor.ok) {
       return nextFactor;
     }
-    value *= nextFactor.value.value;
+    const left = numberFrom(value, firstPos, textAt(tokens, index));
+    if (!left.ok) {
+      return left;
+    }
+    const right = numberFrom(
+      nextFactor.value.value,
+      tokens[next + 1]?.pos ?? end,
+      textAt(tokens, next + 1),
+    );
+    if (!right.ok) {
+      return right;
+    }
+    value = left.value * right.value;
+    operated = true;
     next = nextFactor.value.next;
     current = nextFactor.value.scope;
     token = tokens[next];
   }
-  return ok({ value, next, scope: current });
+  if (!operated) {
+    return ok({ value, next, scope: current });
+  }
+  const numeric = numberFrom(value, firstPos, textAt(tokens, index));
+  if (!numeric.ok) {
+    return numeric;
+  }
+  return ok({
+    value: sign === 0 ? numeric.value : sign * numeric.value,
+    next,
+    scope: current,
+  });
 }
 
 // Parses an optional leading sign, then terms joined by "+" or "-". Stops
@@ -675,10 +760,11 @@ function parseExpression(
   factor: Parser,
 ): Result<Parsed> {
   const leadingSign = signAt(tokens, index);
+  const firstIndex = leadingSign === undefined ? index : index + 1;
   const first = parseTerm(
     tokens,
-    leadingSign === undefined ? index : index + 1,
-    leadingSign ?? 1,
+    firstIndex,
+    leadingSign ?? 0,
     scope,
     end,
     factor,
@@ -686,17 +772,36 @@ function parseExpression(
   if (!first.ok) {
     return first;
   }
-  let sum = first.value.value;
   let next = first.value.next;
   let current = first.value.scope;
 
   let sign = signAt(tokens, next);
+  if (sign === undefined) {
+    return ok({ value: first.value.value, next, scope: current });
+  }
+  const firstValue = numberFrom(
+    first.value.value,
+    tokens[firstIndex]?.pos ?? end,
+    textAt(tokens, firstIndex),
+  );
+  if (!firstValue.ok) {
+    return firstValue;
+  }
+  let sum = firstValue.value;
   while (sign !== undefined) {
     const term = parseTerm(tokens, next + 1, sign, current, end, factor);
     if (!term.ok) {
       return term;
     }
-    sum += term.value.value;
+    const termValue = numberFrom(
+      term.value.value,
+      tokens[next + 1]?.pos ?? end,
+      textAt(tokens, next + 1),
+    );
+    if (!termValue.ok) {
+      return termValue;
+    }
+    sum += termValue.value;
     next = term.value.next;
     current = term.value.scope;
     sign = signAt(tokens, next);
@@ -923,7 +1028,7 @@ function parseDerefAssign(
     return undefinedVariable(name, nameToken.pos);
   }
   const cell = scope.cells.get(variable.id);
-  if (cell === undefined || typeof cell === "number") {
+  if (cell === undefined || typeof cell !== "object") {
     return err({
       what: "Not a reference",
       where: nameToken.pos,
@@ -990,8 +1095,9 @@ export function interpretTuff(tuffSource: string): Result<number> {
   //   value      = expression | "&" name | "&" "mut" name
   //   expression = [sign] term { ("+" | "-") term }
   //   term       = factor { "*" factor }
-  //   factor     = number | name | "*" name | "(" expression ")" | "{" sequence "}"
-  // "*" binds tighter than "+" and "-". Parentheses group an expression. Braces
+  //   factor     = number | "true" | "false" | name | "*" name | "(" expression ")" | "{" sequence "}"
+  // A boolean is a value on its own, but arithmetic needs numbers; a final boolean
+  // is returned as 1 or 0. "*" binds tighter than "+" and "-". Parentheses group an expression. Braces
   // group a block, whose lets are visible only inside it. Only a `let mut`
   // variable may be assigned, and "&mut" needs one. A reference may not outlive
   // the block that declares its target. Parentheses and braces nest freely, but
@@ -1016,7 +1122,7 @@ export function interpretTuff(tuffSource: string): Result<number> {
   }
   const stop = tokens[sequence.value.next];
   if (stop === undefined) {
-    return ok(sequence.value.value);
+    return ok(asNumber(sequence.value.value));
   }
   if (stop.kind === "close") {
     const opener = openerFor(stop.symbol);
