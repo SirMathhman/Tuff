@@ -50,6 +50,7 @@ Dependency direction is strictly downward. No cycles exist; `madge --circular` i
 
 - Stage modules import only the core, `tokenizer.ts`, `parse-errors.ts`, `ast.ts`, and each other.
 - A rule that would close a cycle receives the other rule as a parameter. No parser module imports the expression parser.
+- The binary operator set is declared once in `ast.ts`. The tokenizer, the parser, and the statement-or-expression rule all read that set, so no operator can be known to one and missing from another.
 
 ### Size limits
 
@@ -84,7 +85,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 ### Blocks and if
 
-- `if (cond) a else b` takes a boolean condition and requires both branches; the else branch is a comparison, so `&&` and `||` after it apply to the whole if.
+- `if (cond) a else b` takes a boolean condition and requires both branches; the else branch is a comparison, so arithmetic and shifts after it belong to the else branch, while `|`, `&`, `&&`, and `||` after it apply to the whole if.
 - A `{` at statement position opens a statement block when its contents begin with a statement and the token after its `}` ends the statement.
 
 ### Blocks as values
