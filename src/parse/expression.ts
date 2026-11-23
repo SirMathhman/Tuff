@@ -1,5 +1,6 @@
-import { ok } from "../result.ts";
-import type { Scope } from "../scope.ts";
+import { numberAsBoolean } from "../errors.ts";
+import { err, ok } from "../result.ts";
+import type { Operand, Scope } from "../scope.ts";
 import { signAt, textAt } from "../tokenize.ts";
 import type { Token } from "../tokenize.ts";
 import { numberFrom, parseTerm } from "./term.ts";
@@ -9,7 +10,7 @@ import type { ParseResult, Parsed, Parser } from "./types.ts";
 // before the first token that is not "+" or "-"; the caller decides whether
 // that token is valid there. A single term keeps a boolean value; a sum needs
 // numbers.
-export function parseExpression(
+function parseSum(
   tokens: Token[],
   index: number,
   scope: Scope,
@@ -65,4 +66,41 @@ export function parseExpression(
   }
 
   return ok({ value: sum, next, scope: current });
+}
+
+// Parses sums joined by "||". Both sides must be booleans. The right side is
+// skipped when the left side is true: its assignments are discarded, though its
+// errors are still reported.
+export function parseExpression(
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+): ParseResult<Parsed> {
+  const left = parseSum(tokens, index, scope, end, factor);
+  if (!left.ok) {
+    return left;
+  }
+  let value: Operand = left.value.value;
+  let next = left.value.next;
+  let current = left.value.scope;
+  let orToken = tokens[next];
+  while (orToken?.kind === "or") {
+    const right = parseSum(tokens, next + 1, current, end, factor);
+    if (!right.ok) {
+      return right;
+    }
+    const rightValue = right.value.value;
+    if (typeof value !== "boolean" || typeof rightValue !== "boolean") {
+      return err(numberAsBoolean(orToken.pos));
+    }
+    if (!value) {
+      value = rightValue;
+      current = right.value.scope;
+    }
+    next = right.value.next;
+    orToken = tokens[next];
+  }
+  return ok({ value, next, scope: current });
 }

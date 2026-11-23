@@ -66,6 +66,11 @@ export interface BooleanToken {
   pos: number;
 }
 
+export interface OrToken {
+  kind: "or";
+  pos: number;
+}
+
 export type Token =
   | NumberToken
   | OperatorToken
@@ -77,7 +82,8 @@ export type Token =
   | AmpersandToken
   | EqualsToken
   | SemicolonToken
-  | BooleanToken;
+  | BooleanToken
+  | OrToken;
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
@@ -139,6 +145,9 @@ export function tokenize(source: string): Result<Token[], TuffError> {
     } else if (char === ")" || char === "}") {
       tokens = [...tokens, { kind: "close", symbol: char, pos: index }];
       index++;
+    } else if (char === "|" && source.charAt(index + 1) === "|") {
+      tokens = [...tokens, { kind: "or", pos: index }];
+      index += 2;
     } else if (char === "&") {
       tokens = [...tokens, { kind: "ampersand", pos: index }];
       index++;
@@ -191,6 +200,9 @@ export function tokenText(token: Token): string {
   }
   if (token.kind === "boolean") {
     return token.value ? "true" : "false";
+  }
+  if (token.kind === "or") {
+    return "||";
   }
   return ";";
 }

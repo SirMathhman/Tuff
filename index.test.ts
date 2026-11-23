@@ -245,6 +245,34 @@ test('interpretTuff("let x = true; x") => 1', () => {
   expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
 });
 
+test('interpretTuff("true || false") => 1', () => {
+  expect(interpretTuff("true || false")).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("let mut x = 0; let y = true || { x = 1; true }; x") => 0 (right side skipped)', () => {
+  expect(
+    interpretTuff("let mut x = 0; let y = true || { x = 1; true }; x"),
+  ).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("let mut x = 0; let y = false || { x = 1; true }; x") => 1', () => {
+  expect(
+    interpretTuff("let mut x = 0; let y = false || { x = 1; true }; x"),
+  ).toEqual({ ok: true, value: 1 });
+});
+
+test('interpretTuff("1 || true") => number used as a boolean error', () => {
+  expect(interpretTuff("1 || true")).toEqual({
+    ok: false,
+    error: {
+      what: "Number used as a boolean",
+      where: 2,
+      why: 'Both sides of "||" must be booleans',
+      fix: 'Use a boolean on each side of "||", or remove the number',
+    },
+  });
+});
+
 test('interpretTuff("false") => 0', () => {
   expect(interpretTuff("false")).toEqual({ ok: true, value: 0 });
 });
