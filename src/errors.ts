@@ -132,10 +132,12 @@ export function referenceAsNumber(name: string, where: number): TuffError {
 
 // Reported when a boolean is used where arithmetic needs a number.
 export function booleanAsNumber(where: number, text: string): TuffError {
+  // An operand that starts a group is named as the group, not by its bracket.
+  const subject = text === "(" || text === "{" ? "This group" : `"${text}"`;
   return {
     what: "Boolean used as a number",
     where,
-    why: `"${text}" is a boolean, not a number`,
+    why: `${subject} is a boolean, not a number`,
     fix: "Use a number instead of the boolean, or drop the operator",
   };
 }

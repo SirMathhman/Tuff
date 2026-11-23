@@ -494,3 +494,39 @@ test('interpretTuff("2 < true") => boolean used as a number error', () => {
 test('interpretTuff("1 < 2 && 2 < 3") => 1', () => {
   expect(interpretTuff("1 < 2 && 2 < 3")).toEqual({ ok: true, value: 1 });
 });
+
+test('interpretTuff("1 < 2 <= 3") => chained comparison error', () => {
+  expect(interpretTuff("1 < 2 <= 3")).toEqual({
+    ok: false,
+    error: {
+      what: "Chained comparison",
+      where: 6,
+      why: 'A comparison takes one "<", so another "<=" cannot follow it',
+      fix: 'Join the comparisons with "&&", or remove this "<="',
+    },
+  });
+});
+
+test('interpretTuff("1 == 1 != 1") => chained comparison error', () => {
+  expect(interpretTuff("1 == 1 != 1")).toEqual({
+    ok: false,
+    error: {
+      what: "Chained comparison",
+      where: 7,
+      why: 'A comparison takes one "==", so another "!=" cannot follow it',
+      fix: 'Join the comparisons with "&&", or remove this "!="',
+    },
+  });
+});
+
+test('interpretTuff("true == true") => boolean used as a number error', () => {
+  expect(interpretTuff("true == true")).toEqual({
+    ok: false,
+    error: {
+      what: "Boolean used as a number",
+      where: 0,
+      why: '"true" is a boolean, not a number',
+      fix: "Use a number instead of the boolean, or drop the operator",
+    },
+  });
+});
