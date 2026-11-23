@@ -874,6 +874,14 @@ test("interpretTuff: assigning a struct field the declaration does not mark mut 
   expectErrorKind("struct Point { mut x : I32, y : I32 } let mut p : Point = Point { x : 1I32, y : 2I32 }; p.y = 5I32; p.y", "ImmutableAssignment");
 });
 
+test("interpretTuff: assigning a mut struct field through a binding that is not mut is an ImmutableAssignment error", () => {
+  expectErrorKind("struct P { mut x : I32 } let p : P = P { x : 1I32 }; p.x = 2I32; p.x", "ImmutableAssignment");
+});
+
+test("interpretTuff: assigning a mut struct field through a mut binding returns the new value", () => {
+  expect(interpretTuff("struct P { mut x : I32 } let mut p : P = P { x : 1I32 }; p.x = 2I32; p.x")).toEqual(ok(2));
+});
+
 test("interpretTuff: a struct constructor that leaves out a field is a MissingField error", () => {
   expectErrorKind("struct Point { x : I32, y : I32 } let pt = Point { x : 3I32 }; pt.x", "MissingField");
 });
