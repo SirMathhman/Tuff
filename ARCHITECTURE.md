@@ -13,7 +13,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 ### Bindings and scope
 
-- **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment.
+- **Binding**: a name paired with a value, introduced by `let`. `let mut` allows reassignment. A binding keeps its annotation for its whole life, so reassignment checks the annotation itself, not only the type of the value it replaces. An annotated array keeps its length.
 - **Annotation**: an optional type after the name: a sized integer type, `Bool`, or an array type `[Type; length]` such as `[Bool; 3]`, where the type is a sized integer or `Bool`. Examples: `let x : U8 = 100U8;`, `let x : Bool = true;`, `let x : [Bool; 3] = [true, true, true];`. The value must have exactly that type when the binding is made, and reassignment must keep it.
 - **Scope**: the bindings visible at a point, innermost first. Inner names shadow outer ones.
 - **Reference**: a borrow of a binding, read-only (`&x`) or writable (`&mut x`). It is a live alias of that binding. A reference may be stored only in a binding or array slot that lives no longer than its target, so it never outlives its target.
@@ -183,7 +183,7 @@ Source is untrusted input. It arrives from the REPL, from files, and from a mode
 4. Split the tests by stage, beside their code, so each stage's `*.test.ts` covers its own rules and the public API file covers only the API.
 5. Retire `U64OutOfRange`: one `IntegerOutOfRange` kind carries the type name and bounds for every sized type, U64 included.
 6. Make every parser rule dispatch on token kind. Rules compare token text through `textAt` today.
-7. Derive the annotation names, the `let` type check, and the `let` error hint from one declaration in `ast.ts`, instead of writing `Bool` and the type list by hand in three places.
+7. Derive the annotation names, the `let` type check, and the `let` error hint from one declaration in `ast.ts`, instead of writing `Bool`, the type list, and `annotationName` by hand in several places.
 
 ### Later
 

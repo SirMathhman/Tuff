@@ -145,8 +145,8 @@ function assign(
     return value;
   }
 
-  if (!sameType(target.cell.value, value.value)) {
-    return typeMismatchAt(statement.where, typeName(target.cell.value), typeName(value.value));
+  if (!acceptsValue(target.cell, value.value)) {
+    return typeMismatchAt(statement.where, expectedName(target.cell), typeName(value.value));
   }
 
   if (escapes(value.value, target)) {
@@ -257,6 +257,15 @@ function annotationName(annotation: Annotation): string {
   return typeof annotation === "string" ? `a ${annotation}` : `[${annotation.element}; ${annotation.length}]`;
 }
 
+// A binding with an annotation keeps it, so an assignment must match the annotation, not just the old element type.
+function acceptsValue(cell: Cell, value: Value): boolean {
+  return cell.annotation === undefined ? sameType(cell.value, value) : matchesAnnotation(value, cell.annotation);
+}
+
+function expectedName(cell: Cell): string {
+  return cell.annotation === undefined ? typeName(cell.value) : annotationName(cell.annotation);
+}
+
 // Runs the body while the condition is true. The body's bindings end with each pass, and its
 // changes to outer mut names persist. The loop is iterative, so long loops do not deepen the call stack.
 function runWhile(
@@ -355,7 +364,7 @@ function runStatements(
 
       return ok({
         name: statement.name,
-        cell: { value: value.value, moved: false },
+        cell: { value: value.value, moved: false, annotation: statement.annotation },
         mutable: statement.mutable,
         parent: acc.value,
       });
@@ -726,8 +735,8 @@ function assignThroughReference(
 
   const target = reference.target;
 
-  if (!sameType(target.cell.value, replacement.value)) {
-    return typeMismatchAt(where, typeName(target.cell.value), typeName(replacement.value));
+  if (!acceptsValue(target.cell, replacement.value)) {
+    return typeMismatchAt(where, expectedName(target.cell), typeName(replacement.value));
   }
 
   if (escapes(replacement.value, target)) {

@@ -1,4 +1,4 @@
-import { type IntType } from "../ast.ts";
+import { type Annotation, type IntType } from "../ast.ts";
 import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
 
 /**
@@ -91,6 +91,8 @@ export interface Cell {
   value: Value;
   /** True when a whole array was used by name and must be assigned before reuse. */
   moved: boolean;
+  /** The type the binding was declared with, if any. Every later assignment must keep it. */
+  annotation ?: Annotation;
 }
 
 /**
