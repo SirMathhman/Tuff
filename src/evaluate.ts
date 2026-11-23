@@ -52,6 +52,7 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   //   statement  = "let" [ "mut" ] name "=" value ";"
   //              | name "=" value ";"
   //              | "*" name "=" expression ";"
+  //              | "{" { statement } "}"   (only when the block ends with ";")
   //   value      = expression | "&" name | "&" "mut" name
   //   expression = and { "||" and }
   //   and        = comparison { "&&" comparison }

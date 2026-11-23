@@ -591,3 +591,22 @@ test('interpretTuff("if 1 < 2 1 else 2") => condition needs parentheses error', 
 test('interpretTuff("if (1 < 2) 1 else 2") => 1', () => {
   expect(interpretTuff("if (1 < 2) 1 else 2")).toEqual({ ok: true, value: 1 });
 });
+
+test('interpretTuff("let mut x = 0; { x = 1; } x") => 1', () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; } x")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let mut x = 0; { x = 1; 2; } x") => value in statement block error', () => {
+  expect(interpretTuff("let mut x = 0; { x = 1; 2; } x")).toEqual({
+    ok: false,
+    error: {
+      what: "Value in statement block",
+      where: 24,
+      why: '"2" is a value, but a block that ends with ";" has no value',
+      fix: 'Delete this value, or end the block with a value instead of ";"',
+    },
+  });
+});

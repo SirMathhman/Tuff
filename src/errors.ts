@@ -164,6 +164,17 @@ export function numberAsCondition(
   };
 }
 
+// Reported when a block statement holds a value. A block that ends with ";" has
+// no final value, so only statements may appear in it. `text` is the token found.
+export function valueInStatementBlock(where: number, text: string): TuffError {
+  return {
+    what: "Value in statement block",
+    where,
+    why: `${operandSubject(text)} is a value, but a block that ends with ";" has no value`,
+    fix: 'Delete this value, or end the block with a value instead of ";"',
+  };
+}
+
 // Reported when an if branch is not followed by "else". `where` is the offset of
 // the token found there, or the source length at the end.
 export function missingElse(where: number): TuffError {

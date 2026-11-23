@@ -26,7 +26,10 @@ as the language grows. It describes the ideal, not the current code.
   error in either is reported, but only the chosen branch keeps its assignments,
   as with `&&` and `||`.
 - **Sequence**: zero or more statements, then one expression. A statement is
-  `let [mut] name = value ;`, `name = value ;`, or `*name = expression ;`. The
+  `let [mut] name = value ;`, `name = value ;`, `*name = expression ;`, or a
+  block `{ statements }` that ends with `;`. A block statement has no final
+  value, so only statements may appear in it (`ValueInStatementBlock`
+  otherwise). It needs no `;` after it, and its lets stay inside it. The
   sequence evaluates to its final expression. A `let` name is visible to the
   rest of its sequence, and a name may be declared only once per sequence. Names
   are not visible after the block that declares them closes.
@@ -129,7 +132,7 @@ src/parse/factor.ts      number, boolean, name, group, and if; the only file tha
 src/parse/deref.ts       "*name" read through a reference (a factor)
 src/parse/group.ts       "( expression )" and "{ sequence }"
 src/parse/conditional.ts "if" factor, then two branches joined by "else"
-src/parse/sequence.ts    let, assignment, and "*name =" statements, then an
+src/parse/sequence.ts    let, assignment, "*name =", and block statements, then an
                          expression
 src/parse/value.ts       a let or assignment value: "&name", "&mut name", or an
                          expression
@@ -241,6 +244,11 @@ If:
   boolean. `text` is the condition's spelling. When the condition is followed
   by a comparison or another operator, the fix names the parentheses that the
   condition needs, for example `if (1 < 2) ...`.
+
+Blocks:
+
+- `ValueInStatementBlock { offset, text }`: a block that ends with `;` holds a
+  value, for example `{ x = 1; 2; }`. `offset` is the value's position.
 
 Names, assignments, and scope:
 
