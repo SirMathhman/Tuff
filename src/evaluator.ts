@@ -1,19 +1,22 @@
 import {
   ok,
   immutableAssignmentAt,
+  indexOutOfRangeAt,
   resultTooLargeAt,
   typeMismatchAt,
   undefinedNameAt,
+  useAfterMoveAt,
   type ErrorWhere,
   type Result,
   type TuffError,
 } from "./errors.ts";
 import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "./ast.ts";
 
-type Value = number | boolean | string;
+type Value = number | boolean | string | Value[];
 
 interface Cell {
   value: Value;
+  moved: boolean;
 }
 
 interface Scope {
@@ -30,7 +33,20 @@ function typeName(value: Value): string {
     return "a number";
   }
 
-  return typeof value === "boolean" ? "a boolean" : "a string";
+  if (typeof value === "boolean") {
+    return "a boolean";
+  }
+
+  return typeof value === "string" ? "a string" : "an array";
+}
+
+// Two values have the same type when both are arrays or both are the same primitive type.
+function sameType(left: Value, right: Value): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right);
+  }
+
+  return typeof left === typeof right;
 }
 
 function asNumber(value: Value, where: ErrorWhere): Result<number, TuffError> {
@@ -67,6 +83,36 @@ function lookup(name: string, scope: Scope | undefined): Scope | undefined {
   return current;
 }
 
+// The cell of a name that is declared and not moved.
+function findCell(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Cell, TuffError> {
+  const found = lookup(name, scope);
+
+  if (found === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  if (found.cell.moved) {
+    return useAfterMoveAt(where);
+  }
+
+  return ok(found.cell);
+}
+
+// Using a whole array by name moves it: a second use is an error until the name is assigned again.
+function readWhole(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+  const cell = findCell(name, where, scope);
+
+  if (!cell.ok) {
+    return cell;
+  }
+
+  if (Array.isArray(cell.value.value)) {
+    cell.value.moved = true;
+  }
+
+  return ok(cell.value.value);
+}
+
 function assign(
   statement: AssignStatement,
   scope: Scope | undefined,
@@ -88,11 +134,84 @@ function assign(
     return value;
   }
 
-  if (typeof value.value !== typeof target.cell.value) {
+  if (!sameType(target.cell.value, value.value)) {
     return typeMismatchAt(statement.where, typeName(target.cell.value), typeName(value.value));
   }
 
   target.cell.value = value.value;
+  target.cell.moved = false;
+
+  return ok(scope);
+}
+
+// The position of an element: a number inside an array of the given length.
+function resolveSlot(index: Expr, length: number, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<number, TuffError> {
+  const position = evaluateRule(index, scope);
+
+  if (!position.ok) {
+    return position;
+  }
+
+  const slot = asNumber(position.value, where);
+
+  if (!slot.ok) {
+    return slot;
+  }
+
+  if (slot.value < 0 || slot.value >= length) {
+    return indexOutOfRangeAt(where, slot.value, length);
+  }
+
+  return ok(slot.value);
+}
+
+function assignElement(
+  name: string,
+  index: Expr,
+  value: Expr,
+  where: ErrorWhere,
+  scope: Scope | undefined,
+  evaluateRule: EvalRule,
+): Result<Scope | undefined, TuffError> {
+  const target = lookup(name, scope);
+
+  if (target === undefined) {
+    return undefinedNameAt(where);
+  }
+
+  if (!target.mutable) {
+    return immutableAssignmentAt(where);
+  }
+
+  if (target.cell.moved) {
+    return useAfterMoveAt(where);
+  }
+
+  const array = target.cell.value;
+
+  if (!Array.isArray(array)) {
+    return typeMismatchAt(where, "an array", typeName(array));
+  }
+
+  const slot = resolveSlot(index, array.length, where, scope, evaluateRule);
+
+  if (!slot.ok) {
+    return slot;
+  }
+
+  const replacement = evaluateRule(value, scope);
+
+  if (!replacement.ok) {
+    return replacement;
+  }
+
+  const current = array[slot.value];
+
+  if (current !== undefined && !sameType(current, replacement.value)) {
+    return typeMismatchAt(where, typeName(current), typeName(replacement.value));
+  }
+
+  array[slot.value] = replacement.value;
 
   return ok(scope);
 }
@@ -110,6 +229,10 @@ function runStatements(
 
       if (statement.kind === "assign") {
         return assign(statement, acc.value, evaluateRule);
+      }
+
+      if (statement.kind === "element") {
+        return assignElement(statement.name, statement.index, statement.value, statement.where, acc.value, evaluateRule);
       }
 
       if (statement.kind === "scope") {
@@ -142,7 +265,7 @@ function runStatements(
 
       return ok({
         name: statement.name,
-        cell: { value: value.value },
+        cell: { value: value.value, moved: false },
         mutable: statement.mutable,
         parent: acc.value,
       });
@@ -187,12 +310,6 @@ function evaluateNegate(operand: Expr, where: ErrorWhere, scope: Scope | undefin
 
     return number.ok ? ok(-number.value) : number;
   });
-}
-
-function evaluateReference(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
-  const found = lookup(name, scope);
-
-  return found === undefined ? undefinedNameAt(where) : ok(found.cell.value);
 }
 
 function evaluateIf(
@@ -276,6 +393,10 @@ function numericCompare(op: CompareOp, left: number, right: number): boolean {
 }
 
 function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return typeMismatchAt(where, "a number, boolean, or string", "an array");
+  }
+
   if (op === "==" || op === "!=") {
     if (typeof left !== typeof right) {
       return typeMismatchAt(where, typeName(left), typeName(right));
@@ -367,11 +488,66 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
   );
 }
 
+// Each element must have the type of the first element, so an array has one element type.
+function evaluateArray(elements: Expr[], where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value[], TuffError> {
+  return elements.reduce<Result<Value[], TuffError>>(
+    (acc, element) => {
+      if (!acc.ok) {
+        return acc;
+      }
+
+      const value = evaluateRule(element, scope);
+
+      if (!value.ok) {
+        return value;
+      }
+
+      const first = acc.value[0];
+
+      if (first !== undefined && !sameType(first, value.value)) {
+        return typeMismatchAt(where, typeName(first), typeName(value.value));
+      }
+
+      return ok([...acc.value, value.value]);
+    },
+    ok([]),
+  );
+}
+
+// Indexing does not move the array. A nested array is copied on read, so the copy can be changed independently.
+function evaluateIndex(target: Expr, index: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
+  const container = target.kind === "reference" ? readWithoutMoving(target.name, target.where, scope) : evaluateRule(target, scope);
+
+  if (!container.ok) {
+    return container;
+  }
+
+  if (!Array.isArray(container.value)) {
+    return typeMismatchAt(where, "an array", typeName(container.value));
+  }
+
+  const slot = resolveSlot(index, container.value.length, where, scope, evaluateRule);
+
+  if (!slot.ok) {
+    return slot;
+  }
+
+  const element = container.value[slot.value];
+
+  return ok(Array.isArray(element) ? [...element] : element ?? 0);
+}
+
+function readWithoutMoving(name: string, where: ErrorWhere, scope: Scope | undefined): Result<Value, TuffError> {
+  const cell = findCell(name, where, scope);
+
+  return cell.ok ? ok(cell.value.value) : cell;
+}
+
 /**
- * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, and values that leave the safe integer range.
+ * Computes the value of a parsed expression, reporting undeclared names, invalid assignments, type mismatches, bad indexes, moved arrays, and values that leave the safe integer range.
  * @param expr - The expression tree produced by the parser.
  * @param scope - The let bindings visible to the expression, innermost first.
- * @returns The computed value, a number or a boolean, or a structured error.
+ * @returns The computed value, a number, boolean, string, or array, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
   if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
@@ -383,7 +559,17 @@ export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
   }
 
   if (expr.kind === "reference") {
-    return evaluateReference(expr.name, expr.where, scope);
+    return readWhole(expr.name, expr.where, scope);
+  }
+
+  if (expr.kind === "array") {
+    const elements = evaluateArray(expr.elements, expr.where, scope, evaluate);
+
+    return elements.ok ? ok(elements.value) : elements;
+  }
+
+  if (expr.kind === "index") {
+    return evaluateIndex(expr.target, expr.index, expr.where, scope, evaluate);
   }
 
   if (expr.kind === "if") {

@@ -86,6 +86,41 @@ function parseAssign(
   });
 }
 
+// An assignment to one element, as in array[0] = 5; : a name, a bracketed index, and "=".
+function isElementAssign(tokens: Token[], pos: number): boolean {
+  if (!isIdentifier(textAt(tokens, pos)) || textAt(tokens, pos + 1) !== "[") {
+    return false;
+  }
+
+  const closing = closingOf(tokens, pos + 1, "[", "]");
+
+  return closing !== undefined && textAt(tokens, closing + 1) === "=";
+}
+
+function parseElementAssign(tokens: Token[], pos: number, depth: number, expr: ExprRule): Result<StatementParsed, TuffError> {
+  const closing = closingOf(tokens, pos + 1, "[", "]") ?? pos + 1;
+  const index = expr(tokens, pos + 2, depth + 1);
+
+  if (!index.ok) {
+    return index;
+  }
+
+  if (index.value.next !== closing) {
+    return invalidAt(tokens, index.value.next, "']' after the index", "Close the index with ']'.");
+  }
+
+  const value = parseStatementValue(tokens, closing + 2, depth, expr, "element assignment");
+
+  if (!value.ok) {
+    return value;
+  }
+
+  return ok({
+    statement: { kind: "element", name: textAt(tokens, pos), index: index.value.value, value: value.value.value, where: whereAt(tokens, pos) },
+    next: value.value.next,
+  });
+}
+
 function startsStatement(tokens: Token[], pos: number): boolean {
   const token = textAt(tokens, pos);
 
@@ -256,7 +291,7 @@ function parseStatementList(
   const statements: Statement[] = [];
   let next = pos;
 
-  while (startsStatement(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
+  while (startsStatement(tokens, next) || isElementAssign(tokens, next) || isStatementBlock(tokens, next) || isBranchStatement(tokens, next)) {
     if (textAt(tokens, next) === "if") {
       const branch = parseBranchStatement(tokens, next, depth, expr, parseStatementList);
 
@@ -287,7 +322,9 @@ function parseStatementList(
       const parsed =
         textAt(tokens, next) === "let"
           ? parseLet(tokens, next, depth, expr)
-          : parseAssign(tokens, next, depth, expr);
+          : isElementAssign(tokens, next)
+            ? parseElementAssign(tokens, next, depth, expr)
+            : parseAssign(tokens, next, depth, expr);
 
       if (!parsed.ok) {
         return parsed;

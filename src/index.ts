@@ -1,6 +1,6 @@
-import { ok, type Result, type TuffError } from "./errors.ts";
+import { ok, typeMismatchAt, type Result, type TuffError } from "./errors.ts";
 import { tokenize } from "./tokenizer.ts";
-import { invalidAt } from "./parse-errors.ts";
+import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./evaluator.ts";
@@ -52,6 +52,10 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
 
   if (typeof result.value === "boolean") {
     return ok(result.value ? 1 : 0);
+  }
+
+  if (Array.isArray(result.value)) {
+    return typeMismatchAt(whereAt(tokens, 0), "a number, boolean, or string", "an array");
   }
 
   if (typeof result.value === "string") {

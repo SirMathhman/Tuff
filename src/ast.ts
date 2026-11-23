@@ -100,7 +100,15 @@ interface BranchStatement {
 /**
  * A statement inside a block body: a let declaration, an assignment, or a statement block.
  */
-export type Statement = LetStatement | AssignStatement | ScopeStatement | BranchStatement;
+interface ElementStatement {
+  kind: "element";
+  name: string;
+  index: Expr;
+  value: Expr;
+  where: ErrorWhere;
+}
+
+export type Statement = LetStatement | AssignStatement | ScopeStatement | BranchStatement | ElementStatement;
 
 interface BlockNode {
   kind: "block";
@@ -127,7 +135,22 @@ interface NotNode {
   where: ErrorWhere;
 }
 
+interface ArrayNode {
+  kind: "array";
+  elements: Expr[];
+  where: ErrorWhere;
+}
+
+interface IndexNode {
+  kind: "index";
+  target: Expr;
+  index: Expr;
+  where: ErrorWhere;
+}
+
 export type Expr =
+  | ArrayNode
+  | IndexNode
   | NumberNode
   | BooleanNode
   | StringNode

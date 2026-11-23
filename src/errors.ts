@@ -104,6 +104,22 @@ export interface TypeMismatch extends TuffErrorDetails {
 /**
  * Any error that interpretTuff can return.
  */
+/**
+ * An array index is negative or past the end of the array.
+ */
+export interface IndexOutOfRange extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "IndexOutOfRange";
+}
+
+/**
+ * A whole array was used by name after it had already been moved.
+ */
+export interface UseAfterMove extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "UseAfterMove";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -111,7 +127,9 @@ export type TuffError =
   | NestingTooDeep
   | UndefinedName
   | ImmutableAssignment
-  | TypeMismatch;
+  | TypeMismatch
+  | IndexOutOfRange
+  | UseAfterMove;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -144,6 +162,41 @@ export function ok<T>(value: T): Ok<T> {
  */
 export function err<E>(error: E): Err<E> {
   return { ok: false, error };
+}
+
+/**
+ * Builds an UndefinedName error for a reference to an undeclared name.
+ * @param where - The token where the name is referenced.
+ * @returns An Err result holding the UndefinedName error.
+ */
+/**
+ * Builds an IndexOutOfRange error for an index outside an array.
+ * @param where - The token of the index expression.
+ * @param index - The index that was used.
+ * @param length - The length of the array.
+ * @returns An Err result holding the IndexOutOfRange error.
+ */
+export function indexOutOfRangeAt(where: ErrorWhere, index: number, length: number): Err<TuffError> {
+  return err({
+    where,
+    fix: `Use an index from 0 to ${length - 1}.`,
+    why: `Index ${index} is outside an array of length ${length}.`,
+    kind: "IndexOutOfRange",
+  });
+}
+
+/**
+ * Builds a UseAfterMove error for a whole array used after it was moved.
+ * @param where - The token that names the moved array.
+ * @returns An Err result holding the UseAfterMove error.
+ */
+export function useAfterMoveAt(where: ErrorWhere): Err<TuffError> {
+  return err({
+    where,
+    fix: `Assign ${where.text} a new value before using it again.`,
+    why: `${where.text} was moved by an earlier use of the whole array.`,
+    kind: "UseAfterMove",
+  });
 }
 
 /**

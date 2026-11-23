@@ -101,6 +101,10 @@ function parsePrimary(
     return ok({ value: inner.value.value, next: inner.value.next + 1 });
   }
 
+  if (token === "[") {
+    return parseArray(tokens, pos, depth, rules);
+  }
+
   if (token === "true" || token === "false") {
     return ok({ value: { kind: "boolean", value: token === "true" }, next: pos + 1 });
   }
@@ -228,6 +232,64 @@ function parseIf(
   });
 }
 
+function parseArray(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  if (depth >= MAX_NESTING_DEPTH) {
+    return nestingTooDeepAt(tokens, pos);
+  }
+
+  const elements: Expr[] = [];
+  let next = pos + 1;
+  let more = textAt(tokens, next) !== "]";
+
+  while (more) {
+    const element = rules.expr(tokens, next, depth + 1);
+
+    if (!element.ok) {
+      return element;
+    }
+
+    elements.push(element.value.value);
+    next = element.value.next;
+    more = textAt(tokens, next) === ",";
+    next = more ? next + 1 : next;
+  }
+
+  if (textAt(tokens, next) !== "]") {
+    return invalidAt(tokens, next, "']' to close the array", "Close the array with ']'.");
+  }
+
+  return ok({ value: { kind: "array", elements, where: whereAt(tokens, pos) }, next: next + 1 });
+}
+
+// A primary followed by any number of index suffixes, as in grid[0][1].
+function parseIndexed(tokens: Token[], pos: number, depth: number, rules: ParseRules): Parse {
+  const base = parsePrimary(tokens, pos, depth, rules);
+
+  if (!base.ok) {
+    return base;
+  }
+
+  let target: Expr = base.value.value;
+  let next = base.value.next;
+
+  while (textAt(tokens, next) === "[") {
+    const index = rules.expr(tokens, next + 1, depth + 1);
+
+    if (!index.ok) {
+      return index;
+    }
+
+    if (textAt(tokens, index.value.next) !== "]") {
+      return invalidAt(tokens, index.value.next, "']' after the index", "Close the index with ']'.");
+    }
+
+    target = { kind: "index", target, index: index.value.value, where: whereAt(tokens, next) };
+    next = index.value.next + 1;
+  }
+
+  return ok({ value: target, next });
+}
+
 function parseFactor(
   tokens: Token[],
   pos: number,
@@ -235,7 +297,7 @@ function parseFactor(
   rules: ParseRules,
 ): Parse {
   if (textAt(tokens, pos) === "-") {
-    const operand = parsePrimary(tokens, pos + 1, depth, rules);
+    const operand = parseIndexed(tokens, pos + 1, depth, rules);
 
     return operand.ok
       ? ok({ value: { kind: "negate", operand: operand.value.value, where: whereAt(tokens, pos) }, next: operand.value.next })
@@ -254,7 +316,7 @@ function parseFactor(
       : operand;
   }
 
-  return parsePrimary(tokens, pos, depth, rules);
+  return parseIndexed(tokens, pos, depth, rules);
 }
 
 function parseTerm(

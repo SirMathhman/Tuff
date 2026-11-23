@@ -484,6 +484,38 @@ test("interpretTuff: a string in a let binding compares equal", () => {
   expect(interpretTuff("let c = 'x'; c == 'x'")).toEqual(ok(1));
 });
 
+test("interpretTuff: let array = [1, 2, 3]; array[0] + array[1] + array[2] returns Ok(6)", () => {
+  expect(interpretTuff("let array = [1, 2, 3]; array[0] + array[1] + array[2]")).toEqual(ok(6));
+});
+
+test("interpretTuff: an index past the end is an IndexOutOfRange error", () => {
+  expectErrorKind("let mut a = [1, 2]; a[5]", "IndexOutOfRange");
+});
+
+test("interpretTuff: a negative index is an IndexOutOfRange error", () => {
+  expectErrorKind("let mut a = [1, 2]; a[-1]", "IndexOutOfRange");
+});
+
+test("interpretTuff: a whole array used after a move is a UseAfterMove error", () => {
+  expectErrorKind("let a = [1]; let b = a; a[0]", "UseAfterMove");
+});
+
+test("interpretTuff: an element assignment updates the element: 5 + 2 returns Ok(7)", () => {
+  expect(interpretTuff("let mut a = [1, 2]; a[0] = 5; a[0] + a[1]")).toEqual(ok(7));
+});
+
+test("interpretTuff: an element of the wrong type is a TypeMismatch error", () => {
+  expectErrorKind("let mut a = [1]; a[0] = true;", "TypeMismatch");
+});
+
+test("interpretTuff: mixed element types are a TypeMismatch error", () => {
+  expectErrorKind("[1, true]", "TypeMismatch");
+});
+
+test("interpretTuff: nested indexing grid[1][0] returns Ok(3)", () => {
+  expect(interpretTuff("let grid = [[1, 2], [3, 4]]; grid[1][0]")).toEqual(ok(3));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

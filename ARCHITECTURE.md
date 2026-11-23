@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a boolean, or a one-character string. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
+- **Value**: a number, a boolean, a one-character string, or an array of one element type. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -98,7 +98,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 ### Tokens
 
 - Brackets, operators, `=`, and `;` are self-delimiting, so spacing never changes meaning.
-- Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them.
+- Spaces, tabs, and newlines separate tokens. `true` and `false` are booleans. A single-quoted literal such as `'a'` is a one-character string, with backslash escapes for backslash, single quote, newline, and tab; `==` and `!=` compare strings, and other operators reject them. `[a, b]` is an array of one element type, `array[i]` reads an element (out-of-range indexes are IndexOutOfRange errors), and `name[i] = expr;` assigns an element of a mut array. Using a whole array by name moves it: a later use is a UseAfterMove error until the name is assigned again. Arrays cannot be compared or returned as a program result.
 - The parser dispatches on token kind, never on token text. An unclosed quote reports as an unclosed string, never as a bad escape.
 
 ### Compatibility
