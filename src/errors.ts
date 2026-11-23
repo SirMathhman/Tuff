@@ -140,13 +140,13 @@ export function booleanAsNumber(where: number, text: string): TuffError {
   };
 }
 
-// Reported when a number is used as an operand of "||". `where` is the offset of
-// the "||".
-export function numberAsBoolean(where: number): TuffError {
+// Reported when a number is used as an operand of "||" or "&&". `where` is the
+// offset of the operator, and `symbol` is that operator.
+export function numberAsBoolean(where: number, symbol: string): TuffError {
   return {
     what: "Number used as a boolean",
     where,
-    why: 'Both sides of "||" must be booleans',
-    fix: 'Use a boolean on each side of "||", or remove the number',
+    why: `Both sides of "${symbol}" must be booleans`,
+    fix: `Use a boolean on each side of "${symbol}", or remove the number`,
   };
 }

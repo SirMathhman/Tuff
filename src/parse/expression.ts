@@ -68,9 +68,71 @@ function parseSum(
   return ok({ value: sum, next, scope: current });
 }
 
-// Parses sums joined by "||". Both sides must be booleans. The right side is
-// skipped when the left side is true: its assignments are discarded, though its
-// errors are still reported.
+// A parser for one operand of a boolean operator. It takes the factor parser, as
+// parseSum does.
+type OperandParser = (
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+) => ParseResult<Parsed>;
+
+// Parses operands joined by one boolean operator, left to right. Both sides must
+// be booleans. The right side is skipped when the left side already decides the
+// result: true for "||", false for "&&". Its assignments are then discarded,
+// though its errors are still reported.
+function parseChain(
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+  joiner: "or" | "and",
+  operand: OperandParser,
+): ParseResult<Parsed> {
+  const symbol = joiner === "or" ? "||" : "&&";
+  const left = operand(tokens, index, scope, end, factor);
+  if (!left.ok) {
+    return left;
+  }
+  let value: Operand = left.value.value;
+  let next = left.value.next;
+  let current = left.value.scope;
+  let joinToken = tokens[next];
+  while (joinToken?.kind === joiner) {
+    const right = operand(tokens, next + 1, current, end, factor);
+    if (!right.ok) {
+      return right;
+    }
+    const rightValue = right.value.value;
+    if (typeof value !== "boolean" || typeof rightValue !== "boolean") {
+      return err(numberAsBoolean(joinToken.pos, symbol));
+    }
+    const decided = joiner === "or" ? value : !value;
+    if (!decided) {
+      value = rightValue;
+      current = right.value.scope;
+    }
+    next = right.value.next;
+    joinToken = tokens[next];
+  }
+  return ok({ value, next, scope: current });
+}
+
+// Parses sums joined by "&&". "&&" binds tighter than "||".
+function parseAnd(
+  tokens: Token[],
+  index: number,
+  scope: Scope,
+  end: number,
+  factor: Parser,
+): ParseResult<Parsed> {
+  return parseChain(tokens, index, scope, end, factor, "and", parseSum);
+}
+
+// Parses "&&" groups joined by "||". The whole expression of a let, an
+// assignment, a group, or a block.
 export function parseExpression(
   tokens: Token[],
   index: number,
@@ -78,29 +140,5 @@ export function parseExpression(
   end: number,
   factor: Parser,
 ): ParseResult<Parsed> {
-  const left = parseSum(tokens, index, scope, end, factor);
-  if (!left.ok) {
-    return left;
-  }
-  let value: Operand = left.value.value;
-  let next = left.value.next;
-  let current = left.value.scope;
-  let orToken = tokens[next];
-  while (orToken?.kind === "or") {
-    const right = parseSum(tokens, next + 1, current, end, factor);
-    if (!right.ok) {
-      return right;
-    }
-    const rightValue = right.value.value;
-    if (typeof value !== "boolean" || typeof rightValue !== "boolean") {
-      return err(numberAsBoolean(orToken.pos));
-    }
-    if (!value) {
-      value = rightValue;
-      current = right.value.scope;
-    }
-    next = right.value.next;
-    orToken = tokens[next];
-  }
-  return ok({ value, next, scope: current });
+  return parseChain(tokens, index, scope, end, factor, "or", parseAnd);
 }

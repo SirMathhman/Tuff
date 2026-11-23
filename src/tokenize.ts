@@ -71,6 +71,11 @@ export interface OrToken {
   pos: number;
 }
 
+export interface AndToken {
+  kind: "and";
+  pos: number;
+}
+
 export type Token =
   | NumberToken
   | OperatorToken
@@ -83,7 +88,8 @@ export type Token =
   | EqualsToken
   | SemicolonToken
   | BooleanToken
-  | OrToken;
+  | OrToken
+  | AndToken;
 
 function isDigit(char: string): boolean {
   return char >= "0" && char <= "9";
@@ -148,6 +154,9 @@ export function tokenize(source: string): Result<Token[], TuffError> {
     } else if (char === "|" && source.charAt(index + 1) === "|") {
       tokens = [...tokens, { kind: "or", pos: index }];
       index += 2;
+    } else if (char === "&" && source.charAt(index + 1) === "&") {
+      tokens = [...tokens, { kind: "and", pos: index }];
+      index += 2;
     } else if (char === "&") {
       tokens = [...tokens, { kind: "ampersand", pos: index }];
       index++;
@@ -203,6 +212,9 @@ export function tokenText(token: Token): string {
   }
   if (token.kind === "or") {
     return "||";
+  }
+  if (token.kind === "and") {
+    return "&&";
   }
   return ";";
 }

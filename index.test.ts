@@ -245,6 +245,23 @@ test('interpretTuff("let x = true; x") => 1', () => {
   expect(interpretTuff("let x = true; x")).toEqual({ ok: true, value: 1 });
 });
 
+test('interpretTuff("true && false") => 0', () => {
+  expect(interpretTuff("true && false")).toEqual({ ok: true, value: 0 });
+});
+
+test('interpretTuff("true || false && false") => 1 (&& binds tighter)', () => {
+  expect(interpretTuff("true || false && false")).toEqual({
+    ok: true,
+    value: 1,
+  });
+});
+
+test('interpretTuff("let mut x = 0; let y = false && { x = 1; true }; x") => 0 (right side skipped)', () => {
+  expect(
+    interpretTuff("let mut x = 0; let y = false && { x = 1; true }; x"),
+  ).toEqual({ ok: true, value: 0 });
+});
+
 test('interpretTuff("true || false") => 1', () => {
   expect(interpretTuff("true || false")).toEqual({ ok: true, value: 1 });
 });
