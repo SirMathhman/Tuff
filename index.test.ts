@@ -49,6 +49,38 @@ test("every error has why, where, and fix", () => {
   });
 });
 
+test("interpretTuff('99999999999 * 99999999999') is a ResultTooLarge error", () => {
+  const result = interpretTuff("99999999999 * 99999999999");
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.error.kind).toBe("ResultTooLarge");
+});
+
+test("interpretTuff('9007199254740991 + 2 - 2') is a ResultTooLarge error", () => {
+  const result = interpretTuff("9007199254740991 + 2 - 2");
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.error.kind).toBe("ResultTooLarge");
+});
+
+test("interpretTuff('9007199254740991 - 1') returns Ok(9007199254740990)", () => {
+  expect(interpretTuff("9007199254740991 - 1")).toEqual(ok(9007199254740990));
+});
+
+test("interpretTuff('2 * -3') returns Ok(-6)", () => {
+  expect(interpretTuff("2 * -3")).toEqual(ok(-6));
+});
+
+test("interpretTuff('- 2 * 3') returns Ok(-6)", () => {
+  expect(interpretTuff("- 2 * 3")).toEqual(ok(-6));
+});
+
+test("interpretTuff('1 * 2 * 3 - 4 * 5') returns Ok(-14)", () => {
+  expect(interpretTuff("1 * 2 * 3 - 4 * 5")).toEqual(ok(-14));
+});
+
+test("interpretTuff('2\\t + 3') returns Ok(5)", () => {
+  expect(interpretTuff("2\t + 3")).toEqual(ok(5));
+});
+
 test("interpretTuff('') is an error, not 0", () => {
   expect(interpretTuff("").ok).toBe(false);
 });

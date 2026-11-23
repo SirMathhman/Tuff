@@ -193,6 +193,7 @@ function flagOverflow(acc: Accumulator, index: number): Accumulator {
 
 export function interpretTuff(tuffSource: string): Result<number, TuffError> {
   const tokens = tuffSource
+    .replaceAll("\t", " ")
     .replaceAll("+", " + ")
     .replaceAll("-", " - ")
     .replaceAll("*", " * ")
