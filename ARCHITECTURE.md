@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, and a string result is its Unicode code point.
+- **Value**: a number, a U64, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. A U64 is an exact unsigned 64-bit integer, written with the suffix U64, such as `100U64`. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a U64 result is a number only when it is at most 2^53-1.
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -81,6 +81,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Bitwise `|` and `&` sit between `&&` and comparisons, and `<<` and `>>` between comparisons and `+ -`. Bitwise operands are 32-bit signed integers and a shift amount is from 0 to 31; otherwise the result is a BitwiseOutOfRange error. The `&` after an operand is bitwise-and, and at the start of an operand it is a reference.
 - `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
+- A U64 takes the same operators, with results that must stay within 0 to 2^64-1 (otherwise U64OutOfRange). A U64 never mixes with a number, which is a TypeMismatch.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if

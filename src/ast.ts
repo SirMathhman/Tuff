@@ -175,12 +175,19 @@ interface IndexNode {
   where: ErrorWhere;
 }
 
+// An unsigned 64-bit integer literal, such as 100U64. Its value is already within 0 to 2^64-1.
+interface U64Node {
+  kind: "u64";
+  value: bigint;
+}
+
 export type Expr =
   | ArrayNode
   | IndexNode
   | RefNode
   | DerefNode
   | NumberNode
+  | U64Node
   | BooleanNode
   | StringNode
   | NegateNode

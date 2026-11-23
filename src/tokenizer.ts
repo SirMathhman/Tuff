@@ -107,6 +107,15 @@ export function isDigits(text: string): boolean {
 }
 
 /**
+ * Reports whether a token is a U64 literal: decimal digits followed by the suffix U64.
+ * @param text - The token to test.
+ * @returns True when the token is digits followed by U64.
+ */
+export function isU64Literal(text: string): boolean {
+  return text.endsWith("U64") && isDigits(text.slice(0, -3));
+}
+
+/**
  * Reports whether a token is a valid name: not reserved, starting with a letter or underscore.
  * @param text - The token to test.
  * @returns True when the token can be used as a name.

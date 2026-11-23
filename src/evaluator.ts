@@ -5,9 +5,11 @@ import {
   divisionByZeroAt,
   immutableAssignmentAt,
   indexOutOfRangeAt,
+  MAX_U64,
   referenceEscapesAt,
   resultTooLargeAt,
   typeMismatchAt,
+  u64OutOfRangeAt,
   undefinedNameAt,
   useAfterMoveAt,
   type ErrorWhere,
@@ -22,7 +24,8 @@ interface Reference {
   mutable: boolean;
 }
 
-type Value = number | boolean | string | Value[] | Reference;
+// A U64 is a bigint, so its full range is exact and it never equals a plain number.
+type Value = number | bigint | boolean | string | Value[] | Reference;
 
 function isReference(value: Value): value is Reference {
   return typeof value === "object" && !Array.isArray(value);
@@ -73,6 +76,10 @@ type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffErro
 function typeName(value: Value): string {
   if (typeof value === "number") {
     return "a number";
+  }
+
+  if (typeof value === "bigint") {
+    return "a U64";
   }
 
   if (typeof value === "boolean") {
@@ -179,6 +186,73 @@ function apply(op: Link["op"], left: number, right: number): number {
   }
 
   return op === "*" ? left * right : Math.trunc(left / right);
+}
+
+function asU64(value: Value, where: ErrorWhere): Result<bigint, TuffError> {
+  if (typeof value === "bigint") {
+    return ok(value);
+  }
+
+  return typeMismatchAt(where, "a U64", typeName(value));
+}
+
+// Both operands are U64. Division truncates toward zero, and a shift amount is from 0 to 31.
+function combineU64(link: Link, left: Value, right: Value): Result<Value, TuffError> {
+  const a = asU64(left, link.where);
+
+  if (!a.ok) {
+    return a;
+  }
+
+  const b = asU64(right, link.where);
+
+  if (!b.ok) {
+    return b;
+  }
+
+  if (link.op === "/" && b.value === 0n) {
+    return divisionByZeroAt(link.where);
+  }
+
+  if ((link.op === "<<" || link.op === ">>") && b.value > 31n) {
+    return bitwiseOutOfRangeAt(link.where, Number(b.value), "a shift from 0 to 31");
+  }
+
+  const value = applyU64(link.op, a.value, b.value);
+
+  return value >= 0n && value <= MAX_U64 ? ok(value) : u64OutOfRangeAt(link.where, value);
+}
+
+function applyU64(op: Link["op"], left: bigint, right: bigint): bigint {
+  if (op === "+") {
+    return left + right;
+  }
+
+  if (op === "-") {
+    return left - right;
+  }
+
+  if (op === "*") {
+    return left * right;
+  }
+
+  if (op === "/") {
+    return left / right;
+  }
+
+  if (op === "|") {
+    return left | right;
+  }
+
+  if (op === "&") {
+    return left & right;
+  }
+
+  if (op === "<<") {
+    return left << right;
+  }
+
+  return left >> right;
 }
 
 function lookup(name: string, scope: Scope | undefined): Scope | undefined {
@@ -500,7 +574,7 @@ function evaluateLogical(
   return asBoolean(rightValue.value, where);
 }
 
-function numericCompare(op: CompareOp, left: number, right: number): boolean {
+function numericCompare<T extends number | bigint>(op: CompareOp, left: T, right: T): boolean {
   if (op === "<") {
     return left < right;
   }
@@ -529,6 +603,22 @@ function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): R
     const equal = left === right;
 
     return ok(op === "==" ? equal : !equal);
+  }
+
+  if (typeof left === "bigint" || typeof right === "bigint") {
+    const u64Left = asU64(left, where);
+
+    if (!u64Left.ok) {
+      return u64Left;
+    }
+
+    const u64Right = asU64(right, where);
+
+    if (!u64Right.ok) {
+      return u64Right;
+    }
+
+    return ok(numericCompare(op, u64Left.value, u64Right.value));
   }
 
   const a = asNumber(left, where);
@@ -590,6 +680,10 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
 
       if (!right.ok) {
         return right;
+      }
+
+      if (typeof acc.value === "bigint" || typeof right.value === "bigint") {
+        return combineU64(link, acc.value, right.value);
       }
 
       const left = asNumber(acc.value, link.where);
@@ -770,7 +864,7 @@ function assignThroughReference(
  * @returns The computed value, a number, boolean, string, or array, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
-  if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
+  if (expr.kind === "number" || expr.kind === "u64" || expr.kind === "boolean" || expr.kind === "string") {
     return ok(expr.value);
   }
 

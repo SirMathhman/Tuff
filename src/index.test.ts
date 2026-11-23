@@ -644,6 +644,26 @@ test("interpretTuff: -1 & 0 returns positive zero", () => {
   expect(Object.is(result.ok ? result.value : undefined, 0)).toBe(true);
 });
 
+test("interpretTuff: \"100U64\" => 100", () => {
+  expect(interpretTuff("100U64")).toEqual(ok(100));
+});
+
+test("interpretTuff: 1U64 + 1 is a TypeMismatch error", () => {
+  expectErrorKind("1U64 + 1", "TypeMismatch");
+});
+
+test("interpretTuff: 0U64 - 1U64 is a U64OutOfRange error", () => {
+  expectErrorKind("0U64 - 1U64", "U64OutOfRange");
+});
+
+test("interpretTuff: 18446744073709551616U64 is a U64OutOfRange error", () => {
+  expectErrorKind("18446744073709551616U64", "U64OutOfRange");
+});
+
+test("interpretTuff: 18446744073709551615U64 & 1U64 returns Ok(1)", () => {
+  expect(interpretTuff("18446744073709551615U64 & 1U64")).toEqual(ok(1));
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

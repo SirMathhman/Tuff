@@ -1,7 +1,7 @@
 import { textAt, type Token } from "./tokenizer.ts";
 import { ok, type Result, type TuffError } from "./errors.ts";
 import { type Statement } from "./ast.ts";
-import { isDigits, isIdentifier } from "./tokenizer.ts";
+import { isDigits, isIdentifier, isU64Literal } from "./tokenizer.ts";
 import { whereAt, invalidAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ExprRule } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
 
@@ -177,7 +177,7 @@ function canFollowStatementBlock(token: string | undefined): boolean {
     token === "{" ||
     token === "}" ||
     token === "if" ||
-    (token !== undefined && (isDigits(token) || isIdentifier(token)))
+    (token !== undefined && (isDigits(token) || isU64Literal(token) || isIdentifier(token)))
   );
 }
 

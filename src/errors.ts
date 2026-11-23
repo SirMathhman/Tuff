@@ -152,6 +152,14 @@ export interface BitwiseOutOfRange extends TuffErrorDetails {
   kind: "BitwiseOutOfRange";
 }
 
+/**
+ * A U64 value is outside 0 to 2^64-1.
+ */
+export interface U64OutOfRange extends TuffErrorDetails {
+  /** The error kind. */
+  kind: "U64OutOfRange";
+}
+
 export type TuffError =
   | InvalidTerm
   | TermTooLarge
@@ -165,7 +173,11 @@ export type TuffError =
   | EmptyArrayLiteral
   | DivisionByZero
   | BitwiseOutOfRange
-  | ReferenceEscapes;
+  | ReferenceEscapes
+  | U64OutOfRange;
+
+/** The largest U64 value, 2^64-1. */
+export const MAX_U64 = (1n << 64n) - 1n;
 
 function describeWhere(where: ErrorWhere): string {
   return where.text === ""
@@ -248,6 +260,21 @@ export function bitwiseOutOfRangeAt(where: ErrorWhere, value: number, allowed: s
     fix: `Use a value that is ${allowed}.`,
     why: `${value} is outside the allowed range: it must be ${allowed}.`,
     kind: "BitwiseOutOfRange",
+  });
+}
+
+/**
+ * Builds a U64OutOfRange error for a U64 value outside 0 to 2^64-1.
+ * @param where - The token of the literal or operator that produced the value.
+ * @param value - The value that is out of range.
+ * @returns An Err result holding the U64OutOfRange error.
+ */
+export function u64OutOfRangeAt(where: ErrorWhere, value: bigint): Err<TuffError> {
+  return err({
+    where,
+    fix: `Use a U64 value from 0 to ${MAX_U64}.`,
+    why: `${value} is outside the U64 range, which runs from 0 to ${MAX_U64}.`,
+    kind: "U64OutOfRange",
   });
 }
 

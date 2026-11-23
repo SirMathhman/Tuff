@@ -1,7 +1,7 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { emptyArrayAt, ok, type Result } from "./errors.ts";
+import { emptyArrayAt, MAX_U64, ok, type Result, u64OutOfRangeAt } from "./errors.ts";
 import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
-import { isDigits, isIdentifier } from "./tokenizer.ts";
+import { isDigits, isIdentifier, isU64Literal } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
 import { blockBody } from "./statements.ts";
@@ -129,6 +129,16 @@ function parsePrimary(
     }
 
     return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
+  }
+
+  if (token !== undefined && isU64Literal(token)) {
+    const value = BigInt(token.slice(0, -3));
+
+    if (value > MAX_U64) {
+      return u64OutOfRangeAt(whereAt(tokens, pos), value);
+    }
+
+    return ok({ value: { kind: "u64", value }, next: pos + 1 });
   }
 
   if (token !== undefined && isIdentifier(token)) {
