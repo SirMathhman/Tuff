@@ -47,16 +47,16 @@ as the language grows. It describes the ideal, not the current code.
 - **Boolean rules**: a single factor with no sign, no `*`, and no `+` or `-`
   keeps its value, so `true`, `false`, or a boolean variable can be a whole
   `let` value, an assignment value, or the final result. Any arithmetic (a
-  sign, `*`, `+`, or `-`) requires numbers; a boolean operand there is a
+  sign, `*`, `+`, `-`, or `<`) requires numbers; a boolean operand there is a
   `BooleanAsNumber` error.
 - **Boundary coercion**: `interpretTuff` returns a number. A final boolean
   value is returned as `1` for `true` and `0` for `false`. This is the only
   place a boolean becomes a number; no inner stage coerces.
-- **Logical operators**: `||` joins `&&` groups, and `&&` joins sums. Both
-  operators take booleans only: a number on either side is a
+- **Logical operators**: `||` joins `&&` groups, and `&&` joins comparisons.
+  Both operators take booleans only: a number on either side is a
   `NumberAsBoolean` error. The result is a boolean. `&&` binds tighter than
-  `||`, and both bind looser than `+` and `-`, so `true || false && false` is
-  `true`. The right side is skipped when the left side decides the result
+  `||`, and both bind looser than `<` (see Precedence), so
+  `true || false && false` is `true`. The right side is skipped when the left side decides the result
   (`false &&`, `true ||`). A skipped side's assignments are discarded, but its
   errors are still reported.
 - **Grouping**: parentheses change precedence. Braces group a sequence, so their
@@ -204,7 +204,8 @@ Variants (initial set, with the variants added for names and let):
 - `NumberOutOfRange { offset }`: a literal or intermediate result that is not
   finite.
 - `BooleanAsNumber { offset, text }`: a `true` or `false` operand used in
-  arithmetic (a sign, `*`, `+`, or `-`). `text` is the boolean's spelling.
+  arithmetic or a comparison (a sign, `*`, `+`, `-`, or `<`). `text` is the
+  boolean's spelling.
 - `NumberAsBoolean { offset, symbol }`: a number used as an operand of `||` or
   `&&`. `symbol` is the operator.
 - `MissingNumber { offset }`: a number is required but the source ends, or
@@ -213,6 +214,11 @@ Variants (initial set, with the variants added for names and let):
   operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
 - `UnexpectedSemicolon { offset }`: a `;` that does not end a let statement.
 - `MissingSemicolon { offset, name }`: a let value is not followed by `;`.
+
+Comparison:
+
+- `ChainedComparison { offset }`: a second `<` follows a comparison, for
+  example `1 < 2 < 3`. `offset` is the second `<`.
 
 Names, assignments, and scope:
 
@@ -321,6 +327,9 @@ performs no state changes.
 - Report an unmatched opener as `UnmatchedBracket` before parsing the group's
   contents, not after.
 - Truncate names in error messages to a fixed maximum length.
+- Decide the rules for further comparison operators (`>`, `<=`, `==`) before
+  adding them, including whether any of them may chain. Today a second `<` is
+  a `ChainedComparison` error.
 - Add tests for every error variant, with one test per rule violated.
 
 ## Performance
