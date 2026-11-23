@@ -5,20 +5,19 @@ import {
   divisionByZeroAt,
   immutableAssignmentAt,
   indexOutOfRangeAt,
-  MAX_U64,
+  integerOutOfRangeAt,
   referenceEscapesAt,
   resultTooLargeAt,
   typeMismatchAt,
-  u64OutOfRangeAt,
   undefinedNameAt,
   useAfterMoveAt,
   type ErrorWhere,
   type Result,
   type TuffError,
 } from "../errors.ts";
-import { type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
-import { type Cell, type Reference, type Scope, type Value, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean, asU64 } from "./values.ts";
-import { apply, applyU64, numericCompare } from "./operators.ts";
+import { INT_RANGES, type AssignStatement, type CompareOp, type Expr, type Link, type LogicalOp, type Statement } from "../ast.ts";
+import { type Cell, type Integer, type Reference, type Scope, type Value, isInteger, isReference, escapes, isVisible, typeName, sameType, asNumber, asBoolean } from "./values.ts";
+import { apply, applyInteger, numericCompare } from "./operators.ts";
 
 type EvalRule = (expr: Expr, scope: Scope | undefined) => Result<Value, TuffError>;
 
@@ -45,31 +44,41 @@ function bitwiseProblem(op: Link["op"], left: number, right: number, where: Erro
   return undefined;
 }
 
-// Both operands are U64. Division truncates toward zero, and a shift amount is from 0 to 31.
-function combineU64(link: Link, left: Value, right: Value): Result<Value, TuffError> {
-  const a = asU64(left, link.where);
-
-  if (!a.ok) {
-    return a;
+// Both operands are sized integers of one type. Division truncates toward zero, and a shift amount is from 0 to 31.
+function combineInteger(link: Link, left: Value, right: Value): Result<Value, TuffError> {
+  if (!isInteger(left) || !isInteger(right) || left.type !== right.type) {
+    return typeMismatchAt(link.where, typeName(left), typeName(right));
   }
 
-  const b = asU64(right, link.where);
-
-  if (!b.ok) {
-    return b;
+  if (link.op === "/" && right.value === 0n) {
+    return divisionByZeroAt(link.where, `A ${left.type}`);
   }
 
-  if (link.op === "/" && b.value === 0n) {
-    return divisionByZeroAt(link.where, "A U64");
+  if ((link.op === "<<" || link.op === ">>") && right.value > 31n) {
+    return bitwiseOutOfRangeAt(link.where, Number(right.value), "a shift from 0 to 31");
   }
 
-  if ((link.op === "<<" || link.op === ">>") && b.value > 31n) {
-    return bitwiseOutOfRangeAt(link.where, Number(b.value), "a shift from 0 to 31");
+  const value = applyInteger(link.op, left.value, right.value);
+  const range = INT_RANGES[left.type];
+
+  return value >= range.min && value <= range.max
+    ? ok({ type: left.type, value })
+    : integerOutOfRangeAt(link.where, value, left.type, range.min, range.max);
+}
+
+// Negation needs a signed type, since an unsigned value has no negative to produce.
+function negateInteger(value: Integer, where: ErrorWhere): Result<Value, TuffError> {
+  const range = INT_RANGES[value.type];
+
+  if (range.min === 0n) {
+    return typeMismatchAt(where, "a number or a signed integer", typeName(value));
   }
 
-  const value = applyU64(link.op, a.value, b.value);
+  const negated = -value.value;
 
-  return value >= 0n && value <= MAX_U64 ? ok(value) : u64OutOfRangeAt(link.where, value);
+  return negated >= range.min && negated <= range.max
+    ? ok({ type: value.type, value: negated })
+    : integerOutOfRangeAt(where, negated, value.type, range.min, range.max);
 }
 
 function lookup(name: string, scope: Scope | undefined): Scope | undefined {
@@ -321,6 +330,10 @@ function evaluateUnary(
 
 function evaluateNegate(operand: Expr, where: ErrorWhere, scope: Scope | undefined, evaluateRule: EvalRule): Result<Value, TuffError> {
   return evaluateUnary(operand, scope, evaluateRule, (value) => {
+    if (isInteger(value)) {
+      return negateInteger(value, where);
+    }
+
     const number = asNumber(value, where);
 
     return number.ok ? ok(-number.value) : number;
@@ -391,7 +404,26 @@ function evaluateLogical(
   return asBoolean(rightValue.value, where);
 }
 
+// Sized integers compare only with a value of their own type.
+function compareIntegers(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+  if (!isInteger(left) || !isInteger(right) || left.type !== right.type) {
+    return typeMismatchAt(where, typeName(left), typeName(right));
+  }
+
+  if (op === "==" || op === "!=") {
+    const equal = left.value === right.value;
+
+    return ok(op === "==" ? equal : !equal);
+  }
+
+  return ok(numericCompare(op, left.value, right.value));
+}
+
 function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): Result<Value, TuffError> {
+  if (isInteger(left) || isInteger(right)) {
+    return compareIntegers(op, left, right, where);
+  }
+
   if (typeof left === "object" || typeof right === "object") {
     return typeMismatchAt(where, "a number, boolean, or string", "an array or a reference");
   }
@@ -404,22 +436,6 @@ function compare(op: CompareOp, left: Value, right: Value, where: ErrorWhere): R
     const equal = left === right;
 
     return ok(op === "==" ? equal : !equal);
-  }
-
-  if (typeof left === "bigint" || typeof right === "bigint") {
-    const u64Left = asU64(left, where);
-
-    if (!u64Left.ok) {
-      return u64Left;
-    }
-
-    const u64Right = asU64(right, where);
-
-    if (!u64Right.ok) {
-      return u64Right;
-    }
-
-    return ok(numericCompare(op, u64Left.value, u64Right.value));
   }
 
   const a = asNumber(left, where);
@@ -483,8 +499,8 @@ function evaluateChain(first: Expr, links: Link[], scope: Scope | undefined, eva
         return right;
       }
 
-      if (typeof acc.value === "bigint" || typeof right.value === "bigint") {
-        return combineU64(link, acc.value, right.value);
+      if (isInteger(acc.value) || isInteger(right.value)) {
+        return combineInteger(link, acc.value, right.value);
       }
 
       const left = asNumber(acc.value, link.where);
@@ -665,8 +681,12 @@ function assignThroughReference(
  * @returns The computed value, a number, boolean, string, or array, or a structured error.
  */
 export function evaluate(expr: Expr, scope?: Scope): Result<Value, TuffError> {
-  if (expr.kind === "number" || expr.kind === "u64" || expr.kind === "boolean" || expr.kind === "string") {
+  if (expr.kind === "number" || expr.kind === "boolean" || expr.kind === "string") {
     return ok(expr.value);
+  }
+
+  if (expr.kind === "int") {
+    return ok({ type: expr.type, value: expr.value });
   }
 
   if (expr.kind === "negate") {

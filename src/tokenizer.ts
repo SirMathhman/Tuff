@@ -1,3 +1,5 @@
+import { INT_TYPES, type IntType } from "./ast.ts";
+
 /**
  * One token of Tuff source text.
  */
@@ -107,12 +109,12 @@ export function isDigits(text: string): boolean {
 }
 
 /**
- * Reports whether a token is a U64 literal: decimal digits followed by the suffix U64.
+ * Returns the sized integer type a literal token names, when the token is decimal digits followed by a type suffix.
  * @param text - The token to test.
- * @returns True when the token is digits followed by U64.
+ * @returns The suffix's type, or undefined when the token is not a sized literal.
  */
-export function isU64Literal(text: string): boolean {
-  return text.endsWith("U64") && isDigits(text.slice(0, -3));
+export function intLiteralType(text: string): IntType | undefined {
+  return INT_TYPES.find((type) => text.endsWith(type) && isDigits(text.slice(0, -type.length)));
 }
 
 /**

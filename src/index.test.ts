@@ -718,6 +718,58 @@ test("interpretTuff: 1U64 & 3U64 | 4U64 returns Ok(5)", () => {
   expect(interpretTuff("1U64 & 3U64 | 4U64")).toEqual(ok(5));
 });
 
+test("interpretTuff: the maximum literal of each sized type returns its value", () => {
+  const cases: [string, number][] = [
+    ["255U8", 255],
+    ["65535U16", 65535],
+    ["4294967295U32", 4294967295],
+    ["127I8", 127],
+    ["32767I16", 32767],
+    ["2147483647I32", 2147483647],
+    ["9007199254740991I64", 9007199254740991],
+  ];
+
+  cases.forEach(([source, value]) => {
+    expect(interpretTuff(source)).toEqual(ok(value));
+  });
+});
+
+test("interpretTuff: one above the maximum of each sized type is an IntegerOutOfRange error", () => {
+  ["256U8", "65536U16", "4294967296U32", "128I8", "32768I16", "2147483648I32"].forEach((source) => {
+    expectErrorKind(source, "IntegerOutOfRange");
+  });
+});
+
+test("interpretTuff: 200U8 + 100U8 is an IntegerOutOfRange error", () => {
+  expectErrorKind("200U8 + 100U8", "IntegerOutOfRange");
+});
+
+test("interpretTuff: -128I8 returns Ok(-128) and -(-128I8) is an IntegerOutOfRange error", () => {
+  expect(interpretTuff("-128I8")).toEqual(ok(-128));
+  expectErrorKind("-(-128I8)", "IntegerOutOfRange");
+});
+
+test("interpretTuff: -1U8 is a TypeMismatch error", () => {
+  expectErrorKind("-1U8", "TypeMismatch");
+});
+
+test("interpretTuff: 1U8 + 1U16 is a TypeMismatch error", () => {
+  expectErrorKind("1U8 + 1U16", "TypeMismatch");
+});
+
+test("interpretTuff: -1I8 & 3I8 returns Ok(3) and 1I8 << 7I8 is an IntegerOutOfRange error", () => {
+  expect(interpretTuff("-1I8 & 3I8")).toEqual(ok(3));
+  expectErrorKind("1I8 << 7I8", "IntegerOutOfRange");
+});
+
+test("interpretTuff: 0I8 - 1I8 returns Ok(-1)", () => {
+  expect(interpretTuff("0I8 - 1I8")).toEqual(ok(-1));
+});
+
+test("interpretTuff: 9007199254740991I64 + 1I64 is a ResultTooLarge error", () => {
+  expectErrorKind("9007199254740991I64 + 1I64", "ResultTooLarge");
+});
+
 test("interpretTuff: 1 == true is a TypeMismatch error", () => {
   expectErrorKind("1 == true", "TypeMismatch");
 });

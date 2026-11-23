@@ -13,7 +13,7 @@ const NUMBER_OPERATORS: Record<Link["op"], (left: number, right: number) => numb
   ">>": (left: number, right: number): number => left >> right,
 };
 
-const U64_OPERATORS: Record<Link["op"], (left: bigint, right: bigint) => bigint> = {
+const INTEGER_OPERATORS: Record<Link["op"], (left: bigint, right: bigint) => bigint> = {
   "+": (left, right) => left + right,
   "-": (left, right) => left - right,
   "*": (left, right) => left * right,
@@ -36,14 +36,14 @@ export function apply(op: Link["op"], left: number, right: number): number {
 }
 
 /**
- * Applies an operator to two U64 operands with exact arithmetic. The caller checks the range and the divisor.
+ * Applies an operator to two sized integer operands with exact arithmetic. The caller checks the range and the divisor.
  * @param op - The operator.
  * @param left - The left operand.
  * @param right - The right operand.
- * @returns The exact result, which the caller checks against 0 to 2^64-1.
+ * @returns The exact result, which the caller checks against its type's range.
  */
-export function applyU64(op: Link["op"], left: bigint, right: bigint): bigint {
-  return U64_OPERATORS[op](left, right);
+export function applyInteger(op: Link["op"], left: bigint, right: bigint): bigint {
+  return INTEGER_OPERATORS[op](left, right);
 }
 
 /**

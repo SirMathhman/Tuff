@@ -1,7 +1,7 @@
 import { textAt, type Token } from "./tokenizer.ts";
-import { emptyArrayAt, MAX_U64, ok, type Result, u64OutOfRangeAt } from "./errors.ts";
-import { type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
-import { isDigits, isIdentifier, isU64Literal } from "./tokenizer.ts";
+import { emptyArrayAt, integerOutOfRangeAt, ok, type Result } from "./errors.ts";
+import { INT_RANGES, type CompareOp, type Expr, type Link, type LogicalOp } from "./ast.ts";
+import { intLiteralType, isDigits, isIdentifier } from "./tokenizer.ts";
 import { whereAt, invalidAt, termTooLargeAt, nestingTooDeepAt, MAX_NESTING_DEPTH, type Parse, type ParseRules } from "./parse-errors.ts";
 import { parseCondition } from "./conditions.ts";
 import { blockBody } from "./statements.ts";
@@ -131,14 +131,10 @@ function parsePrimary(
     return ok({ value: { kind: "number", value: Number(token) }, next: pos + 1 });
   }
 
-  if (token !== undefined && isU64Literal(token)) {
-    const value = BigInt(token.slice(0, -3));
+  const sized = literalAt(tokens, pos, false);
 
-    if (value > MAX_U64) {
-      return u64OutOfRangeAt(whereAt(tokens, pos), value);
-    }
-
-    return ok({ value: { kind: "u64", value }, next: pos + 1 });
+  if (sized !== undefined) {
+    return sized;
   }
 
   if (token !== undefined && isIdentifier(token)) {
@@ -317,6 +313,32 @@ function parseRef(tokens: Token[], pos: number): Parse {
   return ok({ value: { kind: "ref", name, mutable, where: whereAt(tokens, pos) }, next: nameIndex + 1 });
 }
 
+// A sized literal such as 100U8 at pos. A minus sign folds into a signed literal, so -128I8 is in range,
+// but a minus before an unsigned literal stays a unary operator, which rejects unsigned values.
+function literalAt(tokens: Token[], pos: number, negative: boolean): Parse | undefined {
+  const token = textAt(tokens, pos);
+  const type = intLiteralType(token);
+
+  if (type === undefined) {
+    return undefined;
+  }
+
+  const range = INT_RANGES[type];
+
+  if (negative && range.min === 0n) {
+    return undefined;
+  }
+
+  const magnitude = BigInt(token.slice(0, -type.length));
+  const value = negative ? -magnitude : magnitude;
+
+  if (value < range.min || value > range.max) {
+    return integerOutOfRangeAt(whereAt(tokens, pos), value, type, range.min, range.max);
+  }
+
+  return ok({ value: { kind: "int", type, value }, next: pos + 1 });
+}
+
 function parseFactor(
   tokens: Token[],
   pos: number,
@@ -324,6 +346,12 @@ function parseFactor(
   rules: ParseRules,
 ): Parse {
   if (textAt(tokens, pos) === "-") {
+    const signed = literalAt(tokens, pos + 1, true);
+
+    if (signed !== undefined) {
+      return signed;
+    }
+
     const operand = parseIndexed(tokens, pos + 1, depth, rules);
 
     return operand.ok

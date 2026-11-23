@@ -8,7 +8,7 @@ The ideal architecture: a small, pure, layered interpreter whose failures are st
 
 - **Source**: the text of a Tuff program. Always untrusted.
 - **Entry point**: `interpretTuff(source)`, the only public function.
-- **Value**: a number, a U64, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. A U64 is an exact unsigned 64-bit integer, written with the suffix U64, such as `100U64`. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a U64 result is a number only when it is at most 2^53-1.
+- **Value**: a number, a sized integer, a boolean, a one-character string, or an array. A number is a safe integer and is never negative zero. A sized integer has one of eight types (U8, U16, U32, U64, I8, I16, I32, I64), written with its suffix, such as `100U8` or `-5I32`; its value is exact and never equals a plain number. An array's element type is part of its type: `[[1], [2]]` is an array of arrays of numbers, and every element and every assignment must match it. A program evaluates to a number; a boolean result is 1 or 0, a string result is its Unicode code point, and a sized integer result is a number only when it lies within ±(2^53-1).
 - **Token**: a kind and its text. Kinds are punctuation, keyword, number, name, string, and unclosed string. A quoted literal is one string token; an unclosed quote is its own kind. Source spans come with the near-term item below.
 
 ### Bindings and scope
@@ -81,7 +81,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Bitwise `|` and `&` sit between `&&` and comparisons, and `<<` and `>>` between comparisons and `+ -`. Bitwise operands are 32-bit signed integers and a shift amount is from 0 to 31; otherwise the result is a BitwiseOutOfRange error. The `&` after an operand is bitwise-and, and at the start of an operand it is a reference.
 - `+`, `-`, `*`, and `/` fold left to right, with `*` and `/` binding tighter. Division truncates toward zero, and a zero divisor is a DivisionByZero error.
-- A U64 takes `+`, `-`, `*`, `/`, `|`, `&`, `<<`, and `>>`. Its operands are not limited to 32 bits, but a shift amount is still from 0 to 31. Results must stay within 0 to 2^64-1 (otherwise U64OutOfRange). A U64 never mixes with a number, and unary `-` on a U64 is a TypeMismatch.
+- A sized integer takes `+`, `-`, `*`, `/`, `|`, `&`, `<<`, and `>>` at its own type. Its operands are not limited to 32 bits, but a shift amount is still from 0 to 31. Results must stay within the type's range (otherwise IntegerOutOfRange, or U64OutOfRange for U64). Unary `-` needs a signed type; a `-` directly before a signed literal folds into it, so `-128I8` is valid. A sized integer never mixes with a number or another type, which is a TypeMismatch.
 - `!` takes a following factor and a boolean, so `!!x` nests. A single unary `-` precedes a primary: a number, a name, a group, a block, or an if.
 
 ### Blocks and if
@@ -98,7 +98,7 @@ Recursion is limited to the parser, the statement rules, and the evaluator over 
 
 - Names bind with `let`. Undeclared names and assignments to immutable names are errors.
 - Numbers are JavaScript doubles. Results above 2^53 are rejected, so precision is never lost silently.
-- A U64 literal such as `100U64` is exact; a literal above 2^64-1 is a U64OutOfRange error. The U64 suffix is case-sensitive, so `1u64` is an invalid term.
+- A sized literal such as `100U64` or `-128I8` is exact and must lie within its type's range (otherwise IntegerOutOfRange, or U64OutOfRange for U64). The suffix is case-sensitive, so `1u64` is an invalid term.
 
 ### Arrays
 

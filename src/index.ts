@@ -4,6 +4,7 @@ import { invalidAt, whereAt } from "./parse-errors.ts";
 import { parseExpr } from "./parser.ts";
 import { blockBody } from "./statements.ts";
 import { evaluate } from "./eval/evaluator.ts";
+import { isInteger } from "./eval/values.ts";
 
 export { describeError } from "./errors.ts";
 export type {
@@ -62,8 +63,11 @@ export function interpretTuff(tuffSource: string): Result<number, TuffError> {
     return ok(result.value);
   }
 
-  if (typeof result.value === "bigint") {
-    return result.value <= BigInt(Number.MAX_SAFE_INTEGER) ? ok(Number(result.value)) : programResultTooLargeAt(whereAt(tokens, 0), result.value);
+  if (isInteger(result.value)) {
+    const digits = result.value.value;
+    const safe = BigInt(Number.MAX_SAFE_INTEGER);
+
+    return digits >= -safe && digits <= safe ? ok(Number(digits)) : programResultTooLargeAt(whereAt(tokens, 0), digits);
   }
 
   const found = Array.isArray(result.value) ? "an array" : "a reference";

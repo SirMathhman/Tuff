@@ -1,3 +1,4 @@
+import { type IntType } from "../ast.ts";
 import { type ErrorWhere, type Result, type TuffError, ok, typeMismatchAt } from "../errors.ts";
 
 /**
@@ -11,17 +12,36 @@ export interface Reference {
 }
 
 /**
- * A runtime value. A U64 is a bigint, so its full range is exact and it never equals a plain number.
+ * A sized integer. Its value is a bigint, so every type's range is exact, and it never equals a plain number.
  */
-export type Value = number | bigint | boolean | string | Value[] | Reference;
+export interface Integer {
+  /** The sized type, such as U8 or I64. */
+  type: IntType;
+  /** The value, within the type's range. */
+  value: bigint;
+}
 
 /**
- * Reports whether a value is a reference rather than an array or a primitive.
+ * A runtime value: a plain number, a sized integer, a boolean, a one-character string, an array, or a reference.
+ */
+export type Value = number | Integer | boolean | string | Value[] | Reference;
+
+/**
+ * Reports whether a value is a sized integer.
+ * @param value - The value to test.
+ * @returns True when the value is an Integer.
+ */
+export function isInteger(value: Value): value is Integer {
+  return typeof value === "object" && !Array.isArray(value) && "type" in value;
+}
+
+/**
+ * Reports whether a value is a reference rather than an array, a sized integer, or a primitive.
  * @param value - The value to test.
  * @returns True when the value is a Reference.
  */
 export function isReference(value: Value): value is Reference {
-  return typeof value === "object" && !Array.isArray(value);
+  return typeof value === "object" && !Array.isArray(value) && !isInteger(value);
 }
 
 /**
@@ -97,8 +117,8 @@ export function typeName(value: Value): string {
     return "a number";
   }
 
-  if (typeof value === "bigint") {
-    return "a U64";
+  if (isInteger(value)) {
+    return `a ${value.type}`;
   }
 
   if (typeof value === "boolean") {
@@ -126,6 +146,10 @@ export function typeName(value: Value): string {
  * @returns True when the values have the same type.
  */
 export function sameType(left: Value, right: Value): boolean {
+  if (isInteger(left) || isInteger(right)) {
+    return isInteger(left) && isInteger(right) && left.type === right.type;
+  }
+
   if (isReference(left) || isReference(right)) {
     return isReference(left) && isReference(right);
   }
@@ -172,16 +196,3 @@ export function asBoolean(value: Value, where: ErrorWhere): Result<boolean, Tuff
   return typeMismatchAt(where, "a boolean", typeName(value));
 }
 
-/**
- * Reads a value as a U64.
- * @param value - The value to read.
- * @param where - The token that needs a U64.
- * @returns The U64 as a bigint, or a TypeMismatch error.
- */
-export function asU64(value: Value, where: ErrorWhere): Result<bigint, TuffError> {
-  if (typeof value === "bigint") {
-    return ok(value);
-  }
-
-  return typeMismatchAt(where, "a U64", typeName(value));
-}

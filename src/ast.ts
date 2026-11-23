@@ -175,9 +175,40 @@ interface IndexNode {
   where: ErrorWhere;
 }
 
-// An unsigned 64-bit integer literal, such as 100U64. Its value is already within 0 to 2^64-1.
-interface U64Node {
-  kind: "u64";
+/** The sized integer types. A literal's suffix is its type name, such as 100U8 or -5I32. */
+export const INT_TYPES = ["U8", "U16", "U32", "U64", "I8", "I16", "I32", "I64"] as const;
+
+/**
+ * A sized integer type's name.
+ */
+export type IntType = (typeof INT_TYPES)[number];
+
+/**
+ * The smallest and largest value of a sized integer type.
+ */
+export interface IntRange {
+  /** The smallest value the type holds. */
+  min: bigint;
+  /** The largest value the type holds. */
+  max: bigint;
+}
+
+/** The range of every sized integer type. */
+export const INT_RANGES: Record<IntType, IntRange> = {
+  U8: { min: 0n, max: 255n },
+  U16: { min: 0n, max: 65535n },
+  U32: { min: 0n, max: 4294967295n },
+  U64: { min: 0n, max: 18446744073709551615n },
+  I8: { min: -128n, max: 127n },
+  I16: { min: -32768n, max: 32767n },
+  I32: { min: -2147483648n, max: 2147483647n },
+  I64: { min: -9223372036854775808n, max: 9223372036854775807n },
+};
+
+// A sized integer literal, such as 100U64 or -128I8. Its value is already within its type's range.
+interface IntNode {
+  kind: "int";
+  type: IntType;
   value: bigint;
 }
 
@@ -187,7 +218,7 @@ export type Expr =
   | RefNode
   | DerefNode
   | NumberNode
-  | U64Node
+  | IntNode
   | BooleanNode
   | StringNode
   | NegateNode
