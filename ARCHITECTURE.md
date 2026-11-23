@@ -6,6 +6,8 @@ as the language grows. It describes the ideal, not the current code.
 
 ## Definitions
 
+### Source, names, and values
+
 - **Tuff source**: a string written by a user or a program. It is untrusted.
 - **Number**: a decimal literal made of ASCII digits. Values use IEEE-754 double
   precision, the same as JavaScript `number`.
@@ -29,6 +31,8 @@ as the language grows. It describes the ideal, not the current code.
   current block declared itself. Declaring or assigning a name returns a new
   scope; it never mutates one. Closing a block keeps the enclosing scope's names,
   with assignments from the block applied, except names the block declared.
+### Evaluation
+
 - **Term**: one or more factors joined by `*`. A term evaluates to the product
   of its factors.
 - **Expression**: an optional leading sign, then one or more terms joined by
@@ -108,10 +112,8 @@ Rules:
 ### Recursion
 
 The grammar is recursive because of parentheses and braces (factor -> group ->
-sequence or expression -> term -> factor). Today this recursion sits inside one
-file, which hides the problem; it blocks splitting the parser into files because
-the functions form a cycle of imports. The target parser must not use recursion
-that spans files:
+sequence or expression -> term -> factor). The target parser must not use
+recursion that spans files:
 
 - The preferred target is a non-recursive parser (for example shunting-yard, or
   recursive descent with an explicit stack). This removes the call-stack limit
@@ -158,12 +160,18 @@ Variants (initial set, with the variants added for names and let):
   operator between them, for example `2 3`, `2 (3)`, or `(2) 3`.
 - `UnexpectedSemicolon { offset }`: a `;` that does not end a let statement.
 - `MissingSemicolon { offset, name }`: a let value is not followed by `;`.
+Names, assignments, and scope:
+
 - `MissingName { offset }`: `let` is not followed by a name.
 - `MissingEquals { offset, name }`: a let name is not followed by `=`.
 - `DuplicateVariable { offset, name }`: a name is declared twice in one
   sequence.
-- `UndefinedVariable { offset, name }`: a name is used where no enclosing block
-  declares it.
+- `UndefinedVariable { offset, name }`: a name is used or assigned where no
+  enclosing block declares it.
+- `ImmutableAssignment { offset, name }`: a name declared with `let` (not
+  `let mut`) is assigned.
+- `UnexpectedEquals { offset }`: a `=` that does not follow a name in a let
+  statement or an assignment.
 - `UnmatchedBracket { offset, symbol }`: an opener with no closer, or a closer
   with no opener. `symbol` is one of `(`, `)`, `{`, `}`.
 - `MismatchedBracket { offset, opener, openerOffset }`: a closer that does not
@@ -182,9 +190,6 @@ maximum length, so a long name in the source cannot make an error message long.
   parser's call stack is the only limit. Around 10,000 nested `(` the current
   parser throws a `RangeError` from `interpretTuff`, which breaks the
   no-exceptions rule. Depth must be limited and reported as `NestingTooDeep`.
-- **Recursion cycle.** The parser functions call each other across a cycle
-  (factor, group, sequence, expression, term). Splitting the parser into the
-  files in Structure is blocked until the cycle is broken (see Recursion).
 - **Quadratic tokenizing.** Invariant 7 forces each token to be appended with a
   spread, which copies the whole array. Tokenizing is therefore O(n^2) in the
   number of tokens. A 20,000-term source takes over a second.
@@ -238,8 +243,7 @@ performs no state changes.
 
 ## Future Work
 
-- Break the parser's recursion cycle by parameter passing, then split the
-  parser into the files in Structure.
+- Split the parser into the files in Structure.
 - Replace the fused parse-and-evaluate pass with a parser that produces a tree,
   then an evaluator that walks it. The tree is the seam that lets later
   features (type checks, more error kinds) be added without touching the
